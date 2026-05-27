@@ -52,6 +52,10 @@ target_link_libraries(${PROJECT_NAME}_tests
          GTest::gmock_main
 )
 
+target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
+    TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"
+)
+
  include(GoogleTest)
  gtest_discover_tests(${PROJECT_NAME}_tests)
 
