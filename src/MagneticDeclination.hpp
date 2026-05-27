@@ -50,7 +50,7 @@ public:
     /**
      * @brief loads .COF file from @param filPath
      *
-     * @param filePath path to .COF file
+     * @param [in] filePath path to .COF file
      *
      * @throws runtime_error Thrown if error in opening .COF file
      *
@@ -62,10 +62,10 @@ public:
      * @brief Calculate the declination angle given a coordinate
      *        From noaa_71569_DS1.pdf Eqn 19
      *
-     * @param lambda geodetic longitude
-     * @param phi geodetic latitude
-     * @param h ellipsoidal height
-     * @param t the current year (YYYY)
+     * @param [in] lambda geodetic longitude
+     * @param [in] phi geodetic latitude
+     * @param [in] h ellipsoidal height
+     * @param [in] t the current year (YYYY)
      *
      * @throws invalid_argument Thrown if latitude is outside of [-90, 90]
      *
@@ -77,12 +77,16 @@ public:
      * @brief Calculates scalar magnetic potential of the Earth's main magnetic field
      *        From noaa_71569_DS1.pdf Eqn 4
      *
-     * @param lambda geodetic longitude
-     * @param phi geodetic latitude
-     * @param h ellipsoidal height
-     * @param t the current year (YYYY)
+     * @param [in] lambda geodetic longitude
+     * @param [in] phi geodetic latitude
+     * @param [in] h ellipsoidal height
+     * @param [in] t the current year (YYYY)
      *
      * @return scalar magnetic potential
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double v(double lambda, double phiPrime, double r, double t);
 
@@ -90,11 +94,15 @@ public:
      * @brief Calculates the Gauss coefficient g^m_n(t) at a given time.
      *        From noaa_71569_DS1.pdf Eqn 9
      *
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
-     * @param t the current year (YYYY)
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
+     * @param [in] t the current year (YYYY)
      *
      * @return g coefficient at the year t
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double g(int n, int m, double t);
 
@@ -102,11 +110,15 @@ public:
      * @brief Calculates the Gauss coefficient h^m_n(t) at a given time.
      *        From noaa_71569_DS1.pdf Eqn 9
      *
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
-     * @param t the current year (YYYY)
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
+     * @param [in] t the current year (YYYY)
      *
      * @return h coefficient at the year t
+     * 
+     * @remarks
+     * 
+     * @exception 
      */
     double h(int n, int m, double t);
 
@@ -114,11 +126,15 @@ public:
      * @brief The Schmidt semi-normalized associated Legendre function evaluated at u, n, m.
      *        From noaa_71569_DS1.pdf Eqn 5
      *
-     * @param u value to be evaluated at
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] u value to be evaluated at
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return pHat
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double pHat(double u, int n, int m);
 
@@ -128,10 +144,14 @@ public:
      *        From noaa_71569_DS1.pdf Eqn 16
      *
      * @param phiPrime geocentric latitude
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return dPHatdPhiPrime
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double dPHatdPhiPrime(double phiPrime, int n, int m);
 
@@ -139,11 +159,15 @@ public:
      * @brief The oscillating factor multiplied by the Legendre associated polynomial at u, n, m.
      *        From noaa_71569_DS1.pdf Eqn 6
      *
-     * @param u value to be evaluated at
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] u value to be evaluated at
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return (-1)^m * LegendrePoly(u, n, m)
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double pLegen(double u, double n, double m);
 
@@ -151,11 +175,15 @@ public:
      * @brief The Legendre associated polynomial at u, n, m.
      *        From IMU_EQs.pdf Eqn 2
      *
-     * @param u value to be evaluated at
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] u value to be evaluated at
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return LegendrePoly(u, n, m)
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double AssociatedLegendrePolynomial(double u, int n, int m);
 
@@ -165,11 +193,15 @@ public:
      *        See @ref GetMthLthOrderAssociatedLegrandreFunctionDerivatives().
      *        From IMU_EQs.pdf Eqn 1
      *
-     * @param M the m-th derivative
-     * @param L polynomial degree
-     * @param x variable, argument to the polynomial
+     * @param [in] M the m-th derivative
+     * @param [in] L polynomial degree
+     * @param [in] x variable, argument to the polynomial
      * 
      * @return
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void CalculateMthLthOrderAssociatedLegrandreFunctionDerivatives(unsigned M, unsigned L, double x);
 
@@ -178,6 +210,10 @@ public:
      *         of the Lth-degree polynomial.
      * 
      * @return m_legendrePolynomialMatrix
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double* GetMthLthOrderAssociatedLegrandreFunctionDerivatives();
 
@@ -185,12 +221,16 @@ public:
      * @brief Field X' North Component in geocentric coordinate of the geomagnetic field
      *        From noaa_71569_DS1.pdf Eqn 10
      * 
-     * @param lambda geodetic longitude
-     * @param phiPrime geocentric latitude
-     * @param r geocentric altitude
-     * @param t the current year (YYYY)
+     * @param [in] lambda geodetic longitude
+     * @param [in] phiPrime geocentric latitude
+     * @param [in] r geocentric altitude
+     * @param [in] t the current year (YYYY)
      *
      * @return X' vector component
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double xPrime(double lambda, double phiPrime, double r, double t);
 
@@ -198,12 +238,16 @@ public:
      * @brief Field Y' East component in geocentric coordinate of the geomagnetic field
      *        From noaa_71569_DS1.pdf Eqn 11
      * 
-     * @param lambda geodetic longitude
-     * @param phiPrime geocentric latitude
-     * @param r geocentric altitude
-     * @param t the current year (YYYY)
+     * @param [in] lambda geodetic longitude
+     * @param [in] phiPrime geocentric latitude
+     * @param [in] r geocentric altitude
+     * @param [in] t the current year (YYYY)
      *
      * @return Y' vector component
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double yPrime(double lambda, double phiPrime, double r, double t);
 
@@ -211,12 +255,16 @@ public:
      * @brief Field Z' Down component in geocentric coordinate of the geomagnetic field
      *        From noaa_71569_DS1.pdf Eqn 12
      * 
-     * @param lambda geodetic longitude
-     * @param phiPrime geocentric latitude
-     * @param r geocentric altitude
-     * @param t the current year (YYYY)
+     * @param [in] lambda geodetic longitude
+     * @param [in] phiPrime geocentric latitude
+     * @param [in] r geocentric altitude
+     * @param [in] t the current year (YYYY)
      *
      * @return Z' vector component
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double zPrime(double lambda, double phiPrime, double r, double t);
 
@@ -224,11 +272,15 @@ public:
      * @brief Calculating the length from center to (lambda, phi, h) projection onto the horizon
      *        From noaa_71569_DS1.pdf Eqn 7
      * 
-     * @param r Radius of curvature of the prime vertical
-     * @param h ellipsoidal height
-     * @param phi geodetic latitude
+     * @param [in] r Radius of curvature of the prime vertical
+     * @param [in] h ellipsoidal height
+     * @param [in] phi geodetic latitude
      *
      * @return distance from center to the projected point
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double p(double r, double h, double phi);
 
@@ -236,51 +288,71 @@ public:
      * @brief Calculating the length from center to (lambda, phi, h) projection onto the prime vertical
      *        From noaa_71569_DS1.pdf Eqn 7
      * 
-     * @param r Radius of curvature of the prime vertical
-     * @param h ellipsoidal height
-     * @param phi geodetic latitude
+     * @param [in] r Radius of curvature of the prime vertical
+     * @param [in] h ellipsoidal height
+     * @param [in] phi geodetic latitude
      *
      * @return distance from center to the projected point
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double z(double r, double h, double phi);
 
     /**
      * @brief gets the g Gauss coefficient given n and m
      * 
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return g Gauss coefficient
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double GetG(int n, int m);
 
     /**
      * @brief gets the gDot Gauss coefficient given n and m
      * 
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return gDot Gauss coefficient
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double GetGDot(int n, int m);
 
     /**
      * @brief gets the h Gauss coefficient given n and m
      * 
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return h Gauss coefficient
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double GetH(int n, int m);
 
     /**
      * @brief gets the hDot Gauss coefficient given n and m
      * 
-     * @param n the WMM expansion degree
-     * @param m the WMM expansion order
+     * @param [in] n the WMM expansion degree
+     * @param [in] m the WMM expansion order
      *
      * @return hDot Gauss coefficient
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double GetHDot(int n, int m);
 
@@ -288,6 +360,10 @@ public:
      * @brief caller to CalculateMthLthOrderAssociatedLegrandreFunctionDerivatives()
      *
      * @return
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void SetAssociatedPolynomialMatrix(double x);
 
@@ -296,20 +372,28 @@ private:
     /**
      * @brief calculates the binomial coefficient
      * 
-     * @param n total objects
-     * @param r number of objects chosen from n
+     * @param [in] n total objects
+     * @param [in] r number of objects chosen from n
      *
      * @return binomial coefficient
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double Binomial(int n, int r);
     
     /**
      * @brief calculates the partial factorial
      * 
-     * @param n starting number
-     * @param m the number of (result *= --n) operations to be run before breaking
+     * @param [in] n starting number
+     * @param [in] m the number of (result *= --n) operations to be run before breaking
      * 
      * @return n x (n - 1) x ... x (n - m + 1)
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double FallingFactorial(double n, int m);
 

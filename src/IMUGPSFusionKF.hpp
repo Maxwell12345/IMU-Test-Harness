@@ -46,11 +46,15 @@ public:
      * @brief Single shot multiple sensor context aware Kalman Filter approximation.
      *        This overloaded method assumes GPS measurement. This implies Beta GPS is nonzero.
      * 
-     * @param dt - delta time from previous IMU innovation
-     * @param z_GPS - 2 state GPS measurement column vector, [x, y, 0, 0, 0, 0]^T
-     * @param z_IMU - 4 state IMU measurement column vector, [0, 0, vx, vy, ax, ay]^T
+     * @param [in] dt - delta time from previous IMU innovation
+     * @param [in] z_GPS - 2 state GPS measurement column vector, [x, y, 0, 0, 0, 0]^T
+     * @param [in] z_IMU - 4 state IMU measurement column vector, [0, 0, vx, vy, ax, ay]^T
      * 
      * @return {x(k|k), P(k|k)} - pseudo-fused postiori x and P
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     std::pair<Vector6d, Matrix6d> Step(double dt, Vector6d& z_GPS, Vector6d& z_IMU);
 
@@ -58,9 +62,13 @@ public:
      * @brief Constructs the state transition matrix. It is a constant acceleration
      *        block matrix assuming [x, y, vx, vy, ax, ay]^T state kinematics
      * 
-     * @param dt - delta time from previous innovation
+     * @param [in] dt - delta time from previous innovation
      * 
      * @return F_k
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     Matrix6d BuildFk(double dt);
 
@@ -68,10 +76,14 @@ public:
      * @brief Calculates the weighting of the GPS and IMU filter for fusion. Beta GPS is 
      *        assumed 0 when no GPS measurement is online.
      * 
-     * @param priori_P - P(k|k-1)
-     * @param innovation_IMU - v_GPS(k)
+     * @param [in] priori_P - P(k|k-1)
+     * @param [in] innovation_IMU - v_GPS(k)
      * 
      * @return B0, B_GPS, B_IMU, B_GPS+IMU
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     Eigen::Vector4d CalculateBetas(Matrix6d priori_P, Vector6d innovation_IMU);
 
@@ -79,61 +91,85 @@ public:
      * @brief Calculates the weighting of the GPS and IMU filter for fusion. Beta GPS is 
      *        assumed nonzero when GPS measurement is online. Reference equations 18 and 19.
      * 
-     * @param priori_P - P(k|k-1)
-     * @param innovation_GPS - v_GPS(k)
-     * @param innovation_IMU - v_IMU(k)
+     * @param [in] priori_P - P(k|k-1)
+     * @param [in] innovation_GPS - v_GPS(k)
+     * @param [in] innovation_IMU - v_IMU(k)
      * 
      * @return B0, B_GPS, B_IMU, B_GPS+IMU
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     Eigen::Vector4d CalculateBetas(Matrix6d priori_P, Vector6d innovation_GPS, Vector6d innovation_IMU);
 
     /**
      * @brief Calculate GPS Kalman Gains.
      * 
-     * @param priori_P_inv - P(k|k-1)^-1
-     * @param innovation_GPS - z_GPS(k) - H_GPS * x(k|k-1)
-     * @param postiori_P_GPS_IMU - P(k|k-1)^-1 + H_GPS^T * R_GPS^-1 * H_GPS + H_IMU^T * R_IMU^-1 * H_IMU
+     * @param [in] priori_P_inv - P(k|k-1)^-1
+     * @param [in] innovation_GPS - z_GPS(k) - H_GPS * x(k|k-1)
+     * @param [in] postiori_P_GPS_IMU - P(k|k-1)^-1 + H_GPS^T * R_GPS^-1 * H_GPS + H_IMU^T * R_IMU^-1 * H_IMU
      * 
      * @return K_GPS(k), K_{GPS|(GPS+IMU)}
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     std::pair<Matrix6d, Matrix6d> Calculate_GPS_KalmanGains(Matrix6d priori_P_inv, Vector6d innovation_GPS, Matrix6d postiori_P_GPS_IMU);
 
     /**
      * @brief Calculate IMU Kalman Gains.
      * 
-     * @param priori_P_inv - P(k|k-1)^-1
-     * @param innovation_IMU - z_IMU(k) - H_IMU * x(k|k-1)
-     * @param postiori_P_GPS_IMU - P(k|k-1)^-1 + H_GPS^T * R_GPS^-1 * H_GPS + H_IMU^T * R_IMU^-1 * H_IMU
+     * @param [in] priori_P_inv - P(k|k-1)^-1
+     * @param [in] innovation_IMU - z_IMU(k) - H_IMU * x(k|k-1)
+     * @param [in] postiori_P_GPS_IMU - P(k|k-1)^-1 + H_GPS^T * R_GPS^-1 * H_GPS + H_IMU^T * R_IMU^-1 * H_IMU
      * 
      * @return K_IMU(k), K_{IMU|(GPS+IMU)}
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     std::pair<Matrix6d, Matrix6d> Calculate_IMU_KalmanGains(Matrix6d priori_P_inv, Vector6d innovation_IMU, Matrix6d postiori_P_GPS_IMU);
 
     /**
      * @brief Update R_GPS(k) through analytical methods.
      * 
-     * @param R_GPS - R_GPS(k)
+     * @param [in] R_GPS - R_GPS(k)
      * 
      * @return 
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void Update_GPS_R(Matrix6d R_GPS);
 
     /**
      * @brief Update R_IMU(k) through analytical methods.
      * 
-     * @param R_IMU - R_IMU(k)
+     * @param [in] R_IMU - R_IMU(k)
      * 
      * @return 
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void Update_IMU_R(Matrix6d R_IMU);
 
     /**
      * @brief Update Q(k) through analytical methods.
      * 
-     * @param dt - delta time from previous innovation.
-     * @param has_GPS - If GPS is available, change Q calculation.
+     * @param [in] dt - delta time from previous innovation.
+     * @param [in] has_GPS - If GPS is available, change Q calculation.
      * 
      * @return 
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void Update_Q(double dt, bool has_GPS);
 
@@ -142,40 +178,56 @@ private:
     /**
      * @brief Calculation of Fig 4 fuzzy logic to determin membership functions mu GPS and mu IMU.
      * 
-     * @param chi_squared_stat - y(k)^T S(k)^-1 y(k), otherwise known as the NIS calculation.
-     * @param is_GPS - Determines which membership value to calculate. 
+     * @param [in] chi_squared_stat - y(k)^T S(k)^-1 y(k), otherwise known as the NIS calculation.
+     * @param [in] is_GPS - Determines which membership value to calculate. 
      * 
      * @return mu_{GPS, IMU}
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     double CalculateFuzzyLogicMembershipFunction(double chi_squared_stat, bool is_GPS);
 
     /**
      * @brief Update GPS adaptive filter queue.
      * 
-     * @param innovation_GPS - z_IMU(k) - H_IMU * x_IMU(k|k-1)
-     * @param priori_P_GPS - P_GPS(k|k)
+     * @param [in] innovation_GPS - z_IMU(k) - H_IMU * x_IMU(k|k-1)
+     * @param [in] priori_P_GPS - P_GPS(k|k)
      * 
      * @return
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void PushInnovationGPS(Vector6d &innovation_GPS, Matrix6d &postiori_P_GPS);
 
     /**
      * @brief Update IMU adaptive filter queue.
      * 
-     * @param innovation_IMU - z_GPS(k) - H_GPS * x_GPS(k|k-1)
-     * @param priori_P_IMU - P_IMU(k|k)
+     * @param [in] innovation_IMU - z_GPS(k) - H_GPS * x_GPS(k|k-1)
+     * @param [in] priori_P_IMU - P_IMU(k|k)
      * 
      * @return
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void PushInnovationIMU(Vector6d &innovation_IMU, Matrix6d &postiori_P_IMU);
 
     /**
      * @brief Update Q adaptive filter queue.
      * 
-     * @param posteriorResidual - K(k) * (z_{GPS+IMU}(k) - x(k|k-1))
-     * @param postiori_P - P(k|k)
+     * @param [in] posteriorResidual - K(k) * (z_{GPS+IMU}(k) - x(k|k-1))
+     * @param [in] postiori_P - P(k|k)
      * 
      * @return
+     * 
+     * @remarks
+     * 
+     * @exception
      */
     void PushInnovationQ(Vector6d &posteriorResidual, Matrix6d &postiori_P);
 
