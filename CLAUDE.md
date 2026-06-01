@@ -68,9 +68,178 @@ None planned yet, initial start will be printing sensor values to stdout.
 
 Because the target software is being developed on a Ubuntu x86-64 host but will be run on a Raspberry Pi with an ARM-based processor, this software will need to be packaged into a Docker container to save headaches with cross-platform. To support this, a well-defined VCPKG manifest will be needed to facilitate building of the container images.
 
+---
+
+## Project-Specific C++ Naming Conventions
+
+Use these naming conventions when writing stories, creating class designs, or generating C++ code for this project.
+
+### Types, Classes, and Files
+
+- Class and type names use PascalCase.
+  - Examples: `GpsReceiver`, `ImuManager`, `DatabaseManager`, `GpsUpdate`, `KalmanOutput`.
+- C++ implementation files use `.cpp`.
+- C++ header files always use `.hpp`.
+- Do not create new project headers with the `.h` extension.
+- Header include guards must use the `.hpp` naming convention:
+  - `#ifndef INU_DISPLAY_<FILENAME>_HPP`
+  - `#define INU_DISPLAY_<FILENAME>_HPP`
+  - `#endif`
+
+### Class Member Naming
+
+- Public non-static class members begin with `m`.
+  - Example: `mCurrentState`
+- Public static class members begin with `ms`.
+  - Example: `msDefaultPort`
+- Private non-static class members begin with `m_`.
+  - Example: `m_currentState`
+- Private static class members begin with `m_s`.
+  - Example: `m_sDefaultPort`
+
+Prefer private members unless there is a clear reason to expose a public data member.
+
+---
+
+## GitHub Story / Issue Writing Conventions
+
+Engineering stories are written as GitHub issues in Markdown. Use the following structure unless the user explicitly requests a different format.
+
+```markdown
+## Story Details ##
+<bulletized list of details of the story/feature>
+
+## Due Outs ##
+<bulletized list of due outs/acceptance criteria for story, followed by the next two points>
+- Implement unit tests with 80% code coverage for all methods
+- Implement documentation for the class and its methods using the custom doxygen styled template
+
+## Class Details ##
+### Public Class Members ###
+Name: <member name>
+Type: <member type>
+
+### Public Class Method Signatures ###
+<method signature>
+Parameters:
+<parameter name> <parameter type> <parameter description>
+Returns:
+<returned object name> <returned type> <description of returned object>
+Exceptions:
+<exception type> <description of what causes the exception to be thrown>
+Behaviors:
+<bulletized list of extra details on behaviors of the function to help the developer>
+
+### Private Class Members ###
+Name: <member name>
+Type: <member type>
+
+### Private Class Method Signatures ###
+<method signature>
+Parameters:
+<parameter name> <parameter type> <parameter description>
+Returns:
+<returned object name> <returned type> <description of returned object>
+Exceptions:
+<exception type> <description of what causes the exception to be thrown>
+Behaviors:
+<bulletized list of extra details on behaviors of the function to help the developer>
+```
+
+### Story Formatting Rules
+
+- Use horizontal rules (`---`) between each method section and each member entry to improve readability.
+- Use fenced `cpp` code blocks for method signatures.
+- Keep class responsibilities tightly scoped.
+- Due outs for class implementation stories must include:
+  - implementation of the `.cpp` file
+  - implementation of the corresponding `.hpp` file
+  - clean startup and shutdown behavior where threads are involved
+  - unit tests with 80% code coverage for all methods
+  - documentation for the class and its methods using the custom Doxygen styled template
+- Use `enqueue...` names for asynchronous database persistence APIs, not `write...`, unless the method really performs the write synchronously on the caller's thread.
+
+---
+
+## Sensor Fusion Data Flow Context
+
+The system is being organized around three primary runtime components plus the Kalman filter.
+
+### `GpsReceiver`
+
+- Receives GPS update messages over UDP multicast only.
+- Multicast group IP: `239.1.2.3`.
+- Multicast group port: `3636`.
+- Owns the UDP multicast socket and receive thread.
+- The receive thread must not be detached; it must be joinable during shutdown.
+- Does not interact with the physical GPS device, serial interface, or raw GPS hardware protocol.
+- Consumes serialized GPS payloads produced elsewhere in the application.
+- Maps/deserializes each received payload into a `GpsUpdate` object.
+- Validates each mapped `GpsUpdate`.
+- Invokes a configured callback only after the payload has been parsed, mapped, and accepted.
+- The callback receives a parsed `GpsUpdate`; the callback is not responsible for parsing serialized payloads.
+- The intended callback provider is `ImuManager`.
+- Does not directly own `ImuManager`, `DatabaseManager`, or the Kalman filter.
+
+### `ImuManager`
+
+- Receives IMU measurements from the Raspberry Pi through an IMU measurement callback.
+- Receives GPS updates through an update method or callback connected to `GpsReceiver`.
+- Maintains the latest accepted `GpsUpdate` internally with thread-safe access.
+- Processes IMU measurements into a form usable by the Kalman filter.
+- Provides processed IMU data and the latest suitable GPS data to the Kalman filter callback.
+- Should avoid heavy processing, database writes, blocking calls, or long-running Kalman filter operations directly inside the IMU callback when practical.
+- Should use an internal queue and processing thread if callback latency or jitter matters.
+
+### `DatabaseManager`
+
+- Owns the SQLite connection and database writer thread.
+- Public persistence methods enqueue GPS, IMU, and Kalman records for asynchronous persistence.
+- SQLite writes occur on the `DatabaseManager` writer thread, not on caller threads.
+- Batches queued records into SQLite transactions where practical.
+- Flushes queued records during shutdown unless an unrecoverable database error occurs.
+- Does not directly own `GpsReceiver`, `ImuManager`, or the Kalman filter.
+
+### Kalman Filter Integration
+
+- `ImuManager` provides the callback path into the Kalman filter.
+- Kalman filter inputs should include processed IMU measurements and the latest GPS data when the GPS data is valid and fresh.
+- Kalman filter outputs should be made available for database persistence through `DatabaseManager`.
+
+---
+
+## Timestamp and Clock Conventions
+
+Use distinct clock types for distinct timestamp purposes.
+
+- Use `std::chrono::steady_clock::time_point` for monotonic receive timestamps, local ordering, stale-data checks, timeouts, and latency measurements.
+- Use `std::chrono::system_clock::time_point` for wall-clock timestamps, UTC correlation, logging, database records, and GPS payload timestamps.
+- Do not prefer `std::chrono::high_resolution_clock` for receive timing because it is not guaranteed to be steady.
+- GPS-related records should distinguish between:
+  - local monotonic receive time
+  - local wall-clock receive time
+  - GPS payload or measurement time when present
+- `steady_clock` values do not have a portable epoch. For database replay, store steady-clock values as offsets from a session start time or store enough session metadata to interpret them.
+
+---
+
+## Threading and Shutdown Conventions
+
+- Manager/receiver classes may own threads, but the objects themselves are not "threads."
+- Use explicit `start()` and `stop()` methods for runtime-managed classes.
+- Constructors should not start worker threads unless explicitly required and documented.
+- Worker threads must not be detached.
+- Shutdown must request thread termination and then join joinable threads.
+- Use `std::jthread` and `std::stop_token` where practical.
+- Shared state must be protected using mutexes, atomics, and condition variables where appropriate.
+- Avoid holding locks while invoking external callbacks.
+- Avoid holding locks while performing blocking I/O.
+- Public methods on internally asynchronous classes must be thread-safe.
+- Callback exceptions should be caught at thread boundaries so exceptions do not escape worker thread functions.
+
 ## Documentation Template & Rules
 
-All source files in this project follow a **standard file header**. Every new `.cpp`, `.hpp`, `.h`, `.ts`, `.tsx`, `.py`, `.sh`, and `.ps1` file must include this header, adapted to the file's language comment syntax.
+All source files in this project follow a **standard file header**. Every new `.cpp`, `.hpp`, `.ts`, `.tsx`, `.py`, `.sh`, and `.ps1` file must include this header, adapted to the file's language comment syntax.
 
 ### C / C++ Header Template
 
@@ -119,7 +288,7 @@ All source files in this project follow a **standard file header**. Every new `.
 
 ### C/C++ Method Documentation
 
-All non-trivial C++ methods — public, protected, and private — must have a Doxygen-format doc block in the header file (`.hpp` / `.h`). Trivial getters/setters consisting of a single return statement are exempt but encouraged. The format follows the style established in `FurunoConnectManager.hpp` and is described in full below.
+All non-trivial C++ methods — public, protected, and private — must have a Doxygen-format doc block in the header file (`.hpp`). Trivial getters/setters consisting of a single return statement are exempt but encouraged. The format follows the style established in `FurunoConnectManager.hpp` and is described in full below.
 
 #### Template
 
@@ -249,7 +418,7 @@ void handleNewConnection(const HttpRequestPtr &req, const WebSocketConnectionPtr
 2. **Author format follows this convention:** <First> <MI> <Last>. Example: `Brian R. Atkinson`
 3. **Organization is always:** `Marine Corps Software Factory`
 4. **Descriptions must be substantive.** Do not leave the description as a placeholder. Describe what the file actually does.
-5. **Include guards in C++ headers:** Use `#ifndef INU_DISPLAY_<FILENAME>_HPP` / `#define` / `#endif` format. Do not rely solely on `#pragma once`, though `#pragma once` may be included as a secondary guard after the `#ifndef`.
+5. **Include guards in C++ headers:** Use `#ifndef INU_DISPLAY_<FILENAME>_HPP` / `#define` / `#endif` format. Do not rely solely on `#pragma once`, though `#pragma once` may be included as a secondary guard after the `#ifndef`. New project headers must use the `.hpp` extension, not `.h`.
 6. **Namespaces:** Drogon plugin classes live in `namespace my_plugin`. Do not introduce new top-level namespaces without discussion.
 7. **Logging:** Use the compile-time logging macros controlled by `ALLOW_DEBUG_LOGGING`, `ALLOW_INFO_LOGGING`, `ALLOW_WARNING_LOGGING`, `ALLOW_ERROR_LOGGING`, and `ALLOW_WINDOW`. Do not use raw `std::cout` or `printf` for application logging.
 8. **Cross-platform guards:** Use `#ifdef` / `#if defined(_WIN32)` / `#elif defined(__linux__)` for platform-specific code blocks. Never write Linux-only or Windows-only code in a shared file without a platform guard.

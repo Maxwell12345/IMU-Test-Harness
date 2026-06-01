@@ -256,3 +256,194 @@ void handleNewConnection(const HttpRequestPtr &req, const WebSocketConnectionPtr
 9. **No internet-dependent code:** Do not introduce dependencies, update checks, or telemetry that require network access at runtime. The deployment environment may be fully air-gapped.
 10. **CMake dependency additions:** All new C++ dependencies must be added to the vcpkg manifest (`vcpkg.json`) and found via `find_package()` in `CMakeLists.txt`. Do not manually set include/lib paths except for the Furuno SDK which has no vcpkg port.
 11. **Constructors:** Constructors do not need Doxygen style documentation.
+---
+
+## C++ Naming and File Conventions
+
+### File Extensions
+
+- C++ implementation files use `.cpp`.
+- C++ header files always use `.hpp`.
+- Do not introduce new project headers using `.h`. Legacy `.h` files may exist, but new headers should use `.hpp` unless explicitly directed otherwise.
+
+### Type Naming
+
+- Class, struct, enum, and type-alias names use PascalCase.
+- Prefer precise responsibility-focused names over broad manager names when a class has a narrow role.
+  - Use `GpsReceiver` for the UDP multicast GPS receive component.
+  - Do not use `GPS_Manager` for the multicast-only receiver because it does not own the physical GPS hardware or serial interface.
+- Use `Gps` rather than `GPS` inside PascalCase type names unless an existing type or external API already requires a different spelling.
+  - Preferred: `GpsReceiver`, `GpsUpdate`, `GpsReceiverStats`.
+  - Avoid: `GPS_Manager`, `GPS_Update`, `GPSReceiverStats`.
+
+### Class Member Naming
+
+- Public non-static class members begin with `m`.
+  - Example: `mMemberName`.
+- Public static class members begin with `ms`.
+  - Example: `msMemberName`.
+- Private non-static class members begin with `m_`.
+  - Example: `m_memberName`.
+- Private static class members begin with `m_s`.
+  - Example: `m_sMemberName`.
+- Apply these prefixes consistently in generated code, story text, class details, and documentation.
+
+### Method Naming and API Intent
+
+- Prefer method names that describe runtime behavior accurately.
+- Use `enqueue...` for asynchronous persistence methods that place work on a queue.
+  - Preferred: `enqueueGpsUpdate`, `enqueueImuMeasurement`, `enqueueKalmanOutput`.
+  - Avoid naming asynchronous queueing methods `write...` if the method does not synchronously write to SQLite on the caller's thread.
+- Use explicit lifecycle methods such as `start()` and `stop()` for classes that own worker threads or sockets.
+- Worker threads must not be detached. They must be joinable and cleanly joined during shutdown.
+
+---
+
+## GitHub Story / Issue Template
+
+Engineering stories are posted as GitHub issues and should be generated in Markdown using the structure below. Preserve the section names and ordering unless the user explicitly requests a different format.
+
+```markdown
+## Story Details ##
+- <bulletized list of story or feature details>
+
+## Due Outs ##
+- <bulletized list of due outs and acceptance criteria>
+- Implement unit tests with 80% code coverage for all methods
+- Implement documentation for the class and its methods using the custom doxygen styled template
+
+## Class Details ##
+### Public Class Members ###
+Name: <member name>
+Type: <member type>
+Description: <briefly describes what purpose this member serves>
+
+---
+
+### Public Class Method Signatures ###
+
+```cpp
+<method signature>
+```
+
+Parameters:
+`<parameter name>` `<parameter type>` <parameter description>
+
+Returns:
+`<returned object name>` `<returned type>` <description of returned object>
+
+Exceptions:
+`<exception type>` <description of what causes the exception to be thrown>
+
+Behaviors:
+- <bulletized list of behavioral details>
+
+---
+
+### Private Class Members ###
+Name: <member name>
+Type: <member type>
+Description: <briefly describes what purpose this member serves>
+---
+
+### Private Class Method Signatures ###
+
+```cpp
+<method signature>
+```
+
+Parameters:
+`<parameter name>` `<parameter type>` <parameter description>
+
+Returns:
+`<returned object name>` `<returned type>` <description of returned object>
+
+Exceptions:
+`<exception type>` <description of what causes the exception to be thrown>
+
+Behaviors:
+- <bulletized list of behavioral details>
+```
+
+### Story Formatting Rules
+
+- Use horizontal rules (`---`) between each member entry and between each method section. This makes long GitHub issues easier to scan.
+- Use fenced `cpp` code blocks for method signatures.
+- Use backticks around parameter names, return object names, return types, member names, and exception types.
+- Public and private member names in stories must follow the project class-member naming convention.
+- For classes with no public members, write:
+  - `Name: None`
+  - `Type: N/A`
+- Story due outs must always include unit testing with 80% code coverage and documentation using the custom Doxygen style template.
+- When a story is still being reviewed, provide a preview in chat. Once approved, generate a `.md` file for the user.
+- Generated story files should use the class name and `_story.md` suffix when practical.
+  - Example: `GpsReceiver_story.md`.
+
+---
+
+## GPS / IMU / Database Data Flow Context
+
+The project is being organized around focused components instead of one monolithic manager. The expected near-term components are `GpsReceiver`, `ImuManager`, and `DatabaseManager`, with a Kalman filter component invoked from the IMU processing path.
+
+### GpsReceiver
+
+- `GpsReceiver` receives GPS update messages over UDP multicast on the private LAN.
+- The multicast group IP is `239.1.2.3`.
+- The multicast group port is `3636`.
+- `GpsReceiver` owns the UDP multicast socket used to receive GPS update messages.
+- `GpsReceiver` owns a receive thread containing the bound UDP multicast socket.
+- The receive thread must not be detached and must be cleanly joined during shutdown.
+- `GpsReceiver` is not responsible for interacting with the physical GPS device, serial interface, or raw GPS hardware protocol.
+- Another object in the application will connect to the physical GPS interface, receive serialized GPS data, and publish GPS update payloads to the multicast group.
+- `GpsReceiver` consumes the multicast payloads, deserializes/maps each valid payload into a `GpsUpdate` object, validates it, and then invokes a configured callback with the parsed `GpsUpdate`.
+- The callback passed to the `GpsReceiver` constructor receives the parsed `GpsUpdate`; the callback is not responsible for parsing serialized payloads.
+- The intended callback provider is `ImuManager`.
+- `GpsReceiver` should timestamp each received message with:
+  - a monotonic receive timestamp for local ordering, stale-data checks, and latency calculations;
+  - a wall-clock receive timestamp for logging, database recording, and correlation with other system data.
+- The GPS payload timestamp should be extracted from the serialized payload when available.
+- `GpsReceiver` should reject malformed, incomplete, stale, or otherwise invalid GPS messages according to validation logic.
+- `GpsReceiver` should expose diagnostic counters for received, accepted, rejected, malformed, stale, and callback-failed messages.
+- `GpsReceiver` must not directly own `ImuManager`, `DatabaseManager`, or the Kalman filter class.
+
+### ImuManager
+
+- `ImuManager` receives IMU measurements from the Raspberry Pi path through an IMU callback.
+- `ImuManager` receives GPS updates from `GpsReceiver`, most likely through a public update method or callback-compatible function.
+- `ImuManager` maintains the latest accepted GPS update internally and must protect it with thread-safe access.
+- `ImuManager` processes IMU measurements into a form readily usable by the Kalman filter.
+- `ImuManager` passes processed IMU data and the latest appropriate GPS data to the Kalman filter callback.
+- Avoid heavy, blocking, or long-running work directly inside the IMU measurement callback when practical. Prefer queueing the measurement and processing it from an internal worker thread when timing jitter matters.
+- `ImuManager` should use stale-data checks before combining GPS data with IMU measurements.
+- `ImuManager` may be constructed or owned via `boost::shared_ptr` where required by surrounding application patterns.
+
+### DatabaseManager
+
+- `DatabaseManager` owns the SQLite database connection.
+- `DatabaseManager` owns a writer thread responsible for SQLite persistence.
+- The writer thread must not be detached and must be cleanly joined during shutdown.
+- Public persistence methods should enqueue records for asynchronous database writes rather than performing SQLite operations on caller threads.
+- All SQLite writes should occur on the `DatabaseManager` writer thread.
+- `DatabaseManager` should provide enqueue methods for GPS update records, IMU measurement records, and Kalman filter output records.
+- `DatabaseManager` should batch queued records into SQLite transactions where practical.
+- `DatabaseManager` should initialize or validate required database tables if they do not already exist.
+- `DatabaseManager` should flush queued records during shutdown unless an unrecoverable database error occurs.
+- `DatabaseManager` should expose diagnostic counters for queued records, written records, failed writes, dropped records, and current queue depth.
+- `DatabaseManager` must not directly own `GpsReceiver`, `ImuManager`, or the Kalman filter class.
+
+### Timestamp Guidance
+
+- Use `std::chrono::steady_clock::time_point` for local monotonic receive timing, elapsed-time calculations, stale-data checks, ordering, and latency calculations.
+- Use `std::chrono::system_clock::time_point` for wall-clock UTC timestamps, database correlation, logs, and timestamps that represent real-world calendar time.
+- Avoid using `std::chrono::high_resolution_clock` for receive timing because it is not guaranteed to be steady on all platforms.
+- A `GpsUpdate` should distinguish between local receive time and the GPS payload measurement time.
+- For database storage, prefer explicit integer timestamp fields such as microseconds or nanoseconds since Unix epoch for wall-clock time. Monotonic timestamps should be stored as offsets from a recorded session start if replay across process runs is required.
+
+### Threading and Shutdown Guidance
+
+- Classes that own sockets, queues, or worker threads should expose explicit `start()` and `stop()` methods.
+- Constructors should configure and validate dependencies but should avoid starting worker threads unless there is a strong reason to do so.
+- Destructors should call `stop()` when the object is still running, and destructors must not throw.
+- Shared state must be protected with mutexes, atomics, and condition variables where practical.
+- Avoid holding mutexes while invoking externally supplied callbacks.
+- Callback exceptions should be caught at thread boundaries and should not escape worker-thread entry points.

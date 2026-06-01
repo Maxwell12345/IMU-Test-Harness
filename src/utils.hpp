@@ -14,11 +14,58 @@
 #pragma once
 
 #include <cmath>
-#include <string>
 #include <stdexcept>
+#include <chrono>
+#include <numbers>
 
 namespace IMUUtils
 {
+    inline double METERS_PER_DEGREE = 111111.1;
+    inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
+    inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
+
+    struct GpsUpdate {
+        std::chrono::steady_clock::time_point rxTimestamp;
+        std::chrono::system_clock::time_point gpsTimestamp;
+        double latitude;
+        double longitude;
+
+        GpsUpdate():
+            rxTimestamp(std::chrono::steady_clock::now()) {}
+
+        GpsUpdate(double latitude, double longitude, std::chrono::system_clock::time_point gpsTimestamp):
+            rxTimestamp(std::chrono::steady_clock::now()),
+            gpsTimestamp(gpsTimestamp),
+            latitude(latitude),
+            longitude(longitude) {}
+    };
+
+    struct KineticState {
+        using TimePoint = std::chrono::steady_clock::time_point;
+
+        TimePoint timestamp;
+        double speedEastWest{};
+        double speedNorthSouth{};
+        double accelerationEastWest{};
+        double accelerationNorthSouth{};
+
+        KineticState():
+            timestamp(std::chrono::steady_clock::now()) {}
+
+        KineticState(double v_x, double v_y, double a_x, double a_y):
+            timestamp(std::chrono::steady_clock::now()),
+            speedEastWest(v_x),
+            speedNorthSouth(v_y),
+            accelerationEastWest(a_x),
+            accelerationNorthSouth(a_y) {}
+
+        KineticState(TimePoint tp, double v_x, double v_y, double a_x, double a_y):
+            timestamp(tp),
+            speedEastWest(v_x),
+            speedNorthSouth(v_y),
+            accelerationEastWest(a_x),
+            accelerationNorthSouth(a_y) {}
+    };
 
     /**
      * Converts Degrees to Radians from IMU readings.
@@ -93,19 +140,103 @@ namespace IMUUtils
     };
 
     /**
-     * @brief Converts magnetic heading and declination angle values into a true north angle.
-     *        True north angle is a degree value from 0 to 360.
-     * 
-     * @param [in] magneticHeading Magnetic heading in geodidic WGS84 from [0, 360).
-     * @param [in] declinationAngle NOAA calculated declination angle in geodedic WGS84 [-180, 180).
-     * 
-     * @return True north heading in geodedic WGS84 from [0, 360).
-     * 
-     * @remarks
-     * 
-     * @throws std::runtime_error if inputs are out of bounds.
-     * 
+     *
+     * @brief   Converts a linear acceleration along the surface of the Earth oriented East/West from meters/(second^2)
+     * into degrees_longitude / (second^2)
+     *
+     * @param [in] boat_latitude    The latitude of the boat at the moment in time the acceleration was measured, in
+     * units of decimal degrees (DD.dddddd). Latitudes south of the equator are entered as negative values
+     * @param [in] global_x     The linear acceleration of the boat along the East/West axis with East being positive
+     *
+     * @return  A double containing the longitudinal acceleration in degrees per second per second, with East being positive
+     *
+     * @throws out_of_range    If the inputted latitude is outside the inclusive bounds of  [-90.0 , 90.0] decimal degrees
      */
+    double Convert_Global_X_to_DegPerS2(double boat_latitude, double global_x) {
+        if (boat_latitude < -90.0 || boat_latitude > 90.0) {
+            throw std::out_of_range("Latitude values must be between [-90.0 , 90.0] degrees in degreee decimal form (e.g. 12.3456).");
+        }
+        return  std::cos(boat_latitude * IMUUtils::RAD_PER_DEGREE) * global_x / METERS_PER_DEGREE;
+    }
+
+    /**
+    *
+    * @brief   Converts a linear acceleration along the surface of the Earth oriented North/South from meters/(second^2)
+    * into degrees_latitude / (second^2)
+    *
+    * @param [in] global_y     The linear acceleration of the boat along the North/South axis with North being positive
+    *
+    * @return  A double containing the latitudinal acceleration in degrees per second per second, with North being positive
+    */
+    double Convert_Global_Y_to_DegPerS2(double global_y) {
+        return global_y / METERS_PER_DEGREE;
+    }
+
+    /**
+    *
+    * @brief   Calculates the current state of the vessel on a global coordinate frame using degrees latitude/longitude as
+    * the metric for movenemt. Utilizes basic Newtonia motion mechanics and assumes a constant acceleration over the elapsed
+    * period between measurements to project where an object is given a rate of acceleration, previous velocity, and
+    * time elapsed.
+    *
+    * @param [in] previous     A const reference to the previously calculated kinetic state of the system in global reference frame
+    * @param [in] accelerationEastWest     The east/west acceleration of the system as measured by the IMU, converted to global
+    * frame (measured in degrees longitude per second per second) with east being positive
+    * @param [in] accelerationNorthSouth     The north/south acceleration of the system as measured by the IMU, converted to global
+    * frame (measured in degrees latitude per second per second) with north being positive
+    * @param [in] currentTimestamp     The steady clock timestamp to assign to the calculated state. Allows tests and
+    * production callers to control the exact elapsed time used in the velocity update.
+    *
+    * @return  The calculated position of the vessel
+    */
+    KineticState Caclulate_Kinetic_Update(const IMUUtils::KineticState& previous, double accelerationEastWest,
+                                          double accelerationNorthSouth, KineticState::TimePoint currentTimestamp) {
+        KineticState current = KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
+        const double deltaT = std::chrono::duration<double>(current.timestamp - previous.timestamp).count();
+
+        current.accelerationEastWest = accelerationEastWest;
+        current.speedEastWest = previous.speedEastWest + accelerationEastWest * deltaT;
+        // double deltaX = previous.speedEastWest * deltaT + .5 * accelerationEastWest * deltaT;
+
+        current.accelerationNorthSouth = accelerationNorthSouth;
+        current.speedNorthSouth= previous.speedNorthSouth + accelerationNorthSouth * deltaT;
+        // double deltaX = previous.speedNorthSouth * deltaT + .5 * accelerationNorthSouth * deltaT;
+
+        return current;
+    }
+
+    /**
+    *
+    * @brief   Calculates the current kinetic state using the steady clock timestamp captured at the time of the call.
+    *
+    * @param [in] previous     A const reference to the previously calculated kinetic state of the system in global reference frame
+    * @param [in] accelerationEastWest     The east/west acceleration of the system as measured by the IMU, converted to global
+    * frame (measured in degrees longitude per second per second) with east being positive
+    * @param [in] accelerationNorthSouth     The north/south acceleration of the system as measured by the IMU, converted to global
+    * frame (measured in degrees latitude per second per second) with north being positive
+    *
+    * @return  The calculated position of the vessel
+    */
+    KineticState Caclulate_Kinetic_Update(const IMUUtils::KineticState& previous, double accelerationEastWest,
+                                          double accelerationNorthSouth) {
+        return Caclulate_Kinetic_Update(previous, accelerationEastWest, accelerationNorthSouth,
+                                        std::chrono::steady_clock::now());
+    }
+  
+   /**
+    * @brief Converts magnetic heading and declination angle values into a true north angle.
+    *        True north angle is a degree value from 0 to 360.
+    * 
+    * @param [in] magneticHeading Magnetic heading in geodidic WGS84 from [0, 360).
+    * @param [in] declinationAngle NOAA calculated declination angle in geodedic WGS84 [-180, 180).
+    * 
+    * @return True north heading in geodedic WGS84 from [0, 360).
+    * 
+    * @remarks
+    * 
+    * @throws std::runtime_error if inputs are out of bounds.
+    * 
+    */
     double MagneticToTrueHeading(double magneticHeading, double declinationAngle) {
         if (magneticHeading < 0.0 || magneticHeading >= 360.0 || declinationAngle < -180.0 || declinationAngle >= 180.0) {
             throw std::runtime_error("Magnetic heading or declination angle is invalid. Magnetic heading bounds are [0.0, 360.0) and declination angle bounds are [-180.0, 180.0). Got, magneticHeading: " + std::to_string(magneticHeading) + " and declinationAngle: " + std::to_string(declinationAngle));
@@ -123,7 +254,6 @@ namespace IMUUtils
 
         return trueNorthHeading;
     }
-
 } // namespace IMUUtils
 
 #endif // IMU_UTILS_HPP

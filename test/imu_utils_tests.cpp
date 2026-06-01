@@ -290,3 +290,24 @@ TEST(IMUUtils, MagneticToTrueHeadingExpectedValues) {
     EXPECT_THROW(MagneticToTrueHeading(0.0, 180), std::runtime_error);
     EXPECT_NO_THROW(MagneticToTrueHeading(0.0, -180));
 }
+
+TEST(IMUUtils, KineticUpdates) {
+    const auto initialTimePoint = std::chrono::steady_clock::time_point{};
+    const auto initialState = IMUUtils::KineticState(initialTimePoint, 0.0, 0.0, 0.0, 0.0);
+
+    const auto secondTimePoint = initialTimePoint + std::chrono::milliseconds(1);
+    IMUUtils::KineticState secondState = IMUUtils::Caclulate_Kinetic_Update(initialState, 1.0, 1.0, secondTimePoint);
+    EXPECT_EQ(secondState.timestamp, secondTimePoint);
+    EXPECT_NEAR(secondState.accelerationEastWest, 1.0, 1e-12);
+    EXPECT_NEAR(secondState.accelerationNorthSouth, 1.0, 1e-12);
+    EXPECT_NEAR(secondState.speedEastWest, .001, 1e-12);
+    EXPECT_NEAR(secondState.speedNorthSouth, .001, 1e-12);
+
+    const auto thirdTimePoint = secondTimePoint + std::chrono::milliseconds(1);
+    IMUUtils::KineticState thirdState = IMUUtils::Caclulate_Kinetic_Update(secondState, 2.0, -1.0, thirdTimePoint);
+    EXPECT_EQ(thirdState.timestamp, thirdTimePoint);
+    EXPECT_NEAR(thirdState.accelerationEastWest, 2.0, 1e-12);
+    EXPECT_NEAR(thirdState.accelerationNorthSouth, -1.0, 1e-12);
+    EXPECT_NEAR(thirdState.speedEastWest, .003, 1e-12);
+    EXPECT_NEAR(thirdState.speedNorthSouth, 0.0, 1e-12);
+}
