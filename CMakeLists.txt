@@ -9,6 +9,7 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
