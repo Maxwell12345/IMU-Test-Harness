@@ -14,6 +14,7 @@
 #include <mutex>
 #include "IMUGPSFusionKF.hpp"
 #include "MagneticDeclination.hpp"
+#include "IMUManager.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;

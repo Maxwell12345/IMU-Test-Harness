@@ -13,4 +13,19 @@ struct GpsUpdate {
     double hdop;                                          // horizontal dilution of precision
     uint32_t gpsTimestampMs;                              // time-of-day from GPS sentence (ms since midnight UTC)
     bool valid;                                           // overall validity flag
+
+    GpsUpdate& operator=(const GpsUpdate& other) {
+        receiveTime = other.receiveTime;
+        wallTime = other.wallTime;
+        latitude = other.latitude;
+        longitude = other.longitude;
+        heading = other.heading;
+        fixQuality = other.fixQuality;
+        numSatellites = other.numSatellites;
+        hdop = other.hdop;
+        gpsTimestampMs = other.gpsTimestampMs;
+        valid = other.valid;
+
+        return *this;
+    }
 };
