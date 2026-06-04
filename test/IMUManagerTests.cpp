@@ -33,3 +33,35 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
                          0, 0, 0, 0};
     EXPECT_EQ(gpsVector, expected);
 }
+
+TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
+    EXPECT_EQ(IMUManager::GetLatestGps(), std::nullopt);
+}
+
+TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue) {
+    sh2_SensorValue sensorValue;
+
+    sensorValue.sensorId = SH2_LINEAR_ACCELERATION;
+    sensorValue.timestamp = 1;
+    sensorValue.un.linearAcceleration.x = 1;
+    sensorValue.un.linearAcceleration.y = 1;
+    sensorValue.un.linearAcceleration.z = 1;
+    sensorValue.status = 1;
+
+    EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
+
+    sensorValue.sensorId = SH2_MAGNETIC_FIELD_CALIBRATED;
+    sensorValue.un.magneticField.x = 1;
+    sensorValue.un.magneticField.y = 1;
+    sensorValue.un.magneticField.z = 1;
+
+    EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
+
+    sensorValue.sensorId = SH2_ROTATION_VECTOR;
+    sensorValue.un.rotationVector.i = 1;
+    sensorValue.un.rotationVector.j = 1;
+    sensorValue.un.rotationVector.k = 1;
+    sensorValue.un.rotationVector.real = 1;
+
+    EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
+}

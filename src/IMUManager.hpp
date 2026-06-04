@@ -177,9 +177,11 @@ private:
     std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> m_ekfCallbackWithGps;
 
 private:
-    FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
+    FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
+    FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
     FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
+    FRIEND_TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue);
 };
 
 #endif
