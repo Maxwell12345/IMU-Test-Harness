@@ -1,3 +1,5 @@
+#ifndef GPS_UPDATE_HPP
+#define GPS_UPDATE_HPP
 #pragma once
 
 #include <chrono>
@@ -29,3 +31,4 @@ struct GpsUpdate {
         return *this;
     }
 };
+#endif

@@ -241,68 +241,57 @@ TEST(IMUUtils, Convert_Local_xy_Acceleration_To_Global_Y_Acceleration) {
   };
 };
 // ----------------------------------------------------------------------------
-// TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
-//   struct Case {
-//     double degree_latitude_input;
-//     double degree_longitude_input;
-//     double accel_x_input;
-//     double accel_deg_longitude_output;
-//   };
+TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
+  struct Case {
+    double degree_latitude_input;
+    double accel_x_input;
+    double accel_deg_longitude_output;
+  };
 
-//   const std::vector<Case> cases = {
-//       // Near equator at +1 m/s2
-//       {0.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
-//       // 45 deg latitude at +1 m/s2
-//       {45.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
-//       // 60 deg latitude at +1 m/s2
-//       {60.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))},
-//       // Near equator at -1 m/s2
-//       {0.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
-//       // 45 deg latitude at -1 m/s2
-//       {45.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
-//       // 60 deg latitude at -1 m/s2
-//       {60.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))}
-//   };
+  const std::vector<Case> cases = {
+      // Near equator at +1 m/s2
+      {0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      // 45 deg latitude at +1 m/s2
+      {45.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      // 60 deg latitude at +1 m/s2
+      {60.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))},
+      // Near equator at -1 m/s2
+      {0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      // 45 deg latitude at -1 m/s2
+      {45.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      // 60 deg latitude at -1 m/s2
+      {60.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))}
+  };
 
-//   for (const auto &c : cases) {
-//     EXPECT_NEAR(
-//         IMUUtils::Convert_Global_X_To_DegPerS2(c.degree_latitude_input, c.degree_longitude_input, c.accel_x_input),
-//         c.accel_deg_longitude_output, 1e-9
-//     );
-//   };
-// };
+  for (const auto &c : cases) {
+    EXPECT_NEAR(
+        IMUUtils::Convert_Global_X_to_DegPerS2(c.degree_latitude_input, c.accel_x_input),
+        c.accel_deg_longitude_output, 1e-9
+    );
+  };
+};
 
 // ----------------------------------------------------------------------------
-// TEST(IMUUtils, Convert_Global_Y_Accel_Into_Degrees_Latitude) {
-//   struct Case {
-//     double degree_latitude_input;
-//     double degree_longitude_input;
-//     double accel_y_input;
-//     double accel_deg_latitude_output;
-//   };
+TEST(IMUUtils, Convert_Global_Y_Accel_Into_Degrees_Latitude) {
+  struct Case {
+    double accel_y_input;
+    double accel_deg_latitude_output;
+  };
 
-//   const std::vector<Case> cases = {
-//       // Near equator at +1 m/s2
-//       {0.0, 0.0, 1.0, 1.0 / 111111.11},
-//       // 45 deg latitude at +1 m/s2
-//       {0.0, 45.0, 1.0, 1.0 / 111111.11},
-//       // 60 deg latitude at +1 m/s2
-//       {0.0, 60.0, 1.0, 1.0 / 111111.11},
-//       // Near equator at -1 m/s2
-//       {0.0, 0.0, -1.0, -1.0 / 111111.11},
-//       // 45 deg latitude at -1 m/s2
-//       {0.0, 45.0, -1.0, -1.0 / 111111.11},
-//       // 60 deg latitude at -1 m/s2
-//       {0.0, 60.0, -1.0, -1.0 / 111111.11}
-//   };
+  const std::vector<Case> cases = {
+      // Near equator at +1 m/s2
+      {1.0, 1.0 / 111111.11},
+      // Near equator at -1 m/s2
+      {-1.0, -1.0 / 111111.11},
+  };
 
-//   for (const auto &c : cases) {
-//     EXPECT_NEAR(
-//         IMUUtils::Convert_Global_X_To_DegPerS2(c.degree_latitude_input, c.degree_longitude_input, c.accel_y_input),
-//         c.accel_deg_latitude_output, 1e-9
-//     );
-//   };
-// };
+  for (const auto &c : cases) {
+    EXPECT_NEAR(
+        IMUUtils::Convert_Global_Y_to_DegPerS2(c.accel_y_input),
+        c.accel_deg_latitude_output, 1e-9
+    );
+  };
+};
 // ----------------------------------------------------------------------------
 TEST(IMUUtils, Calculating_Magnetic_Heading_From_Rotation_Vectors) {
   struct Case {

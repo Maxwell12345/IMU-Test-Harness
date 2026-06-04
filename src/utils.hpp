@@ -93,7 +93,7 @@ namespace IMUUtils
  * 
  *  @return         Normalized heading in radians from [0.0 -> 2 * pi]
  */
-double DegreesToRadians(double degrees) {
+inline double DegreesToRadians(double degrees) {
   if(degrees < 0 || degrees >= 360) {
     degrees = fmod(degrees, 360);
     degrees = (degrees < 0)? degrees + 360 : degrees;
@@ -122,7 +122,7 @@ double DegreesToRadians(double degrees) {
  * @return          Linear acceleration in global x axis (East/West with East being positive) measured in meters per sec
  * per second.
  */
-double InertialToGlobal_X(double theta_t, double boat_x, double boat_y) {
+inline double InertialToGlobal_X(double theta_t, double boat_x, double boat_y) {
   double global_X = std::cos(theta_t) * boat_x + std::sin(theta_t) * boat_y;
   return global_X;
 };
@@ -147,7 +147,7 @@ double InertialToGlobal_X(double theta_t, double boat_x, double boat_y) {
  * sec per second.
  *
  */
-double InertialToGlobal_Y(double theta_t, double boat_x, double boat_y) {
+inline double InertialToGlobal_Y(double theta_t, double boat_x, double boat_y) {
   double global_Y = std::cos(theta_t) * boat_y - std::sin(theta_t) * boat_x;
   return global_Y;
 };
@@ -165,7 +165,7 @@ double InertialToGlobal_Y(double theta_t, double boat_x, double boat_y) {
   *
   * @throws out_of_range    If the inputted latitude is outside the inclusive bounds of  [-90.0 , 90.0] decimal degrees
   */
-double Convert_Global_X_to_DegPerS2(double boat_latitude, double global_x) {
+inline double Convert_Global_X_to_DegPerS2(double boat_latitude, double global_x) {
     if (boat_latitude < -90.0 || boat_latitude > 90.0) {
         throw std::out_of_range("Latitude values must be between [-90.0 , 90.0] degrees in degreee decimal form (e.g. 12.3456).");
     }
@@ -181,7 +181,7 @@ double Convert_Global_X_to_DegPerS2(double boat_latitude, double global_x) {
 *
 * @return  A double containing the latitudinal acceleration in degrees per second per second, with North being positive
 */
-double Convert_Global_Y_to_DegPerS2(double global_y) {
+inline double Convert_Global_Y_to_DegPerS2(double global_y) {
     return global_y / METERS_PER_DEGREE;
 }
 
@@ -202,7 +202,7 @@ double Convert_Global_Y_to_DegPerS2(double global_y) {
 *
 * @return  The calculated position of the vessel
 */
-KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
+inline KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
                                       double accelerationNorthSouth, KineticState::TimePoint currentTimestamp) {
     KineticState current = KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
     const double deltaT = std::chrono::duration<double>(current.timestamp - previous.timestamp).count();
@@ -230,7 +230,7 @@ KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, doub
 *
 * @return  The calculated position of the vessel
 */
-KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
+inline KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
                                       double accelerationNorthSouth) {
     return CalculateKineticUpdate(previous, accelerationEastWest, accelerationNorthSouth,
                                     std::chrono::steady_clock::now());
@@ -250,7 +250,7 @@ KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, doub
 * @throws std::runtime_error if inputs are out of bounds.
 * 
 */
-double MagneticToTrueHeading(double magneticHeading, double declinationAngle) {
+inline double MagneticToTrueHeading(double magneticHeading, double declinationAngle) {
     if (magneticHeading < 0.0 || magneticHeading >= 360.0 || declinationAngle < -180.0 || declinationAngle >= 180.0) {
         throw std::runtime_error("Magnetic heading or declination angle is invalid. Magnetic heading bounds are [0.0, 360.0) and declination angle bounds are [-180.0, 180.0). Got, magneticHeading: " + std::to_string(magneticHeading) + " and declinationAngle: " + std::to_string(declinationAngle));
     }
@@ -286,7 +286,7 @@ double MagneticToTrueHeading(double magneticHeading, double declinationAngle) {
  * @return  A double containing the magnetic heading of the IMU in degrees (not radians).
  *
  */
-double Calculate_Magnetic_Heading(double w, double i, double j, double k) {
+inline double Calculate_Magnetic_Heading(double w, double i, double j, double k) {
   double heading = std::atan2(2 * ((w * k) + (i * j)), 1 - 2 * ((j * j) + (k * k)));
 
     if(w < 0.0 || w > 1.0) {
