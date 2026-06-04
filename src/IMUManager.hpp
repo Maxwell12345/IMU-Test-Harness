@@ -13,6 +13,7 @@
 #include "utils.hpp"
 #include "GpsUpdate.hpp"
 #include "IMUManagerStats.hpp"
+#include "MagneticDeclination.hpp"
 
 extern "C" {
 #include <sh2.h>
@@ -142,6 +143,19 @@ private:
     static bool ValidateImuEvent(const sh2_SensorValue& sensorValue);
 
     /**
+     * @brief Storing IMU Value to its respective static member variable
+     *
+     * @remarks IMU sensor ids maps to the following static member variables:
+     *      SH2_LINEAR_ACCELERATION -> s_ImuAccelerometer
+     *      SH2_MAGNETIC_FIELD_CALIBRATED -> s_ImuMagnetometer
+     *
+     * @param sensorValue reference to the decoded sensor value
+     *
+     * @return
+     */
+    static void StoreImuValue(const sh2_SensorValue& sensorValue);
+
+    /**
      * @brief Build an Eigen vector representation of GpsUpdate data
      * 
      * @param [in] gps gps data struct
@@ -157,21 +171,29 @@ private:
      *
      * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
      */
-    static Vector6d BuildImuMeasurementVector(const sh2_SensorValue& sensorValue, const GpsUpdate& gps);
+    static Vector6d BuildImuMeasurementVector(const sh2_RotationVector& rv, const sh2_Accelerometer& la, const GpsUpdate& gps);
     
-    static std::mutex s_gpsMutex;
-    static std::mutex s_kineticStateMutex;
-    static std::mutex s_latImuTimestampMutex;
+    static IMUManager* s_instance;              // Singleton IMUManager instance. Only one per run time
 
-    static bool s_gpsSentToEkf;
-    static IMUManager* s_instance;
+    static std::mutex s_lastImuEkfInvocationMutex;   // Mutex used when s_lastImuTimestamp is read/writen
+    static std::mutex s_imuValueMutex;                  // Mutex used when s_ImuMagneticField/s_ImuLinearAcceleration modified / read
+    static bool s_imuRotationVectorReady;               
+    static bool s_imuLinearAccelerationReady;         
+    static sh2_RotationVector s_imuRotationVector;    
+    static sh2_Accelerometer s_imuLinearAcceleration;
+    static std::chrono::steady_clock::time_point s_lastImuEkfIvocation;
+    
+    static std::mutex s_gpsMutex;               // Mutex used when s_latestGps is read/written
+    static bool s_gpsSentToEkf;                 // Flag indicating latestGps is sent to ekf
     static std::optional<GpsUpdate> s_latestGps;
-    static IMUUtils::KineticState s_kineticState; 
-    static std::chrono::steady_clock::time_point s_lastImuTimestamp;
+
+    static std::mutex s_kineticStateMutex;      // Mutex used when s_kineticState is read/written
+    static IMUUtils::KineticState s_kineticState;
     
     mutable std::mutex m_statsMutex;
 
     IMUManagerStats m_stats;
+    MagneticDeclination m_magneticDeclination;
     boost::shared_ptr<DatabaseManager> m_databaseManager;
     std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> m_ekfCallbackImuOnly;
     std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> m_ekfCallbackWithGps;

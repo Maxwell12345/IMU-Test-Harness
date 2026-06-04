@@ -2,17 +2,26 @@
 
 #include "utils.hpp"
 #include "IMUManager.hpp"
+#include "MagneticDeclination.hpp"
 
 constexpr auto steadyMin = std::chrono::steady_clock::time_point::min();
 
 std::mutex IMUManager::s_gpsMutex;
 std::mutex IMUManager::s_kineticStateMutex;
-std::mutex IMUManager::s_latImuTimestampMutex;
+std::mutex IMUManager::s_lastImuEkfInvocationMutex;
+std::mutex IMUManager::s_imuValueMutex;
+
+sh2_RotationVector IMUManager::s_imuRotationVector;    
+sh2_Accelerometer IMUManager::s_imuLinearAcceleration;
 
 bool IMUManager::s_gpsSentToEkf = false;
+bool IMUManager::s_imuRotationVectorReady = false;               
+bool IMUManager::s_imuLinearAccelerationReady = false;  
+
 IMUManager* IMUManager::s_instance = nullptr;
 std::optional<GpsUpdate> IMUManager::s_latestGps = std::nullopt;
-std::chrono::steady_clock::time_point IMUManager::s_lastImuTimestamp = steadyMin;
+std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfIvocation = steadyMin;
+
 IMUUtils::KineticState IMUManager::s_kineticState(0.0, 0.0, 0.0, 0.0);
 
 IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
@@ -33,6 +42,8 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
     m_databaseManager = databaseManager;
     m_ekfCallbackImuOnly = ekfCallbackImuOnly;
     m_ekfCallbackWithGps = ekfCallbackWithGps;
+
+    m_magneticDeclination.LoadCOF("./WMM.COF");
 }
 
 void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
@@ -121,17 +132,32 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
-        double dtSeconds;
-        auto now = std::chrono::steady_clock::now();
+        StoreImuValue(val);
+
         {
-            std::lock_guard lastImuTimestampGuard(s_latImuTimestampMutex);
-            if (s_lastImuTimestamp == steadyMin) {
-                s_lastImuTimestamp = now;
+            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
+            if (s_lastImuEkfIvocation == steadyMin) {
+                s_lastImuEkfIvocation = std::chrono::steady_clock::now();
                 return;
-            } else {
-                dtSeconds = std::chrono::duration<double>(now - s_lastImuTimestamp).count();
-                s_lastImuTimestamp = now;
             }
+        }
+
+        sh2_RotationVector rotationVectorSnapshot;
+        sh2_Accelerometer linearAccelerationSnapshot;
+        {
+            std::lock_guard imuValueGuard(s_imuValueMutex);
+            if(s_imuRotationVectorReady == false || s_imuLinearAccelerationReady == false) {
+                return;
+            }
+
+            rotationVectorSnapshot.i = s_imuRotationVector.i;
+            rotationVectorSnapshot.j = s_imuRotationVector.j;
+            rotationVectorSnapshot.k = s_imuRotationVector.k;
+            rotationVectorSnapshot.real = s_imuRotationVector.real;
+
+            linearAccelerationSnapshot.x = s_imuLinearAcceleration.x;
+            linearAccelerationSnapshot.y = s_imuLinearAcceleration.y;
+            linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
         }
         
         std::optional<GpsUpdate> gpsUpdateSnapshot;
@@ -142,11 +168,13 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             gpsSentToEkfSnapshot = s_gpsSentToEkf;
         }
 
-        if(!gpsUpdateSnapshot.has_value()) {
-            throw std::runtime_error("gps is nullopt");
-        }
+        Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
+                                                  linearAccelerationSnapshot,
+                                                  gpsUpdateSnapshot.value());
 
-        Vector6d zImu = BuildImuMeasurementVector(val, gpsUpdateSnapshot.value());
+        auto now = std::chrono::steady_clock::now();
+        double dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfIvocation).count();
+        s_lastImuEkfIvocation = now;
 
         if(gpsUpdateSnapshot.has_value() && gpsSentToEkfSnapshot == false) {
             Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
@@ -167,15 +195,15 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
 bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
     switch (sensorValue.sensorId) {
-        case SH2_ACCELEROMETER:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.accelerometer.x) ||
-                IsInvalidRange(sensorValue.un.accelerometer.y) ||
-                IsInvalidRange(sensorValue.un.accelerometer.z) ||
-                IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
-                return false;
-            }
-            break;
+        // case SH2_ACCELEROMETER:
+        //     if( IsInvalidRange(sensorValue.timestamp) ||
+        //         IsInvalidRange(sensorValue.un.accelerometer.x) ||
+        //         IsInvalidRange(sensorValue.un.accelerometer.y) ||
+        //         IsInvalidRange(sensorValue.un.accelerometer.z) ||
+        //         IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
+        //         return false;
+        //     }
+        //     break;
 
         case SH2_LINEAR_ACCELERATION:
             if( IsInvalidRange(sensorValue.timestamp) ||
@@ -187,14 +215,14 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
             }
             break;
 
-        case SH2_GYROSCOPE_CALIBRATED:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.gyroscope.x) ||
-                IsInvalidRange(sensorValue.un.gyroscope.y) ||
-                IsInvalidRange(sensorValue.un.gyroscope.z)) {
-                return false;
-            }
-            break;
+        // case SH2_GYROSCOPE_CALIBRATED:
+        //     if( IsInvalidRange(sensorValue.timestamp) ||
+        //         IsInvalidRange(sensorValue.un.gyroscope.x) ||
+        //         IsInvalidRange(sensorValue.un.gyroscope.y) ||
+        //         IsInvalidRange(sensorValue.un.gyroscope.z)) {
+        //         return false;
+        //     }
+        //     break;
 
         case SH2_MAGNETIC_FIELD_CALIBRATED:
             if( IsInvalidRange(sensorValue.timestamp) ||
@@ -217,15 +245,15 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
             }
             break;
 
-        case SH2_GAME_ROTATION_VECTOR:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.gameRotationVector.i) ||
-                IsInvalidRange(sensorValue.un.gameRotationVector.j) ||
-                IsInvalidRange(sensorValue.un.gameRotationVector.k) ||
-                IsInvalidRange(sensorValue.un.gameRotationVector.real)) {
-                return false;
-            }
-            break;
+        // case SH2_GAME_ROTATION_VECTOR:
+        //     if( IsInvalidRange(sensorValue.timestamp) ||
+        //         IsInvalidRange(sensorValue.un.gameRotationVector.i) ||
+        //         IsInvalidRange(sensorValue.un.gameRotationVector.j) ||
+        //         IsInvalidRange(sensorValue.un.gameRotationVector.k) ||
+        //         IsInvalidRange(sensorValue.un.gameRotationVector.real)) {
+        //         return false;
+        //     }
+        //     break;
 
         default:
             return false;
@@ -234,26 +262,67 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
     return true;
 };
 
+void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
+    std::lock_guard sensorValueGuard(s_imuValueMutex);
+    switch (sensorValue.sensorId) {
+        case SH2_ACCELEROMETER:
+            break;
+
+        case SH2_LINEAR_ACCELERATION:
+            s_imuLinearAccelerationReady = true;
+            s_imuLinearAcceleration.x = sensorValue.un.linearAcceleration.x;
+            s_imuLinearAcceleration.y = sensorValue.un.linearAcceleration.y;
+            s_imuLinearAcceleration.z = sensorValue.un.linearAcceleration.z;
+            break;
+
+        case SH2_GYROSCOPE_CALIBRATED:
+            break;
+
+        case SH2_MAGNETIC_FIELD_CALIBRATED:
+            break;
+
+        case SH2_ROTATION_VECTOR:
+            s_imuRotationVectorReady = true;
+            s_imuRotationVector.i = sensorValue.un.rotationVector.i;
+            s_imuRotationVector.j = sensorValue.un.rotationVector.j;
+            s_imuRotationVector.k = sensorValue.un.rotationVector.k;
+            s_imuRotationVector.real = sensorValue.un.rotationVector.real;
+            break;
+
+        case SH2_GAME_ROTATION_VECTOR:
+            break;
+    }
+}
+
 Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate& gps) {
     Vector6d gpsVector = {gps.longitude, gps.latitude, 0, 0, 0, 0};
     return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const sh2_SensorValue& sensorValue, const GpsUpdate& gps) {
-    if(sensorValue.sensorId != SH2_ACCELEROMETER) {
-        throw std::invalid_argument("Sensor Value is not from Accelerometer");
-    }
-
+Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVector& rv, const sh2_Accelerometer& la, const GpsUpdate& gps) {
     double latitude = gps.latitude;
     double longitude = gps.longitude;
-    double heading = gps.heading.value();
+    const double RADAR_HEIGHT_M = 10;
+    const auto now = std::chrono::system_clock::now();
+    const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(now)};
 
-    double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(heading,
-                                                                    sensorValue.un.accelerometer.x,
-                                                                    sensorValue.un.accelerometer.y);
-    double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(heading,
-                                                                    sensorValue.un.accelerometer.x,
-                                                                    sensorValue.un.accelerometer.y);
+    double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real,
+                                                                  rv.i,
+                                                                  rv.j,
+                                                                  rv.k);
+    double magneticDeclination = s_instance->m_magneticDeclination.CalculateDeclination(longitude,
+                                                                                        latitude,
+                                                                                        RADAR_HEIGHT_M,
+                                                                                        static_cast<int>(ymd.year()));
+    double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading,
+                                                         magneticDeclination);
+
+    double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeading,
+                                                                    la.x,
+                                                                    la.y);
+    double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeading,
+                                                                    la.x,
+                                                                    la.y);
 
     double globalGeoAccelerationX = IMUUtils::Convert_Global_X_to_DegPerS2(latitude,
                                                                            globalLinearAccelerationX);
