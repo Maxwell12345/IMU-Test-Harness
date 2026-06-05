@@ -46,6 +46,17 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
     m_magneticDeclination.LoadCOF("./WMM.COF");
 }
 
+IMUManager::~IMUManager() {
+    s_imuRotationVectorReady = false;
+    s_imuLinearAccelerationReady = false;
+    s_imuRotationVector = {};
+    s_imuLinearAcceleration = {};
+    s_lastImuEkfIvocation = {};
+    s_gpsSentToEkf = false;
+    s_latestGps = std::nullopt;
+    s_kineticState = {};
+}
+
 void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
                             std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
                             std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
@@ -56,6 +67,11 @@ void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
     s_instance = new IMUManager(databaseManager,
                                 ekfCallbackImuOnly,
                                 ekfCallbackWithGps);
+}
+
+void IMUManager::Deinitialize() {
+    delete s_instance;
+    s_instance = nullptr;
 }
 
 IMUManager& IMUManager::Instance() {
@@ -206,11 +222,9 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
         //     break;
 
         case SH2_LINEAR_ACCELERATION:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.linearAcceleration.x) ||
+            if( IsInvalidRange(sensorValue.un.linearAcceleration.x) ||
                 IsInvalidRange(sensorValue.un.linearAcceleration.y) ||
-                IsInvalidRange(sensorValue.un.linearAcceleration.z) ||
-                IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
+                IsInvalidRange(sensorValue.un.linearAcceleration.z)) {
                 return false;
             }
             break;
@@ -224,19 +238,18 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
         //     }
         //     break;
 
-        case SH2_MAGNETIC_FIELD_CALIBRATED:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.magneticField.x) ||
-                IsInvalidRange(sensorValue.un.magneticField.y) ||
-                IsInvalidRange(sensorValue.un.magneticField.z) ||
-                IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
-                return false;
-            }
-            break;
+        // case SH2_MAGNETIC_FIELD_CALIBRATED:
+        //     if( IsInvalidRange(sensorValue.timestamp) ||
+        //         IsInvalidRange(sensorValue.un.magneticField.x) ||
+        //         IsInvalidRange(sensorValue.un.magneticField.y) ||
+        //         IsInvalidRange(sensorValue.un.magneticField.z) ||
+        //         IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
+        //         return false;
+        //     }
+        //     break;
 
         case SH2_ROTATION_VECTOR:
-            if( IsInvalidRange(sensorValue.timestamp) ||
-                IsInvalidRange(sensorValue.un.rotationVector.i) ||
+            if( IsInvalidRange(sensorValue.un.rotationVector.i) ||
                 IsInvalidRange(sensorValue.un.rotationVector.j) ||
                 IsInvalidRange(sensorValue.un.rotationVector.k) ||
                 IsInvalidRange(sensorValue.un.rotationVector.real) ||

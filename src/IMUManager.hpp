@@ -39,7 +39,7 @@ private:
                std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
                std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
 
-    ~IMUManager() = default;
+    ~IMUManager();
 
 public:
 
@@ -57,6 +57,11 @@ public:
     static void Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
                            std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
                            std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
+
+    /**
+     * @brief Clean up singleton instance
+     */
+    static void Deinitialize();
 
     /**
      * @brief Reference to singleton instance of IMUManager
@@ -203,7 +208,8 @@ private:
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
     FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
     FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
-    FRIEND_TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue);
+    FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsTrue);
+    FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsFalse);
 };
 
 #endif

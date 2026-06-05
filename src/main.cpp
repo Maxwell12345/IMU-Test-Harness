@@ -67,12 +67,12 @@ int main() {
 
     sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
 
-    enable_sensor(SH2_ACCELEROMETER,             2'500);
+    // enable_sensor(SH2_ACCELEROMETER,             2'500);
     enable_sensor(SH2_LINEAR_ACCELERATION,       2'500);
-    enable_sensor(SH2_GYROSCOPE_CALIBRATED,      2'500);
-    enable_sensor(SH2_MAGNETIC_FIELD_CALIBRATED, 10'000);
+    // enable_sensor(SH2_GYROSCOPE_CALIBRATED,      2'500);
+    // enable_sensor(SH2_MAGNETIC_FIELD_CALIBRATED, 10'000);
     enable_sensor(SH2_ROTATION_VECTOR,           2'500);
-    enable_sensor(SH2_GAME_ROTATION_VECTOR,      2'500);
+    // enable_sensor(SH2_GAME_ROTATION_VECTOR,      2'500);
 
     std::thread service_thread([]() {
         while (g_running) {

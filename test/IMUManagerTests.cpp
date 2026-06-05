@@ -3,9 +3,38 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
 
-#include "IMUManager.hpp"
 #include "GpsUpdate.hpp"
+#include "IMUManager.hpp"
+#include "IMUGPSFusionKF.hpp"
+
+class DatabaseManager {
+
+};
+
+namespace {
+    void SetupIMUManager() {
+        boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>();
+
+        IMUGPSFusionKF_2D_ConstantAcceleration ekf;
+        auto ekfNoGps = [&ekf](double dt, Vector6d& z_IMU) {
+                            return ekf.Step(dt, z_IMU);
+                        };
+        auto ekfWithGps = [&ekf](double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
+                                return ekf.Step(dt, z_GPS, z_IMU);
+                            };
+
+        IMUManager::Initialize(db,
+                            ekfNoGps,
+                            ekfWithGps);
+    }
+
+    void CleanupIMUManager() {
+        IMUManager::Deinitialize();
+    }
+}
 
 TEST(IMUManagerTest, IsInvalidRangeReturnsFalse) {
     EXPECT_EQ(IMUManager::IsInvalidRange(0), false);
@@ -38,7 +67,90 @@ TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
     EXPECT_EQ(IMUManager::GetLatestGps(), std::nullopt);
 }
 
-TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue) {
+TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
+    SetupIMUManager();
+
+    GpsUpdate gpsUpdate;
+    gpsUpdate.latitude = 1;
+    gpsUpdate.longitude = 1;
+    gpsUpdate.valid = true;
+    gpsUpdate.receiveTime = std::chrono::steady_clock::now();
+
+    IMUManager::UpdateLatestGps(gpsUpdate);
+    
+    std::optional<GpsUpdate> latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), true);
+
+    GpsUpdate latestGps = latestGpsOpt.value();
+    EXPECT_EQ(latestGps.latitude, gpsUpdate.latitude);
+    EXPECT_EQ(latestGps.longitude, gpsUpdate.longitude);
+    EXPECT_EQ(latestGps.valid, gpsUpdate.valid);
+    EXPECT_EQ(latestGps.receiveTime, gpsUpdate.receiveTime);
+
+    CleanupIMUManager();
+}
+
+TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
+    SetupIMUManager();
+
+    const std::chrono::seconds STALE_TIME_OUT_S(10);
+    const uint64_t GPS_TIMESTAMP_MS= std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::milliseconds(1000)).count();
+    const uint64_t GPS_TIMESTAMP_MS_INVALID= std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::milliseconds(900)).count();
+
+    GpsUpdate gpsUpdate;
+    gpsUpdate.latitude = 10;
+    gpsUpdate.longitude = 20;
+    std::optional<GpsUpdate> latestGpsOpt;
+
+    // No GPS Update yet
+    latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), false);
+
+    // When gps status is invalid
+    gpsUpdate.valid = false;
+    IMUManager::UpdateLatestGps(gpsUpdate);
+    latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), false);
+
+    // When stale gps
+    gpsUpdate.receiveTime = std::chrono::steady_clock::now() - STALE_TIME_OUT_S;
+    IMUManager::UpdateLatestGps(gpsUpdate);
+    latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), false);
+
+    // Update IMUManager with valid gps
+    gpsUpdate.valid = true;
+    gpsUpdate.receiveTime = std::chrono::steady_clock::now();
+    gpsUpdate.gpsTimestampMs = GPS_TIMESTAMP_MS;
+    IMUManager::UpdateLatestGps(gpsUpdate);
+    latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), true);
+    GpsUpdate latestGps = latestGpsOpt.value();
+    EXPECT_EQ(latestGps.latitude, gpsUpdate.latitude);
+    EXPECT_EQ(latestGps.longitude, gpsUpdate.longitude);
+    EXPECT_EQ(latestGps.valid, gpsUpdate.valid);
+    EXPECT_EQ(latestGps.receiveTime, gpsUpdate.receiveTime);
+    EXPECT_EQ(latestGps.gpsTimestampMs, GPS_TIMESTAMP_MS);
+
+    // Update IMUManager with gpsTimestampMs older than s_latestGps.gpsTimestampMs
+    // Expect no update to s_latestGps
+    gpsUpdate.gpsTimestampMs = GPS_TIMESTAMP_MS_INVALID;
+    IMUManager::UpdateLatestGps(gpsUpdate);
+    latestGpsOpt = IMUManager::GetLatestGps();
+    EXPECT_EQ(latestGpsOpt.has_value(), true);
+    latestGps = latestGpsOpt.value();
+    EXPECT_EQ(latestGps.latitude, gpsUpdate.latitude);
+    EXPECT_EQ(latestGps.longitude, gpsUpdate.longitude);
+    EXPECT_EQ(latestGps.valid, gpsUpdate.valid);
+    EXPECT_EQ(latestGps.receiveTime, gpsUpdate.receiveTime);
+    EXPECT_EQ(latestGps.gpsTimestampMs, GPS_TIMESTAMP_MS);
+
+    CleanupIMUManager();
+}
+
+TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
     sh2_SensorValue sensorValue;
 
     sensorValue.sensorId = SH2_LINEAR_ACCELERATION;
@@ -46,14 +158,6 @@ TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue) {
     sensorValue.un.linearAcceleration.x = 1;
     sensorValue.un.linearAcceleration.y = 1;
     sensorValue.un.linearAcceleration.z = 1;
-    sensorValue.status = 1;
-
-    EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
-
-    sensorValue.sensorId = SH2_MAGNETIC_FIELD_CALIBRATED;
-    sensorValue.un.magneticField.x = 1;
-    sensorValue.un.magneticField.y = 1;
-    sensorValue.un.magneticField.z = 1;
 
     EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
 
@@ -64,4 +168,37 @@ TEST(IMUManagerTest, ValidateImuEventLinearAccelerationReturnsTrue) {
     sensorValue.un.rotationVector.real = 1;
 
     EXPECT_EQ(IMUManager::ValidateImuEvent(sensorValue), true);
+}
+
+TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
+    sh2_SensorValue sensorValue;
+
+    sensorValue.timestamp = 1;
+    sensorValue.un.linearAcceleration.x = 1;
+    sensorValue.un.linearAcceleration.y = 1;
+    sensorValue.un.linearAcceleration.z = NAN;
+
+    std::vector<sh2_SensorValue> casesLA = {
+        {SH2_LINEAR_ACCELERATION, 0, 0, 0, 0, {.linearAcceleration = {1, 1, NAN}}},
+        {SH2_LINEAR_ACCELERATION, 0, 0, 0, 0, {.linearAcceleration = {1, NAN, 1}}},
+        {SH2_LINEAR_ACCELERATION, 0, 0, 0, 0, {.linearAcceleration = {NAN, 1, 1}}},
+        {SH2_LINEAR_ACCELERATION, 0, 0, 0, 0, {.linearAcceleration = {NAN, NAN, NAN}}},
+    };
+
+    for(auto& c : casesLA) {
+        EXPECT_EQ(IMUManager::ValidateImuEvent(c), false);
+    }
+
+    std::vector<sh2_SensorValue> casesRV = {
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {1, 1, 1, 1, NAN}}},
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {1, 1, 1, NAN, 1}}},
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {1, 1, NAN, 1, 1}}},
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {1, NAN, 1, 1, 1}}},
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {NAN, 1, 1, 1, 1}}},
+        {SH2_ROTATION_VECTOR, 0, 0, 0, 0, {.rotationVector = {NAN, NAN, NAN, NAN, NAN}}},
+    };
+
+    for(auto& c : casesRV) {
+        EXPECT_EQ(IMUManager::ValidateImuEvent(c), false);
+    }
 }
