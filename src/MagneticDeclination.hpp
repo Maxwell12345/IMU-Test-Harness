@@ -403,7 +403,7 @@ private:
     static const double F;  // Flattening
     static const double E;  // Eccentricity
 
-    double *m_legendrePolynomialMatrix = static_cast<double*>(calloc(13 * 13, sizeof(double))); // A matrix containing M derivatives of polynomial order N
+    double *m_legendrePolynomialMatrix = nullptr; // A matrix containing M derivatives of polynomial order N
     std::map<std::pair<int, int>, NOAA_COF_COEFFS> m_coeffMap;  // (n, m) -> (g, h, gDot, gDot)
     double m_epoch; // YYYY considered Epoch, defined in .COF file
 };

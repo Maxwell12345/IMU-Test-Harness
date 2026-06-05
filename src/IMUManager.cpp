@@ -11,7 +11,7 @@ std::mutex IMUManager::s_kineticStateMutex;
 std::mutex IMUManager::s_lastImuEkfInvocationMutex;
 std::mutex IMUManager::s_imuValueMutex;
 
-sh2_RotationVector IMUManager::s_imuRotationVector;    
+sh2_RotationVectorWAcc IMUManager::s_imuRotationVector;    
 sh2_Accelerometer IMUManager::s_imuLinearAcceleration;
 
 bool IMUManager::s_gpsSentToEkf = false;
@@ -22,7 +22,7 @@ IMUManager* IMUManager::s_instance = nullptr;
 std::optional<GpsUpdate> IMUManager::s_latestGps = std::nullopt;
 std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfIvocation = steadyMin;
 
-IMUUtils::KineticState IMUManager::s_kineticState(0.0, 0.0, 0.0, 0.0);
+IMUUtils::KineticState IMUManager::s_kineticState(std::chrono::steady_clock::now(), 0.0, 0.0, 0.0, 0.0);
 
 IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
                        std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
@@ -76,13 +76,17 @@ void IMUManager::Deinitialize() {
 
 IMUManager& IMUManager::Instance() {
     if(s_instance == nullptr) {
-        throw std::runtime_error("IMUManager does not exist");
+        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
     }
 
     return *s_instance;
 }
 
 IMUManagerStats IMUManager::GetStats() const {
+    if(s_instance == nullptr) {
+        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    }
+
     std::lock_guard imuGuard(s_instance->m_statsMutex);
 
     IMUManagerStats statSnapshot;
@@ -96,6 +100,10 @@ std::optional<GpsUpdate> IMUManager::GetLatestGps() {
 }
 
 void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
+    if(s_instance == nullptr) {
+        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    }
+
     std::lock_guard gpsGuard(s_gpsMutex);
     std::lock_guard statsGuard(s_instance->m_statsMutex);
 
@@ -126,7 +134,7 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
     try {
         if(s_instance == nullptr) {
-            throw std::runtime_error("IMUManager instance not initialized");
+            throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
         }
 
         if(event == nullptr) {
@@ -158,7 +166,7 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             }
         }
 
-        sh2_RotationVector rotationVectorSnapshot;
+        sh2_RotationVectorWAcc rotationVectorSnapshot;
         sh2_Accelerometer linearAccelerationSnapshot;
         {
             std::lock_guard imuValueGuard(s_imuValueMutex);
@@ -184,9 +192,13 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             gpsSentToEkfSnapshot = s_gpsSentToEkf;
         }
 
+        // This ymdNow is the obtain current year to calculate Magnetic declination
+        auto ymdNow = std::chrono::system_clock::now();
+        const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
         Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
                                                   linearAccelerationSnapshot,
-                                                  gpsUpdateSnapshot.value());
+                                                  gpsUpdateSnapshot.value(),
+                                                  static_cast<int>(ymd.year()));
 
         auto now = std::chrono::steady_clock::now();
         double dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfIvocation).count();
@@ -312,34 +324,52 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate& gps) {
     return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVector& rv, const sh2_Accelerometer& la, const GpsUpdate& gps) {
+Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear) {
+    if(s_instance == nullptr) {
+        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    }
+
     double latitude = gps.latitude;
     double longitude = gps.longitude;
     const double RADAR_HEIGHT_M = 10;
-    const auto now = std::chrono::system_clock::now();
-    const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(now)};
 
     double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real,
                                                                   rv.i,
                                                                   rv.j,
                                                                   rv.k);
+    printf("Magnetic heading: %f\n", magneticHeading);                    
+    
     double magneticDeclination = s_instance->m_magneticDeclination.CalculateDeclination(longitude,
                                                                                         latitude,
                                                                                         RADAR_HEIGHT_M,
-                                                                                        static_cast<int>(ymd.year()));
+                                                                                        currentYear);
+    printf("Magnetic Declination: %f\n", magneticDeclination);       
+             
     double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading,
                                                          magneticDeclination);
+                                                        
+    printf("True Heading: %f\n", trueHeading);      
 
-    double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeading,
+    double trueHeadingRadians = IMUUtils::DegreesToRadians(trueHeading);
+    double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians,
                                                                     la.x,
                                                                     la.y);
-    double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeading,
+
+    printf("Acc X: %f\n", globalLinearAccelerationX);  
+
+    double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeadingRadians,
                                                                     la.x,
                                                                     la.y);
+
+    printf("Acc Y: %f\n", globalLinearAccelerationY);                                                                      
 
     double globalGeoAccelerationX = IMUUtils::Convert_Global_X_to_DegPerS2(latitude,
                                                                            globalLinearAccelerationX);
+    printf("Acc X(deg): %f\n", globalGeoAccelerationX);
+
     double globalGeoAccelerationY = IMUUtils::Convert_Global_Y_to_DegPerS2(globalLinearAccelerationY);
+    
+    printf("Acc Y(deg): %f\n", globalGeoAccelerationY);
 
     IMUUtils::KineticState kineticState;
     {
@@ -358,5 +388,6 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVector& rv, con
         kineticState.accelerationEastWest,
         kineticState.accelerationNorthSouth
     };
+    
     return imuVector;
 }

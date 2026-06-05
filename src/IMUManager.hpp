@@ -176,7 +176,7 @@ private:
      *
      * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
      */
-    static Vector6d BuildImuMeasurementVector(const sh2_RotationVector& rv, const sh2_Accelerometer& la, const GpsUpdate& gps);
+    static Vector6d BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear);
     
     static IMUManager* s_instance;              // Singleton IMUManager instance. Only one per run time
 
@@ -184,7 +184,7 @@ private:
     static std::mutex s_imuValueMutex;                  // Mutex used when s_ImuMagneticField/s_ImuLinearAcceleration modified / read
     static bool s_imuRotationVectorReady;               
     static bool s_imuLinearAccelerationReady;         
-    static sh2_RotationVector s_imuRotationVector;    
+    static sh2_RotationVectorWAcc s_imuRotationVector;    
     static sh2_Accelerometer s_imuLinearAcceleration;
     static std::chrono::steady_clock::time_point s_lastImuEkfIvocation;
     
@@ -207,9 +207,10 @@ private:
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
     FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
-    FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
     FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsTrue);
     FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsFalse);
+    FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
+    FRIEND_TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector);
 };
 
 #endif

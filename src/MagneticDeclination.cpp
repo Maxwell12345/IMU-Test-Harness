@@ -12,12 +12,14 @@ const double MagneticDeclination::E = F * ( 2 - F );
 MagneticDeclination::MagneticDeclination()
 {
     this->m_epoch = 2025.0;
+    this->m_legendrePolynomialMatrix = static_cast<double*>(calloc(13 * 13, sizeof(double)));
 }
 
 MagneticDeclination::~MagneticDeclination()
 {
     if (this->m_legendrePolynomialMatrix != nullptr) {
         free(m_legendrePolynomialMatrix);
+        this->m_legendrePolynomialMatrix = nullptr;
     }
 }
 
