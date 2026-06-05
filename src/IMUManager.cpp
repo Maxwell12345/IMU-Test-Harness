@@ -337,40 +337,26 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
                                                                   rv.i,
                                                                   rv.j,
                                                                   rv.k);
-    printf("Magnetic heading: %f\n", magneticHeading);                    
-    
     double magneticDeclination = s_instance->m_magneticDeclination.CalculateDeclination(longitude,
                                                                                         latitude,
                                                                                         RADAR_HEIGHT_M,
                                                                                         currentYear);
-    printf("Magnetic Declination: %f\n", magneticDeclination);       
-             
     double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading,
                                                          magneticDeclination);
                                                         
-    printf("True Heading: %f\n", trueHeading);      
-
     double trueHeadingRadians = IMUUtils::DegreesToRadians(trueHeading);
     double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians,
                                                                     la.x,
                                                                     la.y);
 
-    printf("Acc X: %f\n", globalLinearAccelerationX);  
-
     double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeadingRadians,
                                                                     la.x,
                                                                     la.y);
 
-    printf("Acc Y: %f\n", globalLinearAccelerationY);                                                                      
-
     double globalGeoAccelerationX = IMUUtils::Convert_Global_X_to_DegPerS2(latitude,
                                                                            globalLinearAccelerationX);
-    printf("Acc X(deg): %f\n", globalGeoAccelerationX);
-
     double globalGeoAccelerationY = IMUUtils::Convert_Global_Y_to_DegPerS2(globalLinearAccelerationY);
     
-    printf("Acc Y(deg): %f\n", globalGeoAccelerationY);
-
     IMUUtils::KineticState kineticState;
     {
         std::lock_guard kineticStateGuard(s_kineticStateMutex);

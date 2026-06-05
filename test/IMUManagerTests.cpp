@@ -36,21 +36,6 @@ namespace {
     }
 }
 
-TEST(IMUManagerTest, IsInvalidRangeReturnsFalse) {
-    EXPECT_EQ(IMUManager::IsInvalidRange(0), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(10), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(-10), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<int>::max()), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<double>::max()), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<int>::min()), false);
-    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<double>::min()), false);
-}
-
-TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
-    EXPECT_EQ(IMUManager::IsInvalidRange(NAN), true);
-    EXPECT_EQ(IMUManager::IsInvalidRange(INFINITY), true);
-}
-
 TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
     EXPECT_EQ(IMUManager::GetLatestGps(), std::nullopt);
 }
@@ -136,6 +121,21 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
     EXPECT_EQ(latestGps.gpsTimestampMs, GPS_TIMESTAMP_MS);
 
     CleanupIMUManager();
+}
+
+TEST(IMUManagerTest, IsInvalidRangeReturnsFalse) {
+    EXPECT_EQ(IMUManager::IsInvalidRange(0), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(10), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(-10), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<int>::max()), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<double>::max()), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<int>::min()), false);
+    EXPECT_EQ(IMUManager::IsInvalidRange(std::numeric_limits<double>::min()), false);
+}
+
+TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
+    EXPECT_EQ(IMUManager::IsInvalidRange(NAN), true);
+    EXPECT_EQ(IMUManager::IsInvalidRange(INFINITY), true);
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
