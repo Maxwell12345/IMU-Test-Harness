@@ -7,9 +7,9 @@
 constexpr auto steadyMin = std::chrono::steady_clock::time_point::min();
 
 std::mutex IMUManager::s_gpsMutex;
+std::mutex IMUManager::s_imuValueMutex;
 std::mutex IMUManager::s_kineticStateMutex;
 std::mutex IMUManager::s_lastImuEkfInvocationMutex;
-std::mutex IMUManager::s_imuValueMutex;
 
 sh2_RotationVectorWAcc IMUManager::s_imuRotationVector;    
 sh2_Accelerometer IMUManager::s_imuLinearAcceleration;
@@ -20,7 +20,7 @@ bool IMUManager::s_imuLinearAccelerationReady = false;
 
 IMUManager* IMUManager::s_instance = nullptr;
 std::optional<GpsUpdate> IMUManager::s_latestGps = std::nullopt;
-std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfIvocation = steadyMin;
+std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfInvocation = steadyMin;
 
 IMUUtils::KineticState IMUManager::s_kineticState(std::chrono::steady_clock::now(), 0.0, 0.0, 0.0, 0.0);
 
@@ -51,7 +51,7 @@ IMUManager::~IMUManager() {
     s_imuLinearAccelerationReady = false;
     s_imuRotationVector = {};
     s_imuLinearAcceleration = {};
-    s_lastImuEkfIvocation = {};
+    s_lastImuEkfInvocation = steadyMin;
     s_gpsSentToEkf = false;
     s_latestGps = std::nullopt;
     s_kineticState = {};
@@ -95,6 +95,7 @@ IMUManagerStats IMUManager::GetStats() const {
 }
 
 std::optional<GpsUpdate> IMUManager::GetLatestGps() {
+    std::lock_guard gpsMutex(s_gpsMutex);
     std::optional<GpsUpdate> gpsSnapshot = s_latestGps;
     return gpsSnapshot;
 }
@@ -160,8 +161,8 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
         {
             std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
-            if (s_lastImuEkfIvocation == steadyMin) {
-                s_lastImuEkfIvocation = std::chrono::steady_clock::now();
+            if (s_lastImuEkfInvocation == steadyMin) {
+                s_lastImuEkfInvocation = std::chrono::steady_clock::now();
                 return;
             }
         }
@@ -184,12 +185,17 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
         }
         
-        std::optional<GpsUpdate> gpsUpdateSnapshot;
         bool gpsSentToEkfSnapshot;
+        std::optional<GpsUpdate> gpsUpdateSnapshot;
         {
-            std::lock_guard gpsMutex(s_gpsMutex);
-            gpsUpdateSnapshot = GetLatestGps();
+            std::lock_guard sentToEkfGuard(s_gpsMutex);
+            gpsUpdateSnapshot    = s_latestGps;
             gpsSentToEkfSnapshot = s_gpsSentToEkf;
+        }
+
+        if(gpsUpdateSnapshot.has_value() == false)
+        {
+            return;
         }
 
         // This ymdNow is the obtain current year to calculate Magnetic declination
@@ -201,10 +207,15 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
                                                   static_cast<int>(ymd.year()));
 
         auto now = std::chrono::steady_clock::now();
-        double dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfIvocation).count();
-        s_lastImuEkfIvocation = now;
+        double dtSeconds;
 
-        if(gpsUpdateSnapshot.has_value() && gpsSentToEkfSnapshot == false) {
+        {
+            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
+            dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfInvocation).count();
+            s_lastImuEkfInvocation = now;
+        }
+
+        if(gpsSentToEkfSnapshot == false) {
             Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
             s_instance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
@@ -212,6 +223,12 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
             s_gpsSentToEkf = true;
         } else {
             s_instance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+        }
+
+        {
+            std::lock_guard sensorValueGuard(s_imuValueMutex);
+            s_imuRotationVectorReady = false;               
+            s_imuLinearAccelerationReady = false;  
         }
 
         std::lock_guard imuGuard(s_instance->m_statsMutex);
@@ -284,6 +301,7 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
             return false;
     }
 
+    printf("VALID SENSOR %d\n", sensorValue.sensorId);
     return true;
 };
 

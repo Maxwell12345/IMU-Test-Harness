@@ -49,15 +49,26 @@ int main() {
     boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>();
 
     IMUGPSFusionKF_2D_ConstantAcceleration ekf;
+    auto ekfNoGps = [&ekf](double dt, Vector6d& z_IMU) {
+                        return ekf.Step(dt, z_IMU);
+                    };
+    auto ekfWithGps = [&ekf](double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
+                            return ekf.Step(dt, z_GPS, z_IMU);
+                        };
 
-    IMUManager::Initialize(
-    db,
-    [&ekf](double dt, Vector6d& z_IMU) {
-        return ekf.Step(dt, z_IMU);
-    },
-    [&ekf](double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
-        return ekf.Step(dt, z_GPS, z_IMU);
-    });
+    IMUManager::Initialize(db,
+                        ekfNoGps,
+                        ekfWithGps);
+    
+    GpsUpdate gpsUpdate;
+    gpsUpdate.receiveTime = std::chrono::steady_clock::now();
+    gpsUpdate.wallTime = std::chrono::system_clock::now();
+    gpsUpdate.valid = true;
+    gpsUpdate.latitude = 30.27422999594027;
+    gpsUpdate.longitude = -97.7344479815635;
+    gpsUpdate.gpsTimestampMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::milliseconds(1000)).count();
+    IMUManager::UpdateLatestGps(gpsUpdate);
 
     sh2_Hal_t hal = bno085_hal_create();
     if (sh2_open(&hal, nullptr, nullptr) != SH2_OK) {
@@ -67,12 +78,8 @@ int main() {
 
     sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
 
-    // enable_sensor(SH2_ACCELEROMETER,             2'500);
     enable_sensor(SH2_LINEAR_ACCELERATION,       2'500);
-    // enable_sensor(SH2_GYROSCOPE_CALIBRATED,      2'500);
-    // enable_sensor(SH2_MAGNETIC_FIELD_CALIBRATED, 10'000);
     enable_sensor(SH2_ROTATION_VECTOR,           2'500);
-    // enable_sensor(SH2_GAME_ROTATION_VECTOR,      2'500);
 
     std::thread service_thread([]() {
         while (g_running) {

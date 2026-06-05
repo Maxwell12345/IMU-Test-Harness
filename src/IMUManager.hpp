@@ -45,6 +45,8 @@ public:
 
     /**
      * @brief Singleton Pattern Initializer
+     * 
+     * @brief MUST BE CALLED, only ONCE. If not, code will get segfault, though attempts at catching has been made
      *
      * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
      * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
@@ -118,7 +120,7 @@ public:
      *      - unsupported IMU report type
      *      - no gps ever recorded
      *
-     * @param [in] cookie Opaque user-data pointer passed by the SH2 driver
+     * @param [in] cookie (unused) Opaque user-data pointer passed by the SH2 driver
      * @param [in] event The pointer to an undecoded report coming from the IMU
      */
     static void SensorCallback(void* cookie, sh2_SensorEvent* event);
@@ -172,7 +174,14 @@ private:
     /**
      * @brief Build an Eigen vector representation of SensorValue data
      * 
-     * @param [in] sensorValue imu sensor value containing sensor type and measurement data
+     * @remarks Converts local IMU measurents and gps data to velocity and acceleration
+     *      in Global frame of reference in Geodetic units. Applies Magnetic Declination
+     *      to rotation vector using GPS coordinate.
+     * 
+     * @param [in] rv the rotation vector snapshot from IMU (i, j, k, w)
+     * @param [in] la the linear acceleration measurement snapshot from IMU (m/s^2)
+     * @param [in] gps the latest gps snapshot
+     * @param [in] currentYear the current year YYYY
      *
      * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
      */
@@ -186,7 +195,7 @@ private:
     static bool s_imuLinearAccelerationReady;         
     static sh2_RotationVectorWAcc s_imuRotationVector;    
     static sh2_Accelerometer s_imuLinearAcceleration;
-    static std::chrono::steady_clock::time_point s_lastImuEkfIvocation;
+    static std::chrono::steady_clock::time_point s_lastImuEkfInvocation;
     
     static std::mutex s_gpsMutex;               // Mutex used when s_latestGps is read/written
     static bool s_gpsSentToEkf;                 // Flag indicating latestGps is sent to ekf
