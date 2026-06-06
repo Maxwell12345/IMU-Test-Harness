@@ -238,6 +238,105 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
     }
 }
 
+void IMUManager::SensorCallback(const sh2_SensorValue& val) {
+    try {
+        if(s_instance == nullptr) {
+            throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+        }
+
+        if(ValidateImuEvent(val) == false) {
+            std::lock_guard imuGuard(s_instance->m_statsMutex);
+            s_instance->m_stats.imuRejected++;
+            // throw std::runtime_error("Sensor value out of range or Report type not supported");
+        }
+
+        StoreImuValue(val);
+        // printf("Stored IMU Value\n");
+
+        {
+            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
+            if (s_lastImuEkfInvocation == steadyMin) {
+                s_lastImuEkfInvocation = std::chrono::steady_clock::now();
+                return;
+            }
+        }
+
+        
+        sh2_RotationVectorWAcc rotationVectorSnapshot;
+        sh2_Accelerometer linearAccelerationSnapshot;
+        {
+            std::lock_guard imuValueGuard(s_imuValueMutex);
+            if(s_imuRotationVectorReady == false || s_imuLinearAccelerationReady == false) {
+                return;
+            }
+            
+            rotationVectorSnapshot.i = s_imuRotationVector.i;
+            rotationVectorSnapshot.j = s_imuRotationVector.j;
+            rotationVectorSnapshot.k = s_imuRotationVector.k;
+            rotationVectorSnapshot.real = s_imuRotationVector.real;
+            
+            linearAccelerationSnapshot.x = s_imuLinearAcceleration.x;
+            linearAccelerationSnapshot.y = s_imuLinearAcceleration.y;
+            linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
+        }
+        // printf("IMU Data Ready\n");
+        
+        bool gpsSentToEkfSnapshot;
+        std::optional<GpsUpdate> gpsUpdateSnapshot;
+        {
+            std::lock_guard sentToEkfGuard(s_gpsMutex);
+            gpsUpdateSnapshot    = s_latestGps;
+            gpsSentToEkfSnapshot = s_gpsSentToEkf;
+        }
+        
+        if(gpsUpdateSnapshot.has_value() == false)
+        {
+            // printf("Gps Does not have data\n");
+            return;
+        }
+
+        // This ymdNow is the obtain current year to calculate Magnetic declination
+        auto ymdNow = std::chrono::system_clock::now();
+        const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
+        Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
+                                                  linearAccelerationSnapshot,
+                                                  gpsUpdateSnapshot.value(),
+                                                  static_cast<int>(ymd.year()));
+
+        printf("%.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
+
+        auto now = std::chrono::steady_clock::now();
+        double dtSeconds;
+
+        {
+            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
+            dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfInvocation).count();
+            s_lastImuEkfInvocation = now;
+        }
+
+        if(gpsSentToEkfSnapshot == false) {
+            Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+            s_instance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+
+            std::lock_guard gpsMutex(s_gpsMutex);
+            s_gpsSentToEkf = true;
+        } else {
+            s_instance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+        }
+
+        {
+            std::lock_guard sensorValueGuard(s_imuValueMutex);
+            s_imuRotationVectorReady = false;               
+            s_imuLinearAccelerationReady = false;  
+        }
+
+        std::lock_guard imuGuard(s_instance->m_statsMutex);
+        s_instance->m_stats.imuAccepted++;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
 bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
     switch (sensorValue.sensorId) {
         // case SH2_ACCELEROMETER:
@@ -301,7 +400,6 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
             return false;
     }
 
-    printf("VALID SENSOR %d\n", sensorValue.sensorId);
     return true;
 };
 

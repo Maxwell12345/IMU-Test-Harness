@@ -125,6 +125,8 @@ public:
      */
     static void SensorCallback(void* cookie, sh2_SensorEvent* event);
 
+    static void SensorCallback(const sh2_SensorValue& val);
+
 private:
 
     /**
