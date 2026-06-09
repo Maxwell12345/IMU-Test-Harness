@@ -28,7 +28,7 @@ using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class IMUManager {
-private:
+public:
     /**
      * @brief Constructor
      *
@@ -47,30 +47,6 @@ private:
      */
     ~IMUManager();
 
-public:
-
-    /**
-     * @brief Singleton Pattern Initializer
-     *
-     * @remarks MUST BE CALLED, only ONCE. If not, code will get segfault, though attempts at catching has been made
-     *
-     * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
-     * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
-     * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
-     *
-     * @return
-     *
-     * @throws runtime_error when Singleton instance already exists
-     */
-    static void Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
-                           std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
-                           std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
-
-    /**
-     * @brief Clean up singleton instance
-     */
-    static void Deinitialize();
-
     /**
      * @brief Returns the runtime statistics of this class.
      *
@@ -82,7 +58,7 @@ public:
      *
      * @return IMUManagerStats include
      */
-    IMUManagerStats GetStats() const;
+    static IMUManagerStats GetStats();
 
     /**
      * @brief Returns the current GPS status if available
@@ -212,19 +188,20 @@ private:
     static std::mutex m_sKineticStateMutex;              // Mutex used when m_sKineticState is read/written
     static IMUUtils::KineticState m_sKineticState;       // Internal KineticState data state
     
-    IMUManagerStats m_stats;                            // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
+    static IMUManagerStats m_sStats;                            // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
 
-    MagneticDeclination m_magneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
-    boost::shared_ptr<DatabaseManager> m_databaseManager;   // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
+    static MagneticDeclination m_sMagneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
+    static boost::shared_ptr<DatabaseManager> m_sDatabaseManager;   // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
 
-    std::function<void(double, Vector6d&)> m_ekfCallbackImuOnly;               // EKF callback without new GPS data
-    std::function<void(double, Vector6d&, Vector6d&)> m_ekfCallbackWithGps;    // EKF callback with new unused GPS data
+    static std::function<void(double, Vector6d&)> m_sEkfCallbackImuOnly;               // EKF callback without new GPS data
+    static std::function<void(double, Vector6d&, Vector6d&)> m_sEkfCallbackWithGps;    // EKF callback with new unused GPS data
 
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
     FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
     FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsTrue);
     FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsFalse);
+    FRIEND_TEST(IMUManagerTest, StoreImuValueReturnsVoid);
     FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
     FRIEND_TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector);
 };

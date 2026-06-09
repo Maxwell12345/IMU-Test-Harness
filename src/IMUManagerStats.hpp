@@ -9,7 +9,6 @@ struct IMUManagerStats {
     std::atomic<uint64_t> imuRejected;
     std::atomic<uint64_t> gpsAccepted;
     std::atomic<uint64_t> gpsRejected;
-    std::atomic<uint64_t> ekfCallbackFailures;
     std::atomic<uint64_t> dbEnqueueFailures;
 
     IMUManagerStats() : 
@@ -17,7 +16,6 @@ struct IMUManagerStats {
         imuRejected(0),
         gpsAccepted(0),
         gpsRejected(0),
-        ekfCallbackFailures(0),
         dbEnqueueFailures(0)
     {}
 
@@ -26,7 +24,6 @@ struct IMUManagerStats {
         imuRejected.store(other.imuRejected.load());
         gpsAccepted.store(other.gpsAccepted.load());
         gpsRejected.store(other.gpsRejected.load());
-        ekfCallbackFailures.store(other.ekfCallbackFailures.load());
         dbEnqueueFailures.store(other.dbEnqueueFailures.load());
     }
 
@@ -35,7 +32,6 @@ struct IMUManagerStats {
         imuRejected.store(other.imuRejected.load());
         gpsAccepted.store(other.gpsAccepted.load());
         gpsRejected.store(other.gpsRejected.load());
-        ekfCallbackFailures.store(other.ekfCallbackFailures.load());
         dbEnqueueFailures.store(other.dbEnqueueFailures.load());
 
         return *this;

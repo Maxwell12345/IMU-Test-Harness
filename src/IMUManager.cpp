@@ -25,6 +25,14 @@ std::atomic<uint64_t> IMUManager::m_sLastEKFMachineTime = 1e-4;
 
 IMUUtils::KineticState IMUManager::m_sKineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
 
+IMUManagerStats IMUManager::m_sStats;
+
+MagneticDeclination IMUManager::m_sMagneticDeclination;
+boost::shared_ptr<DatabaseManager> IMUManager::m_sDatabaseManager;
+
+std::function<void(double, Vector6d&)> IMUManager::m_sEkfCallbackImuOnly;
+std::function<void(double, Vector6d&, Vector6d&)> IMUManager::m_sEkfCallbackWithGps;
+
 namespace {
     std::FILE *file = std::fopen("output.csv", "w");
 }
@@ -44,11 +52,14 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
         throw std::invalid_argument("ekfCallbackWithGps is nullptr");
     }
 
-    m_databaseManager = databaseManager;
-    m_ekfCallbackImuOnly = ekfCallbackImuOnly;
-    m_ekfCallbackWithGps = ekfCallbackWithGps;
+    m_sDatabaseManager = databaseManager;
+    m_sEkfCallbackImuOnly = ekfCallbackImuOnly;
+    m_sEkfCallbackWithGps = ekfCallbackWithGps;
 
-    m_magneticDeclination.LoadCOF("./WMM.COF");
+    m_sMagneticDeclination.LoadCOF("./WMM.COF");
+
+    m_sImuRotationVector = {0, 0, 0, 0, 0};    
+    m_sImuLinearAcceleration = {0, 0, 0};
 }
 
 IMUManager::~IMUManager() {
@@ -57,32 +68,15 @@ IMUManager::~IMUManager() {
     m_sGpsSentToEkf = false;
     m_sLatestGps = std::nullopt;
     m_sKineticState = {};
+    
+    IMUManagerStats reset;
+    m_sStats = reset;
 }
 
-void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
-                            std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
-                            std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
-    if(m_sInstance != nullptr) {
-        throw std::runtime_error("IMUManager instance already exist");
-    }
-
-    m_sInstance = new IMUManager(databaseManager,
-                                ekfCallbackImuOnly,
-                                ekfCallbackWithGps);
-}
-
-void IMUManager::Deinitialize() {
-    delete m_sInstance;
-    m_sInstance = nullptr;
-}
-
-IMUManagerStats IMUManager::GetStats() const {
-    if(m_sInstance == nullptr) {
-        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-    }
+IMUManagerStats IMUManager::GetStats() {
 
     IMUManagerStats statSnapshot;
-    statSnapshot = m_sInstance->m_stats;
+    statSnapshot = m_sStats;
 
     return statSnapshot;
 }
@@ -94,59 +88,52 @@ std::optional<GpsUpdate> IMUManager::GetLatestGps() {
 }
 
 void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
-    if(m_sInstance == nullptr) {
-        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-    }
-
     std::lock_guard gpsGuard(m_sGpsMutex);
 
     if(update.valid == false) {
-        m_sInstance->m_stats.gpsRejected++;
+        m_sStats.gpsRejected++;
         return;
     }
 
     const unsigned int STALE_TIME_OUT = 5;
     double deltaTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - update.receiveTime).count();
     if(deltaTime > STALE_TIME_OUT) {
-        m_sInstance->m_stats.gpsRejected++;
+        m_sStats.gpsRejected++;
         return;
     }
 
     if(m_sLatestGps.has_value() && update.gpsTimestampMs <= m_sLatestGps->gpsTimestampMs){
-        m_sInstance->m_stats.gpsRejected++;
+        m_sStats.gpsRejected++;
         return;
     }
 
     m_sGpsSentToEkf = false;
     m_sLatestGps = update;
-    m_sInstance->m_stats.gpsAccepted++;
+    m_sStats.gpsAccepted++;
 }
 
 void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
     (void) cookie;
 
     try {
-        if(m_sInstance == nullptr) {
-            throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-        }
-
         if(event == nullptr) {
-            m_sInstance->m_stats.imuRejected++;
+            m_sStats.imuRejected++;
             throw std::invalid_argument("Sh2_SensorEvent was a nullptr");
         }
 
         sh2_SensorValue_t val{};
         if (sh2_decodeSensorEvent(&val, event) != SH2_OK) {
-            m_sInstance->m_stats.imuRejected++;
+            m_sStats.imuRejected++;
             throw std::runtime_error("There was an error trying to decode Sh2_SensorEvent");
         };
 
         if(ValidateImuEvent(val) == false) {
-            m_sInstance->m_stats.imuRejected++;
+            m_sStats.imuRejected++;
             throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
         StoreImuValue(val);
+        m_sStats.imuAccepted++;
         
         if(!(m_sImuRotationVectorReady && m_sImuLinearAccelerationReady)) {
             return;
@@ -189,18 +176,16 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
         if(gpsSentToEkfSnapshot == false) {
             Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
-            m_sInstance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+            m_sEkfCallbackWithGps(dtSeconds, zImu, zGps);
 
             std::lock_guard gpsMutex(m_sGpsMutex);
             m_sGpsSentToEkf = true;
         } else {
-            m_sInstance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+            m_sEkfCallbackImuOnly(dtSeconds, zImu);
         }
 
         m_sImuRotationVectorReady = false;               
         m_sImuLinearAccelerationReady = false;  
-
-        m_sInstance->m_stats.imuAccepted++;
     } catch (const std::exception& e) {
         // TODO: Needs a way to log these errors, not to cerr in prod
         std::cerr << e.what() << std::endl;
@@ -209,12 +194,8 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
 void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double timestampS) {
     try {
-        if(m_sInstance == nullptr) {
-            throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-        }
-
         if(ValidateImuEvent(val) == false) {
-            m_sInstance->m_stats.imuRejected++;
+            m_sStats.imuRejected++;
             throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
@@ -262,19 +243,19 @@ void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double tim
         if(gpsSentToEkfSnapshot == false) {
         Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
         fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-        m_sInstance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+        m_sEkfCallbackWithGps(dtSeconds, zImu, zGps);
 
         std::lock_guard gpsMutex(m_sGpsMutex);
         m_sGpsSentToEkf = true;
     } else {
         fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-        m_sInstance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+        m_sEkfCallbackImuOnly(dtSeconds, zImu);
     }
 
         m_sImuRotationVectorReady = false;               
         m_sImuLinearAccelerationReady = false;  
 
-        m_sInstance->m_stats.imuAccepted++;
+        m_sStats.imuAccepted++;
     } catch (const std::exception& e) {
         // TODO: Needs a way to log these errors, not to cerr in prod
         std::cerr << e.what() << std::endl;
@@ -331,6 +312,7 @@ void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
             imuRot.j = sensorValue.un.rotationVector.j;
             imuRot.k = sensorValue.un.rotationVector.k;
             imuRot.real = sensorValue.un.rotationVector.real;
+            imuRot.accuracy = sensorValue.un.rotationVector.accuracy;
             m_sImuRotationVector = imuRot;
             m_sLastRotationVectorMachineTime.store(sensorValue.timestamp);
             break;
@@ -345,10 +327,6 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate& gps) {
 }
 
 Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear) {
-    if(m_sInstance == nullptr) {
-        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-    }
-
     double latitude = gps.latitude;
     double longitude = gps.longitude;
     const double RADAR_HEIGHT_M = 10;
@@ -357,7 +335,7 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
                                                                   rv.i,
                                                                   rv.j,
                                                                   rv.k);
-    double magneticDeclination = m_sInstance->m_magneticDeclination.CalculateDeclination(longitude,
+    double magneticDeclination = m_sMagneticDeclination.CalculateDeclination(longitude,
                                                                                         latitude,
                                                                                         RADAR_HEIGHT_M,
                                                                                         currentYear);
