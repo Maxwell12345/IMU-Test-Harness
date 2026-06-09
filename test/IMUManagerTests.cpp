@@ -107,8 +107,8 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
     EXPECT_EQ(latestGps.receiveTime, gpsUpdate.receiveTime);
     EXPECT_EQ(latestGps.gpsTimestampMs, GPS_TIMESTAMP_MS);
 
-    // Update IMUManager with gpsTimestampMs older than s_latestGps.gpsTimestampMs
-    // Expect no update to s_latestGps
+    // Update IMUManager with gpsTimestampMs older than m_sLatestGps.gpsTimestampMs
+    // Expect no update to m_sLatestGps
     gpsUpdate.gpsTimestampMs = GPS_TIMESTAMP_MS_INVALID;
     IMUManager::UpdateLatestGps(gpsUpdate);
     latestGpsOpt = IMUManager::GetLatestGps();
@@ -226,7 +226,7 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
 //     gps.latitude = 80.0;
 //     gps.longitude = 0;
 
-//     IMUManager::s_kineticState = {
+//     IMUManager::m_sKineticState = {
 //         std::chrono::steady_clock::now(),
 //         0, 0, 0, 0
 //     };

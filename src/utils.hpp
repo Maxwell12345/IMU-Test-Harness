@@ -42,9 +42,7 @@ namespace IMUUtils
     };
 
     struct KineticState {
-        using TimePoint = std::chrono::steady_clock::time_point;
-
-        TimePoint timestamp;
+        std::chrono::steady_clock::time_point timestamp;
         double speedEastWest{};
         double speedNorthSouth{};
         double accelerationEastWest{};
@@ -60,7 +58,7 @@ namespace IMUUtils
             accelerationEastWest(a_x),
             accelerationNorthSouth(a_y) {}
 
-        KineticState(TimePoint tp, double v_x, double v_y, double a_x, double a_y):
+        KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
             timestamp(tp),
             speedEastWest(v_x),
             speedNorthSouth(v_y),
@@ -203,7 +201,7 @@ inline double Convert_Global_Y_to_DegPerS2(double global_y) {
 * @return  The calculated position of the vessel
 */
 inline KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
-                                      double accelerationNorthSouth, KineticState::TimePoint currentTimestamp) {
+                                      double accelerationNorthSouth, std::chrono::steady_clock::time_point currentTimestamp) {
     KineticState current = KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
     const double deltaT = std::chrono::duration<double>(current.timestamp - previous.timestamp).count();
 

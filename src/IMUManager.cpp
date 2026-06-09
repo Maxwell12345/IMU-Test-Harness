@@ -7,31 +7,32 @@
 
 constexpr auto steadyMin = std::chrono::steady_clock::time_point::min();
 
-std::mutex IMUManager::s_gpsMutex;
-std::mutex IMUManager::s_imuValueMutex;
-std::mutex IMUManager::s_kineticStateMutex;
-std::mutex IMUManager::s_lastImuEkfInvocationMutex;
+std::mutex IMUManager::m_sGpsMutex;
+std::mutex IMUManager::m_sKineticStateMutex;
 
-sh2_RotationVectorWAcc IMUManager::s_imuRotationVector;    
-sh2_Accelerometer IMUManager::s_imuLinearAcceleration;
+std::atomic<sh2_RotationVectorWAcc> IMUManager::m_sImuRotationVector;    
+std::atomic<sh2_Accelerometer> IMUManager::m_sImuLinearAcceleration;
 
-bool IMUManager::s_gpsSentToEkf = false;
-bool IMUManager::s_imuRotationVectorReady = false;               
-bool IMUManager::s_imuLinearAccelerationReady = false;  
+std::atomic<bool> IMUManager::m_sGpsSentToEkf = false;
+std::atomic<bool> IMUManager::m_sImuRotationVectorReady = false;               
+std::atomic<bool> IMUManager::m_sImuLinearAccelerationReady = false;  
 
-IMUManager* IMUManager::s_instance = nullptr;
-std::optional<GpsUpdate> IMUManager::s_latestGps = std::nullopt;
-std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfInvocation = steadyMin;
+IMUManager* IMUManager::m_sInstance = nullptr;
+std::optional<GpsUpdate> IMUManager::m_sLatestGps = std::nullopt;
 
-IMUUtils::KineticState IMUManager::s_kineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
+std::atomic<uint64_t> IMUManager::m_sLastAccelerationVectorMachineTime = 0;
+std::atomic<uint64_t> IMUManager::m_sLastRotationVectorMachineTime = 0;
+std::atomic<uint64_t> IMUManager::m_sLastEKFMachineTime = 1e-4;
+
+IMUUtils::KineticState IMUManager::m_sKineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
 
 namespace {
     std::FILE *file = std::fopen("output.csv", "w");
 }
 
 IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
-                       std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
-                       std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
+                       std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
+                       std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
     if(databaseManager == nullptr) {
         throw std::invalid_argument("databaseManager is nullptr");
     }
@@ -52,150 +53,123 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
 }
 
 IMUManager::~IMUManager() {
-    s_imuRotationVectorReady = false;
-    s_imuLinearAccelerationReady = false;
-    s_imuRotationVector = {};
-    s_imuLinearAcceleration = {};
-    s_lastImuEkfInvocation = steadyMin;
-    s_gpsSentToEkf = false;
-    s_latestGps = std::nullopt;
-    s_kineticState = {};
+    m_sImuRotationVectorReady = false;
+    m_sImuLinearAccelerationReady = false;
+    m_sGpsSentToEkf = false;
+    m_sLatestGps = std::nullopt;
+    m_sKineticState = {};
 }
 
 void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
-                            std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
-                            std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
-    if(s_instance != nullptr) {
+                            std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
+                            std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
+    if(m_sInstance != nullptr) {
         throw std::runtime_error("IMUManager instance already exist");
     }
 
-    s_instance = new IMUManager(databaseManager,
+    m_sInstance = new IMUManager(databaseManager,
                                 ekfCallbackImuOnly,
                                 ekfCallbackWithGps);
 }
 
 void IMUManager::Deinitialize() {
-    delete s_instance;
-    s_instance = nullptr;
+    delete m_sInstance;
+    m_sInstance = nullptr;
 }
 
 IMUManager& IMUManager::Instance() {
-    if(s_instance == nullptr) {
-        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    if(m_sInstance == nullptr) {
+        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
     }
 
-    return *s_instance;
+    return *m_sInstance;
 }
 
 IMUManagerStats IMUManager::GetStats() const {
-    if(s_instance == nullptr) {
-        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    if(m_sInstance == nullptr) {
+        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
     }
 
-    std::lock_guard imuGuard(s_instance->m_statsMutex);
-
     IMUManagerStats statSnapshot;
-    statSnapshot = s_instance->m_stats;
+    statSnapshot = m_sInstance->m_stats;
+
     return statSnapshot;
 }
 
 std::optional<GpsUpdate> IMUManager::GetLatestGps() {
-    std::lock_guard gpsMutex(s_gpsMutex);
-    std::optional<GpsUpdate> gpsSnapshot = s_latestGps;
+    std::lock_guard gpsMutex(m_sGpsMutex);
+    std::optional<GpsUpdate> gpsSnapshot = m_sLatestGps;
     return gpsSnapshot;
 }
 
 void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
-    if(s_instance == nullptr) {
-        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    if(m_sInstance == nullptr) {
+        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
     }
 
-    std::lock_guard gpsGuard(s_gpsMutex);
-    std::lock_guard statsGuard(s_instance->m_statsMutex);
+    std::lock_guard gpsGuard(m_sGpsMutex);
 
     if(update.valid == false) {
-        s_instance->m_stats.gpsRejected++;
+        m_sInstance->m_stats.gpsRejected++;
         return;
     }
 
     const unsigned int STALE_TIME_OUT = 5;
     double deltaTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - update.receiveTime).count();
     if(deltaTime > STALE_TIME_OUT) {
-        s_instance->m_stats.gpsRejected++;
+        m_sInstance->m_stats.gpsRejected++;
         return;
     }
 
-    if(s_latestGps.has_value() && update.gpsTimestampMs <= s_latestGps->gpsTimestampMs){
-        s_instance->m_stats.gpsRejected++;
+    if(m_sLatestGps.has_value() && update.gpsTimestampMs <= m_sLatestGps->gpsTimestampMs){
+        m_sInstance->m_stats.gpsRejected++;
         return;
     }
 
-    s_gpsSentToEkf = false;
-    s_latestGps = update;
-    s_instance->m_stats.gpsAccepted++;
+    m_sGpsSentToEkf = false;
+    m_sLatestGps = update;
+    m_sInstance->m_stats.gpsAccepted++;
 }
 
 void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
     (void) cookie;
 
     try {
-        if(s_instance == nullptr) {
-            throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+        if(m_sInstance == nullptr) {
+            throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
         }
 
         if(event == nullptr) {
-            std::lock_guard imuGuard(s_instance->m_statsMutex);
-            s_instance->m_stats.imuRejected++;
+            m_sInstance->m_stats.imuRejected++;
             throw std::invalid_argument("Sh2_SensorEvent was a nullptr");
         }
 
         sh2_SensorValue_t val{};
         if (sh2_decodeSensorEvent(&val, event) != SH2_OK) {
-            std::lock_guard imuGuard(s_instance->m_statsMutex);
-            s_instance->m_stats.imuRejected++;
+            m_sInstance->m_stats.imuRejected++;
             throw std::runtime_error("There was an error trying to decode Sh2_SensorEvent");
         };
 
         if(ValidateImuEvent(val) == false) {
-            std::lock_guard imuGuard(s_instance->m_statsMutex);
-            s_instance->m_stats.imuRejected++;
+            m_sInstance->m_stats.imuRejected++;
             throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
         StoreImuValue(val);
-
-        {
-            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
-            if (s_lastImuEkfInvocation == steadyMin) {
-                s_lastImuEkfInvocation = std::chrono::steady_clock::now();
-                return;
-            }
-        }
-
-        sh2_RotationVectorWAcc rotationVectorSnapshot;
-        sh2_Accelerometer linearAccelerationSnapshot;
-        {
-            std::lock_guard imuValueGuard(s_imuValueMutex);
-            if(s_imuRotationVectorReady == false || s_imuLinearAccelerationReady == false) {
-                return;
-            }
-
-            rotationVectorSnapshot.i = s_imuRotationVector.i;
-            rotationVectorSnapshot.j = s_imuRotationVector.j;
-            rotationVectorSnapshot.k = s_imuRotationVector.k;
-            rotationVectorSnapshot.real = s_imuRotationVector.real;
-
-            linearAccelerationSnapshot.x = s_imuLinearAcceleration.x;
-            linearAccelerationSnapshot.y = s_imuLinearAcceleration.y;
-            linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
-        }
         
+        if(!(m_sImuRotationVectorReady && m_sImuLinearAccelerationReady)) {
+            return;
+        }
+
+        sh2_RotationVectorWAcc rotationVectorSnapshot = m_sImuRotationVector.load();
+        sh2_Accelerometer linearAccelerationSnapshot = m_sImuLinearAcceleration.load();
+
         bool gpsSentToEkfSnapshot;
         std::optional<GpsUpdate> gpsUpdateSnapshot;
         {
-            std::lock_guard sentToEkfGuard(s_gpsMutex);
-            gpsUpdateSnapshot    = s_latestGps;
-            gpsSentToEkfSnapshot = s_gpsSentToEkf;
+            std::lock_guard sentToEkfGuard(m_sGpsMutex);
+            gpsUpdateSnapshot    = m_sLatestGps;
+            gpsSentToEkfSnapshot = m_sGpsSentToEkf.load();
         }
 
         if(gpsUpdateSnapshot.has_value() == false)
@@ -212,87 +186,67 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
                                                   gpsUpdateSnapshot.value(),
                                                   static_cast<int>(ymd.year()));
 
-        auto now = std::chrono::steady_clock::now();
-        double dtSeconds;
+        
+        uint64_t accHwTime = m_sLastAccelerationVectorMachineTime.load();
+        uint64_t rotHwTime = m_sLastRotationVectorMachineTime.load();
+        uint64_t lastEKFHwTime = m_sLastEKFMachineTime.load();
+        uint64_t oldestHwTime = std::min(accHwTime, rotHwTime);
+        
+        double dtSeconds = static_cast<double>(oldestHwTime - lastEKFHwTime) / 1e6;
 
-        {
-            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
-            dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfInvocation).count();
-            s_lastImuEkfInvocation = now;
-        }
+        m_sLastEKFMachineTime.store(oldestHwTime);
 
         if(gpsSentToEkfSnapshot == false) {
             Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
-            s_instance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+            m_sInstance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
-            std::lock_guard gpsMutex(s_gpsMutex);
-            s_gpsSentToEkf = true;
+            std::lock_guard gpsMutex(m_sGpsMutex);
+            m_sGpsSentToEkf = true;
         } else {
-            s_instance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+            m_sInstance->m_ekfCallbackImuOnly(dtSeconds, zImu);
         }
 
-        {
-            std::lock_guard sensorValueGuard(s_imuValueMutex);
-            s_imuRotationVectorReady = false;               
-            s_imuLinearAccelerationReady = false;  
-        }
+        m_sImuRotationVectorReady = false;               
+        m_sImuLinearAccelerationReady = false;  
 
-        std::lock_guard imuGuard(s_instance->m_statsMutex);
-        s_instance->m_stats.imuAccepted++;
+        m_sInstance->m_stats.imuAccepted++;
     } catch (const std::exception& e) {
+        // TODO: Needs a way to log these errors, not to cerr in prod
         std::cerr << e.what() << std::endl;
     }
 }
 
-void IMUManager::SensorCallback(const sh2_SensorValue& val) {
+void IMUManager::SensorCallback(const sh2_SensorValue& val, const double timestampS) {
     try {
-        if(s_instance == nullptr) {
-            throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+        if(m_sInstance == nullptr) {
+            throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
         }
 
         if(ValidateImuEvent(val) == false) {
-            std::lock_guard imuGuard(s_instance->m_statsMutex);
-            s_instance->m_stats.imuRejected++;
+            m_sInstance->m_stats.imuRejected++;
+            throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
         StoreImuValue(val);
-
-        {
-            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
-            if (s_lastImuEkfInvocation == steadyMin) {
-                s_lastImuEkfInvocation = std::chrono::steady_clock::now();
-                return;
-            }
-        }
-
-        sh2_RotationVectorWAcc rotationVectorSnapshot;
-        sh2_Accelerometer linearAccelerationSnapshot;
-        {
-            std::lock_guard imuValueGuard(s_imuValueMutex);
-            if(s_imuRotationVectorReady == false || s_imuLinearAccelerationReady == false) {
-                return;
-            }
-            
-            rotationVectorSnapshot.i = s_imuRotationVector.i;
-            rotationVectorSnapshot.j = s_imuRotationVector.j;
-            rotationVectorSnapshot.k = s_imuRotationVector.k;
-            rotationVectorSnapshot.real = s_imuRotationVector.real;
-            
-            linearAccelerationSnapshot.x = s_imuLinearAcceleration.x;
-            linearAccelerationSnapshot.y = s_imuLinearAcceleration.y;
-            linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
-        }
         
+        if(!(m_sImuRotationVectorReady && m_sImuLinearAccelerationReady)) {
+            return;
+        }
+
+        sh2_RotationVectorWAcc rotationVectorSnapshot = m_sImuRotationVector.load();
+        sh2_Accelerometer linearAccelerationSnapshot = m_sImuLinearAcceleration.load();
+
         bool gpsSentToEkfSnapshot;
         std::optional<GpsUpdate> gpsUpdateSnapshot;
         {
-            std::lock_guard sentToEkfGuard(s_gpsMutex);
-            gpsUpdateSnapshot    = s_latestGps;
-            gpsSentToEkfSnapshot = s_gpsSentToEkf;
+            std::lock_guard sentToEkfGuard(m_sGpsMutex);
+            gpsUpdateSnapshot    = m_sLatestGps;
+            gpsSentToEkfSnapshot = m_sGpsSentToEkf.load();
         }
-        
+
         if(gpsUpdateSnapshot.has_value() == false)
         {
+            throw std::runtime_error("No GPS data ever recorded");
             return;
         }
 
@@ -304,42 +258,37 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
                                                   gpsUpdateSnapshot.value(),
                                                   static_cast<int>(ymd.year()));
 
-        auto now = std::chrono::steady_clock::now();
-        double nowMs =
-            std::chrono::duration<double, std::milli>(
-                now.time_since_epoch()
-            ).count();
-        double dtSeconds;
+        
+        uint64_t accHwTime = m_sLastAccelerationVectorMachineTime.load();
+        uint64_t rotHwTime = m_sLastRotationVectorMachineTime.load();
+        uint64_t lastEKFHwTime = m_sLastEKFMachineTime.load();
+        uint64_t oldestHwTime = std::min(accHwTime, rotHwTime);
+        
+        double dtSeconds = static_cast<double>(oldestHwTime - lastEKFHwTime) / 1e6;
 
-        {
-            std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
-            dtSeconds = std::chrono::duration<double>(now - s_lastImuEkfInvocation).count();
-            s_lastImuEkfInvocation = now;
-        }
+        m_sLastEKFMachineTime.store(oldestHwTime);
 
         if(gpsSentToEkfSnapshot == false) {
-            Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
-            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-            s_instance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+        Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+        fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
+        m_sInstance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
-            std::lock_guard gpsMutex(s_gpsMutex);
-            s_gpsSentToEkf = true;
-        } else {
-            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-            s_instance->m_ekfCallbackImuOnly(dtSeconds, zImu);
-        }
+        std::lock_guard gpsMutex(m_sGpsMutex);
+        m_sGpsSentToEkf = true;
+    } else {
+        fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
+        m_sInstance->m_ekfCallbackImuOnly(dtSeconds, zImu);
+    }
 
-        {
-            std::lock_guard sensorValueGuard(s_imuValueMutex);
-            s_imuRotationVectorReady = false;               
-            s_imuLinearAccelerationReady = false;  
-        }
+        m_sImuRotationVectorReady = false;               
+        m_sImuLinearAccelerationReady = false;  
 
-        std::lock_guard imuGuard(s_instance->m_statsMutex);
-        s_instance->m_stats.imuAccepted++;
+        m_sInstance->m_stats.imuAccepted++;
     } catch (const std::exception& e) {
+        // TODO: Needs a way to log these errors, not to cerr in prod
         std::cerr << e.what() << std::endl;
     }
+        
 }
 
 bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
@@ -371,23 +320,32 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
 };
 
 void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
-    std::lock_guard sensorValueGuard(s_imuValueMutex);
     switch (sensorValue.sensorId) {
-        case SH2_LINEAR_ACCELERATION:
-            s_imuLinearAccelerationReady = true;
-            s_imuLinearAcceleration.x = sensorValue.un.linearAcceleration.x;
-            s_imuLinearAcceleration.y = sensorValue.un.linearAcceleration.y;
-            s_imuLinearAcceleration.z = sensorValue.un.linearAcceleration.z;
-            break;
+        case SH2_LINEAR_ACCELERATION: {
+            m_sImuLinearAccelerationReady = true;
 
+            sh2_Accelerometer imuAcc = m_sImuLinearAcceleration;
+            imuAcc.x = sensorValue.un.linearAcceleration.x;
+            imuAcc.y = sensorValue.un.linearAcceleration.y;
+            imuAcc.z = sensorValue.un.linearAcceleration.z;
+            m_sImuLinearAcceleration = imuAcc;
+            m_sLastAccelerationVectorMachineTime.store(sensorValue.timestamp);
+            break;
+        }
         case SH2_ROTATION_VECTOR:
-            s_imuRotationVectorReady = true;
-            s_imuRotationVector.i = sensorValue.un.rotationVector.i;
-            s_imuRotationVector.j = sensorValue.un.rotationVector.j;
-            s_imuRotationVector.k = sensorValue.un.rotationVector.k;
-            s_imuRotationVector.real = sensorValue.un.rotationVector.real;
+            m_sImuRotationVectorReady = true;
+
+            sh2_RotationVectorWAcc imuRot = m_sImuRotationVector;
+            imuRot.i = sensorValue.un.rotationVector.i;
+            imuRot.j = sensorValue.un.rotationVector.j;
+            imuRot.k = sensorValue.un.rotationVector.k;
+            imuRot.real = sensorValue.un.rotationVector.real;
+            m_sImuRotationVector = imuRot;
+            m_sLastRotationVectorMachineTime.store(sensorValue.timestamp);
             break;
     }
+
+
 }
 
 Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate& gps) {
@@ -396,8 +354,8 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate& gps) {
 }
 
 Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear) {
-    if(s_instance == nullptr) {
-        throw std::runtime_error("s_instance does not exist, need to run IMUManager::Initialize()");
+    if(m_sInstance == nullptr) {
+        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
     }
 
     double latitude = gps.latitude;
@@ -408,7 +366,7 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
                                                                   rv.i,
                                                                   rv.j,
                                                                   rv.k);
-    double magneticDeclination = s_instance->m_magneticDeclination.CalculateDeclination(longitude,
+    double magneticDeclination = m_sInstance->m_magneticDeclination.CalculateDeclination(longitude,
                                                                                         latitude,
                                                                                         RADAR_HEIGHT_M,
                                                                                         currentYear);
@@ -431,15 +389,15 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
     
     IMUUtils::KineticState kineticState;
     {
-        std::lock_guard kineticStateGuard(s_kineticStateMutex);
-        if(s_kineticState.timestamp == steadyMin)
+        std::lock_guard kineticStateGuard(m_sKineticStateMutex);
+        if(m_sKineticState.timestamp == steadyMin)
         {
-            s_kineticState.timestamp = std::chrono::steady_clock::now();
+            m_sKineticState.timestamp = std::chrono::steady_clock::now();
         }
-        kineticState = IMUUtils::CalculateKineticUpdate(s_kineticState,
+        kineticState = IMUUtils::CalculateKineticUpdate(m_sKineticState,
                                                         globalGeoAccelerationX,
                                                         globalGeoAccelerationY);
-        s_kineticState = kineticState;
+        m_sKineticState = kineticState;
     }
 
     Vector6d imuVector = {

@@ -41,4 +41,5 @@ struct IMUManagerStats {
         return *this;
     }
 };
+
 #endif

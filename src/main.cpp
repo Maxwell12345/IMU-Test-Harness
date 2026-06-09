@@ -56,10 +56,10 @@ int main() {
 
     IMUGPSFusionKF_2D_ConstantAcceleration ekf;
     auto ekfNoGps = [&ekf](double dt, Vector6d& z_IMU) {
-                        return ekf.Step(dt, z_IMU);
+                        ekf.Step(dt, z_IMU);
                     };
     auto ekfWithGps = [&ekf](double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
-                            return ekf.Step(dt, z_GPS, z_IMU);
+                            ekf.Step(dt, z_GPS, z_IMU);
                         };
 
     IMUManager::Initialize(db,
@@ -115,7 +115,7 @@ int main() {
                         break;
                 }
 
-                IMUManager::SensorCallback(value);
+                IMUManager::SensorCallback(value, sensorRows[sensorIdx].epochS);
 
                 if(sensorIdx < sensorRows.size() - 1) {
                     ++sensorIdx;

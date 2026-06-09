@@ -23,7 +23,7 @@ last_est_lat = None
 last_time = None
 
 first_gps = True
-GPS_SKIPS = 100
+GPS_SKIPS = 2
 gps_n_skips = GPS_SKIPS
 
 for _, row in df.iterrows():
