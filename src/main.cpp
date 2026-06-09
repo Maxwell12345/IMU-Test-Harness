@@ -115,7 +115,7 @@ int main() {
                         break;
                 }
 
-                IMUManager::SensorCallback(value, sensorRows[sensorIdx].epochS);
+                IMUManager::TESTSensorCallback(value, sensorRows[sensorIdx].epochS);
 
                 if(sensorIdx < sensorRows.size() - 1) {
                     ++sensorIdx;

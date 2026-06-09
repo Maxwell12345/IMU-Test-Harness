@@ -72,15 +72,6 @@ public:
     static void Deinitialize();
 
     /**
-     * @brief Reference to singleton instance of IMUManager
-     *
-     * @return IMUManager reference
-     *
-     * @throws runtime_error when Singleton instance is not initialized (nullptr)
-     */
-    static IMUManager& Instance();
-
-    /**
      * @brief Returns the runtime statistics of this class.
      *
      * @remarks The statistic includes:
@@ -140,15 +131,7 @@ public:
      */
     static void SensorCallback(void* cookie, sh2_SensorEvent* event);
 
-    /**
-     * @brief This is just a method similar to SensorCallback(void* cookie, sh2_SensorEvent* event),
-     *        but dev can modify it to play around
-     * 
-     * @remark This method is for testing. It behaves almost the same way as SensorCallback(void* cookie, sh2_SensorEvent* event).
-     *
-     * @param [in] val a referece to a sh2_SensorValue populated with IMU measurements already. (Events decoded before calling this method)
-     */
-    static void SensorCallback(const sh2_SensorValue& val, const double timestampS);
+    static void TESTSensorCallback(const sh2_SensorValue& val, const double timestampS);
 
 private:
 
@@ -212,8 +195,6 @@ private:
      */
     static Vector6d BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear);
     
-    static IMUManager* m_sInstance;                      // Singleton IMUManager instance. Only one per run time
-
     static std::atomic<bool> m_sImuRotationVectorReady;               // True when class is updated with new RotationVector measurement and not used yet in EKF
     static std::atomic<bool> m_sImuLinearAccelerationReady;           // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
     static std::atomic<sh2_RotationVectorWAcc> m_sImuRotationVector;  // Internal RotationVector measurement state

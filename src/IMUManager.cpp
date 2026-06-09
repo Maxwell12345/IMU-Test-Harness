@@ -17,7 +17,6 @@ std::atomic<bool> IMUManager::m_sGpsSentToEkf = false;
 std::atomic<bool> IMUManager::m_sImuRotationVectorReady = false;               
 std::atomic<bool> IMUManager::m_sImuLinearAccelerationReady = false;  
 
-IMUManager* IMUManager::m_sInstance = nullptr;
 std::optional<GpsUpdate> IMUManager::m_sLatestGps = std::nullopt;
 
 std::atomic<uint64_t> IMUManager::m_sLastAccelerationVectorMachineTime = 0;
@@ -75,14 +74,6 @@ void IMUManager::Initialize(boost::shared_ptr<DatabaseManager> databaseManager,
 void IMUManager::Deinitialize() {
     delete m_sInstance;
     m_sInstance = nullptr;
-}
-
-IMUManager& IMUManager::Instance() {
-    if(m_sInstance == nullptr) {
-        throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");
-    }
-
-    return *m_sInstance;
 }
 
 IMUManagerStats IMUManager::GetStats() const {
@@ -216,7 +207,7 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
     }
 }
 
-void IMUManager::SensorCallback(const sh2_SensorValue& val, const double timestampS) {
+void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double timestampS) {
     try {
         if(m_sInstance == nullptr) {
             throw std::runtime_error("m_sInstance does not exist, need to run IMUManager::Initialize()");

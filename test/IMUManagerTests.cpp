@@ -34,6 +34,10 @@ namespace {
     void CleanupIMUManager() {
         IMUManager::Deinitialize();
     }
+
+    IMUManager Get() {
+        return 
+    }
 }
 
 TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
@@ -203,52 +207,116 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
     EXPECT_EQ(gpsVector, expected);
 }
 
-// TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
-//     SetupIMUManager();
-//     double latitude = 80.0;
-//     double longitude = 0.0;
+TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
+    SetupIMUManager();
+    double latitude = 80.0;
+    double longitude = 0.0;
 
-//     sh2_RotationVectorWAcc rv = {
-//         0.032959,
-//         -0.061829,
-//         -0.706909,
-//         0.703796,
-//         0
-//     };
+    sh2_RotationVectorWAcc rv = {
+        0.032959,
+        -0.061829,
+        -0.706909,
+        0.703796,
+        0
+    };
 
-//     sh2_Accelerometer la = {
-//         20,
-//         50,
-//         0
-//     };
+    sh2_Accelerometer la = {
+        20,
+        50,
+        0
+    };
 
-//     GpsUpdate gps;
-//     gps.latitude = 80.0;
-//     gps.longitude = 0;
+    GpsUpdate gps;
+    gps.latitude = 80.0;
+    gps.longitude = 0;
 
-//     IMUManager::m_sKineticState = {
-//         std::chrono::steady_clock::now(),
-//         0, 0, 0, 0
-//     };
+    IMUManager::m_sKineticState = {
+        std::chrono::steady_clock::now(),
+        0, 0, 0, 0
+    };
 
-//     std::this_thread::sleep_for(std::chrono::seconds(1));
-//     Vector6d zImuT1Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
-//     std::this_thread::sleep_for(std::chrono::seconds(1));
-//     Vector6d zImuT2Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    Vector6d zImuT1Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    Vector6d zImuT2Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
 
-//     EXPECT_NEAR(zImuT1Sec[0], 0, 1e-6);
-//     EXPECT_NEAR(zImuT1Sec[1], 0, 1e-16);
-//     EXPECT_NEAR(zImuT1Sec[2], -0.002575, 1e-4);
-//     EXPECT_NEAR(zImuT1Sec[3], 0.000187, 1e-4);
-//     EXPECT_NEAR(zImuT1Sec[4], -0.002575, 1e-4);
-//     EXPECT_NEAR(zImuT1Sec[5], 0.000187, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[0], 0, 1e-6);
+    EXPECT_NEAR(zImuT1Sec[1], 0, 1e-16);
+    EXPECT_NEAR(zImuT1Sec[2], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[3], 0.000187, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[4], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[5], 0.000187, 1e-4);
 
-//     EXPECT_NEAR(zImuT2Sec[0], 0, 1e-6);
-//     EXPECT_NEAR(zImuT2Sec[1], 0, 1e-16);
-//     EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 1e-4);
-//     EXPECT_NEAR(zImuT2Sec[3], 0.000187 * 2, 1e-4);
-//     EXPECT_NEAR(zImuT2Sec[4], -0.002575, 1e-4);
-//     EXPECT_NEAR(zImuT2Sec[5], 0.000187, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[0], 0, 1e-6);
+    EXPECT_NEAR(zImuT2Sec[1], 0, 1e-16);
+    EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[3], 0.000187 * 2, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[4], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[5], 0.000187, 1e-4);
 
-//     CleanupIMUManager();
-// }
+    CleanupIMUManager();
+}
+
+TEST(IMUManagerTest, ValidateGetStats) {
+    SetupIMUManager();
+
+    // Run a few times, no rejections
+
+    // Run a few times WITH null in IMU and valid GPS
+    // Validate that stats show IMU
+
+    // Run a few times WITH invalid GPS
+    // Validate that stats show GPS + IMU
+
+    sh2_SensorEvent_t events[] = {
+        {
+            .timestamp_uS = 1000000,
+            .delay_uS = 0,
+            .len = 12,
+            .reportId = SH2_ACCELEROMETER,
+            .report = {
+                0x00, 0x00, 0x00, 0x00,
+                0x10, 0x27, 0x00, 0x00,
+                0x20, 0x4E, 0x00, 0x00
+            }
+        },
+        {
+            .timestamp_uS = 1010000,
+            .delay_uS = 10000,
+            .len = 12,
+            .reportId = SH2_LINEAR_ACCELERATION,
+            .report = {
+                0x01, 0x00, 0x00, 0x00,
+                0x34, 0x12, 0x00, 0x00,
+                0x78, 0x56, 0x00, 0x00
+            }
+        },
+        {
+            .timestamp_uS = 1020000,
+            .delay_uS = 10000,
+            .len = 16,
+            .reportId = SH2_ROTATION_VECTOR,
+            .report = {
+                0x02, 0x00, 0x00, 0x00,
+                0x11, 0x22, 0x33, 0x44,
+                0x55, 0x66, 0x77, 0x88,
+                0x99, 0xAA, 0xBB, 0xCC
+            }
+        }
+    };
+
+    GpsUpdate gpsUpdate;
+    gpsUpdate.latitude = 1;
+    gpsUpdate.longitude = 1;
+    gpsUpdate.valid = true;
+    gpsUpdate.receiveTime = std::chrono::steady_clock::now();
+
+    IMUManager::SensorCallback(nullptr, events[0]);
+    IMUManager::SensorCallback(nullptr, events[1]);
+
+    IMUManager::UpdateLatestGps(gpsUpdate);
+
+    IMUManager m = IMUManager();
+
+    EXPECT_EQ(m.GetStats(). );
+}
