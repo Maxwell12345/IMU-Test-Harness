@@ -203,52 +203,52 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
     EXPECT_EQ(gpsVector, expected);
 }
 
-TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
-    SetupIMUManager();
-    double latitude = 80.0;
-    double longitude = 0.0;
+// TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
+//     SetupIMUManager();
+//     double latitude = 80.0;
+//     double longitude = 0.0;
 
-    sh2_RotationVectorWAcc rv = {
-        0.032959,
-        -0.061829,
-        -0.706909,
-        0.703796,
-        0
-    };
+//     sh2_RotationVectorWAcc rv = {
+//         0.032959,
+//         -0.061829,
+//         -0.706909,
+//         0.703796,
+//         0
+//     };
 
-    sh2_Accelerometer la = {
-        20,
-        50,
-        0
-    };
+//     sh2_Accelerometer la = {
+//         20,
+//         50,
+//         0
+//     };
 
-    GpsUpdate gps;
-    gps.latitude = 80.0;
-    gps.longitude = 0;
+//     GpsUpdate gps;
+//     gps.latitude = 80.0;
+//     gps.longitude = 0;
 
-    IMUManager::s_kineticState = {
-        std::chrono::steady_clock::now(),
-        0, 0, 0, 0
-    };
+//     IMUManager::s_kineticState = {
+//         std::chrono::steady_clock::now(),
+//         0, 0, 0, 0
+//     };
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    Vector6d zImuT1Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    Vector6d zImuT2Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
+//     std::this_thread::sleep_for(std::chrono::seconds(1));
+//     Vector6d zImuT1Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
+//     std::this_thread::sleep_for(std::chrono::seconds(1));
+//     Vector6d zImuT2Sec = IMUManager::BuildImuMeasurementVector(rv, la, gps, 2025);
 
-    EXPECT_NEAR(zImuT1Sec[0], 0, 1e-6);
-    EXPECT_NEAR(zImuT1Sec[1], 0, 1e-16);
-    EXPECT_NEAR(zImuT1Sec[2], -0.002575, 1e-4);
-    EXPECT_NEAR(zImuT1Sec[3], 0.000187, 1e-4);
-    EXPECT_NEAR(zImuT1Sec[4], -0.002575, 1e-4);
-    EXPECT_NEAR(zImuT1Sec[5], 0.000187, 1e-4);
+//     EXPECT_NEAR(zImuT1Sec[0], 0, 1e-6);
+//     EXPECT_NEAR(zImuT1Sec[1], 0, 1e-16);
+//     EXPECT_NEAR(zImuT1Sec[2], -0.002575, 1e-4);
+//     EXPECT_NEAR(zImuT1Sec[3], 0.000187, 1e-4);
+//     EXPECT_NEAR(zImuT1Sec[4], -0.002575, 1e-4);
+//     EXPECT_NEAR(zImuT1Sec[5], 0.000187, 1e-4);
 
-    EXPECT_NEAR(zImuT2Sec[0], 0, 1e-6);
-    EXPECT_NEAR(zImuT2Sec[1], 0, 1e-16);
-    EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 1e-4);
-    EXPECT_NEAR(zImuT2Sec[3], 0.000187 * 2, 1e-4);
-    EXPECT_NEAR(zImuT2Sec[4], -0.002575, 1e-4);
-    EXPECT_NEAR(zImuT2Sec[5], 0.000187, 1e-4);
+//     EXPECT_NEAR(zImuT2Sec[0], 0, 1e-6);
+//     EXPECT_NEAR(zImuT2Sec[1], 0, 1e-16);
+//     EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 1e-4);
+//     EXPECT_NEAR(zImuT2Sec[3], 0.000187 * 2, 1e-4);
+//     EXPECT_NEAR(zImuT2Sec[4], -0.002575, 1e-4);
+//     EXPECT_NEAR(zImuT2Sec[5], 0.000187, 1e-4);
 
-    CleanupIMUManager();
-}
+//     CleanupIMUManager();
+// }

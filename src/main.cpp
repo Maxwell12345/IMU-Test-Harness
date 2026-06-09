@@ -31,23 +31,23 @@ class DatabaseManager {
 static std::atomic<bool> g_running{true};
 
 struct SensorRow {
-    double epoch_s;
-    long long sensor_timestamp_us;
-    int sensor_id;
-    std::string sensor_name;
+    double epochS;
+    long long sensorTimestampUs;
+    int sensorId;
+    std::string sensorName;
     int status, accuracy;
     std::optional<double> x, y, z;
     std::optional<double> i, j, k, real;
-    std::optional<double> rotation_accuracy;
+    std::optional<double> rotationAccuracy;
 };
 
 struct GpsRow {
-    double epoch_s;
-    std::string sentence_id;
+    double epochS;
+    std::string sentenceId;
     std::optional<double> lat, lon;
 };
 
-void EnableSensor(sh2_SensorId_t sensor_id, uint32_t interval_us);
+void EnableSensor(sh2_SensorId_t sensorId, uint32_t intervalUs);
 size_t ReadSensorCsv(const std::string& path, std::vector<SensorRow> &rows);
 size_t ReadGpsCsv(const std::string& path, std::vector<GpsRow> &rows);
 
@@ -66,24 +66,6 @@ int main() {
                         ekfNoGps,
                         ekfWithGps);
 
-    // sh2_Hal_t hal = bno085_hal_create();
-    // if (sh2_open(&hal, nullptr, nullptr) != SH2_OK) {
-    //     std::cerr << "[ERROR] sh2_open failed — check wiring and I2C address\n";
-    //     return EXIT_FAILURE;
-    // }
-
-    // sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
-
-    // EnableSensor(SH2_LINEAR_ACCELERATION,       2'500);
-    // EnableSensor(SH2_ROTATION_VECTOR,           2'500);
-
-    // std::thread service_thread([]() {
-    //     while (g_running) {
-    //         sh2_service();
-    //     }
-    // });
-    // std::cout << "BNO085 streaming — press Esc to stop\n\n";
-
     std::cout << "Reading csv files..." << std::endl;
 
     std::vector<SensorRow> sensorRows;
@@ -98,22 +80,25 @@ int main() {
         size_t sensorIdx = 0;
         size_t gpsIdx = 0;
 
-        while(gpsRows[gpsIdx].epoch_s < 1779986868) {
+        while(gpsRows[gpsIdx].epochS < 1779986868) {
             gpsIdx++;
         }
 
-        while(sensorRows[sensorIdx].epoch_s < 1779986868) {
+        while(sensorRows[sensorIdx].epochS < 1779986868) {
             sensorIdx++;
         }
 
         while (g_running) {
+            if(sensorIdx % 100000 == 0) {
+                printf("Sensor Idx: %ld, Gps Idx: %ld\n", sensorIdx, gpsIdx);
+            }
 
-            if(sensorRows[sensorIdx].epoch_s < gpsRows[gpsIdx].epoch_s) {
+            if(sensorRows[sensorIdx].epochS < gpsRows[gpsIdx].epochS) {
                 auto& row = sensorRows[sensorIdx];
 
                 sh2_SensorValue value;
-                value.sensorId = row.sensor_id;
-                value.timestamp = row.sensor_timestamp_us;
+                value.sensorId = row.sensorId;
+                value.timestamp = row.sensorTimestampUs;
 
                 switch (value.sensorId) {
                     case SH2_LINEAR_ACCELERATION:
@@ -144,7 +129,7 @@ int main() {
                     gpsUpdate.longitude = row.lon.value();
                     gpsUpdate.valid = true;
                     gpsUpdate.receiveTime = std::chrono::steady_clock::now();
-                    gpsUpdate.gpsTimestampMs = static_cast<uint32_t>(row.epoch_s);
+                    gpsUpdate.gpsTimestampMs = static_cast<uint32_t>(row.epochS);
                     IMUManager::UpdateLatestGps(gpsUpdate);
                 }
 
@@ -153,13 +138,13 @@ int main() {
                 }
             }
 
-            if ((gpsIdx == (gpsRows.size() - 1)) && (sensorIdx == (sensorRows.size() - 1))) {
+            if ((gpsIdx >= (gpsRows.size() - 1)) || (sensorIdx >= (sensorRows.size() - 1))) {
                 g_running = false;
+                printf("DONE WITH PROCESSING DATA\n");
             }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
+
     std::cout << "BNO085 streaming — press Esc to stop\n\n";
 
     while (g_running) {
@@ -177,11 +162,11 @@ int main() {
     std::cout << "\nShutdown complete.\n";
 }
 
-void EnableSensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
+void EnableSensor(sh2_SensorId_t sensorId, uint32_t intervalUs) {
     sh2_SensorConfig_t cfg{};
-    cfg.reportInterval_us = interval_us;
-    if (sh2_setSensorConfig(sensor_id, &cfg) != SH2_OK) {
-        std::cerr << "[WARN] Failed to enable sensor id=" << sensor_id << "\n";
+    cfg.reportInterval_us = intervalUs;
+    if (sh2_setSensorConfig(sensorId, &cfg) != SH2_OK) {
+        std::cerr << "[WARN] Failed to enable sensor id=" << sensorId << "\n";
     }
 }
 
@@ -194,7 +179,9 @@ size_t ReadSensorCsv(const std::string& path, std::vector<SensorRow>& rows) {
     std::string line;
     std::getline(f, line);
 
+
     while (std::getline(f, line)) {
+   
         std::istringstream ss(line);
         std::vector<std::string> cols;
         std::string tok;

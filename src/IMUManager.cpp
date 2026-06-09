@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdio>
 
 #include "utils.hpp"
 #include "IMUManager.hpp"
@@ -22,7 +23,11 @@ IMUManager* IMUManager::s_instance = nullptr;
 std::optional<GpsUpdate> IMUManager::s_latestGps = std::nullopt;
 std::chrono::steady_clock::time_point IMUManager::s_lastImuEkfInvocation = steadyMin;
 
-IMUUtils::KineticState IMUManager::s_kineticState(std::chrono::steady_clock::now(), 0.0, 0.0, 0.0, 0.0);
+IMUUtils::KineticState IMUManager::s_kineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
+
+namespace {
+    std::FILE *file = std::fopen("output.csv", "w");
+}
 
 IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
                        std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
@@ -195,6 +200,7 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
 
         if(gpsUpdateSnapshot.has_value() == false)
         {
+            throw std::runtime_error("No GPS data ever recorded");
             return;
         }
 
@@ -247,11 +253,9 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
         if(ValidateImuEvent(val) == false) {
             std::lock_guard imuGuard(s_instance->m_statsMutex);
             s_instance->m_stats.imuRejected++;
-            // throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
         StoreImuValue(val);
-        // printf("Stored IMU Value\n");
 
         {
             std::lock_guard lastImuTimestampGuard(s_lastImuEkfInvocationMutex);
@@ -261,7 +265,6 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
             }
         }
 
-        
         sh2_RotationVectorWAcc rotationVectorSnapshot;
         sh2_Accelerometer linearAccelerationSnapshot;
         {
@@ -279,7 +282,6 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
             linearAccelerationSnapshot.y = s_imuLinearAcceleration.y;
             linearAccelerationSnapshot.z = s_imuLinearAcceleration.z;
         }
-        // printf("IMU Data Ready\n");
         
         bool gpsSentToEkfSnapshot;
         std::optional<GpsUpdate> gpsUpdateSnapshot;
@@ -291,7 +293,6 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
         
         if(gpsUpdateSnapshot.has_value() == false)
         {
-            // printf("Gps Does not have data\n");
             return;
         }
 
@@ -303,9 +304,11 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
                                                   gpsUpdateSnapshot.value(),
                                                   static_cast<int>(ymd.year()));
 
-        printf("%.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-
         auto now = std::chrono::steady_clock::now();
+        double nowMs =
+            std::chrono::duration<double, std::milli>(
+                now.time_since_epoch()
+            ).count();
         double dtSeconds;
 
         {
@@ -316,11 +319,13 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
 
         if(gpsSentToEkfSnapshot == false) {
             Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
             s_instance->m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
             std::lock_guard gpsMutex(s_gpsMutex);
             s_gpsSentToEkf = true;
         } else {
+            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
             s_instance->m_ekfCallbackImuOnly(dtSeconds, zImu);
         }
 
@@ -339,15 +344,6 @@ void IMUManager::SensorCallback(const sh2_SensorValue& val) {
 
 bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
     switch (sensorValue.sensorId) {
-        // case SH2_ACCELEROMETER:
-        //     if( IsInvalidRange(sensorValue.timestamp) ||
-        //         IsInvalidRange(sensorValue.un.accelerometer.x) ||
-        //         IsInvalidRange(sensorValue.un.accelerometer.y) ||
-        //         IsInvalidRange(sensorValue.un.accelerometer.z) ||
-        //         IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
-        //         return false;
-        //     }
-        //     break;
 
         case SH2_LINEAR_ACCELERATION:
             if( IsInvalidRange(sensorValue.un.linearAcceleration.x) ||
@@ -356,25 +352,6 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
                 return false;
             }
             break;
-
-        // case SH2_GYROSCOPE_CALIBRATED:
-        //     if( IsInvalidRange(sensorValue.timestamp) ||
-        //         IsInvalidRange(sensorValue.un.gyroscope.x) ||
-        //         IsInvalidRange(sensorValue.un.gyroscope.y) ||
-        //         IsInvalidRange(sensorValue.un.gyroscope.z)) {
-        //         return false;
-        //     }
-        //     break;
-
-        // case SH2_MAGNETIC_FIELD_CALIBRATED:
-        //     if( IsInvalidRange(sensorValue.timestamp) ||
-        //         IsInvalidRange(sensorValue.un.magneticField.x) ||
-        //         IsInvalidRange(sensorValue.un.magneticField.y) ||
-        //         IsInvalidRange(sensorValue.un.magneticField.z) ||
-        //         IsInvalidRange(static_cast<uint8_t>(sensorValue.status & 0x03))) {
-        //         return false;
-        //     }
-        //     break;
 
         case SH2_ROTATION_VECTOR:
             if( IsInvalidRange(sensorValue.un.rotationVector.i) ||
@@ -386,16 +363,6 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
             }
             break;
 
-        // case SH2_GAME_ROTATION_VECTOR:
-        //     if( IsInvalidRange(sensorValue.timestamp) ||
-        //         IsInvalidRange(sensorValue.un.gameRotationVector.i) ||
-        //         IsInvalidRange(sensorValue.un.gameRotationVector.j) ||
-        //         IsInvalidRange(sensorValue.un.gameRotationVector.k) ||
-        //         IsInvalidRange(sensorValue.un.gameRotationVector.real)) {
-        //         return false;
-        //     }
-        //     break;
-
         default:
             return false;
     }
@@ -406,20 +373,11 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue& sensorValue) {
 void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
     std::lock_guard sensorValueGuard(s_imuValueMutex);
     switch (sensorValue.sensorId) {
-        case SH2_ACCELEROMETER:
-            break;
-
         case SH2_LINEAR_ACCELERATION:
             s_imuLinearAccelerationReady = true;
             s_imuLinearAcceleration.x = sensorValue.un.linearAcceleration.x;
             s_imuLinearAcceleration.y = sensorValue.un.linearAcceleration.y;
             s_imuLinearAcceleration.z = sensorValue.un.linearAcceleration.z;
-            break;
-
-        case SH2_GYROSCOPE_CALIBRATED:
-            break;
-
-        case SH2_MAGNETIC_FIELD_CALIBRATED:
             break;
 
         case SH2_ROTATION_VECTOR:
@@ -428,9 +386,6 @@ void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
             s_imuRotationVector.j = sensorValue.un.rotationVector.j;
             s_imuRotationVector.k = sensorValue.un.rotationVector.k;
             s_imuRotationVector.real = sensorValue.un.rotationVector.real;
-            break;
-
-        case SH2_GAME_ROTATION_VECTOR:
             break;
     }
 }
@@ -461,6 +416,7 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
                                                          magneticDeclination);
                                                         
     double trueHeadingRadians = IMUUtils::DegreesToRadians(trueHeading);
+
     double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians,
                                                                     la.x,
                                                                     la.y);
@@ -476,6 +432,10 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
     IMUUtils::KineticState kineticState;
     {
         std::lock_guard kineticStateGuard(s_kineticStateMutex);
+        if(s_kineticState.timestamp == steadyMin)
+        {
+            s_kineticState.timestamp = std::chrono::steady_clock::now();
+        }
         kineticState = IMUUtils::CalculateKineticUpdate(s_kineticState,
                                                         globalGeoAccelerationX,
                                                         globalGeoAccelerationY);

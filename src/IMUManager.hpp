@@ -39,14 +39,19 @@ private:
                std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> ekfCallbackImuOnly,
                std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
 
+    /**
+     * @brief Destructor
+     *
+     * @remarks reset all static members to initial values
+     */
     ~IMUManager();
 
 public:
 
     /**
      * @brief Singleton Pattern Initializer
-     * 
-     * @brief MUST BE CALLED, only ONCE. If not, code will get segfault, though attempts at catching has been made
+     *
+     * @remarks MUST BE CALLED, only ONCE. If not, code will get segfault, though attempts at catching has been made
      *
      * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
      * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
@@ -119,12 +124,29 @@ public:
      *      - out of bound IMU measurements
      *      - unsupported IMU report type
      *      - no gps ever recorded
+     *         Exits if no GPS ever recoded
+     *
      *
      * @param [in] cookie (unused) Opaque user-data pointer passed by the SH2 driver
      * @param [in] event The pointer to an undecoded report coming from the IMU
+     *
+     * @throws SEE ABOVE, internally handled
+     * @throws runtime_error if s_instance does not exist
+     * @throws runtime_error if event is nullptr
+     * @throws runtime_error if decode event failure
+     * @throws runtime_error if sensorId is not supported
+     * @throws runtime_error if sensor report invalid measurements
      */
     static void SensorCallback(void* cookie, sh2_SensorEvent* event);
 
+    /**
+     * @brief This is just a method similar to SensorCallback(void* cookie, sh2_SensorEvent* event),
+     *        but dev can modify it to play around
+     * 
+     * @remark This method is for testing. It behaves almost the same way as SensorCallback(void* cookie, sh2_SensorEvent* event).
+     *
+     * @param [in] val a referece to a sh2_SensorValue populated with IMU measurements already. (Events decoded before calling this method)
+     */
     static void SensorCallback(const sh2_SensorValue& val);
 
 private:
@@ -189,32 +211,32 @@ private:
      */
     static Vector6d BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear);
     
-    static IMUManager* s_instance;              // Singleton IMUManager instance. Only one per run time
+    static IMUManager* s_instance;                      // Singleton IMUManager instance. Only one per run time
 
-    static std::mutex s_lastImuEkfInvocationMutex;   // Mutex used when s_lastImuTimestamp is read/writen
+    static std::mutex s_lastImuEkfInvocationMutex;      // Mutex used when s_lastImuTimestamp is read/writen
     static std::mutex s_imuValueMutex;                  // Mutex used when s_ImuMagneticField/s_ImuLinearAcceleration modified / read
-    static bool s_imuRotationVectorReady;               
-    static bool s_imuLinearAccelerationReady;         
-    static sh2_RotationVectorWAcc s_imuRotationVector;    
-    static sh2_Accelerometer s_imuLinearAcceleration;
-    static std::chrono::steady_clock::time_point s_lastImuEkfInvocation;
+    static bool s_imuRotationVectorReady;               // True when class is updated with new RotationVector measurement and not used yet in EKF
+    static bool s_imuLinearAccelerationReady;           // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
+    static sh2_RotationVectorWAcc s_imuRotationVector;  // Internal RotationVector measurement state
+    static sh2_Accelerometer s_imuLinearAcceleration;   // Internal LinearAcceleration measurement state
+    static std::chrono::steady_clock::time_point s_lastImuEkfInvocation;    // Last timepoint when EKF was invoked, used to calculate dt for EKF as well
     
-    static std::mutex s_gpsMutex;               // Mutex used when s_latestGps is read/written
-    static bool s_gpsSentToEkf;                 // Flag indicating latestGps is sent to ekf
-    static std::optional<GpsUpdate> s_latestGps;
+    static std::mutex s_gpsMutex;                       // Mutex used when s_latestGps is read/written
+    static bool s_gpsSentToEkf;                         // Flag indicating latestGps is sent to ekf
+    static std::optional<GpsUpdate> s_latestGps;        // Internal GpsUpdate data state
 
-    static std::mutex s_kineticStateMutex;      // Mutex used when s_kineticState is read/written
-    static IMUUtils::KineticState s_kineticState;
+    static std::mutex s_kineticStateMutex;              // Mutex used when s_kineticState is read/written
+    static IMUUtils::KineticState s_kineticState;       // Internal KineticState data state
     
-    mutable std::mutex m_statsMutex;
+    mutable std::mutex m_statsMutex;                    // Mutex used when m_statsMutex is read/written
+    IMUManagerStats m_stats;                            // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
 
-    IMUManagerStats m_stats;
-    MagneticDeclination m_magneticDeclination;
-    boost::shared_ptr<DatabaseManager> m_databaseManager;
-    std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> m_ekfCallbackImuOnly;
-    std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> m_ekfCallbackWithGps;
+    MagneticDeclination m_magneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
+    boost::shared_ptr<DatabaseManager> m_databaseManager;   // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
 
-private:
+    std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&)> m_ekfCallbackImuOnly;               // EKF callback without new GPS data
+    std::function<std::pair<Vector6d, Matrix6d>(double, Vector6d&, Vector6d&)> m_ekfCallbackWithGps;    // EKF callback with new unused GPS data
+
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
     FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
