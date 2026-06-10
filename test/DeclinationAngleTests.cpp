@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include <cmath>
 
-#include <cmath>
 #include <iostream>
 
 #include "MagneticDeclination.hpp"

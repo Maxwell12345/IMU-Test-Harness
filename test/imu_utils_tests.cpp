@@ -244,29 +244,28 @@ TEST(IMUUtils, Convert_Local_xy_Acceleration_To_Global_Y_Acceleration) {
 TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
   struct Case {
     double degree_latitude_input;
-    double degree_longitude_input;
     double accel_x_input;
     double accel_deg_longitude_output;
   };
 
   const std::vector<Case> cases = {
       // Near equator at +1 m/s2
-      {0.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      {0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
       // 45 deg latitude at +1 m/s2
-      {45.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      {45.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
       // 60 deg latitude at +1 m/s2
-      {60.0, 0.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))},
+      {60.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))},
       // Near equator at -1 m/s2
-      {0.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      {0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
       // 45 deg latitude at -1 m/s2
-      {45.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      {45.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
       // 60 deg latitude at -1 m/s2
-      {60.0, 0.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))}
+      {60.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))}
   };
 
   for (const auto &c : cases) {
     EXPECT_NEAR(
-        IMUUtils::Convert_Global_X_To_DegPerS2(c.degree_latitude_input, c.degree_longitude_input, c.accel_x_input),
+        IMUUtils::Convert_Global_X_to_DegPerS2(c.degree_latitude_input, c.accel_x_input),
         c.accel_deg_longitude_output, 1e-9
     );
   };
@@ -275,30 +274,20 @@ TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
 // ----------------------------------------------------------------------------
 TEST(IMUUtils, Convert_Global_Y_Accel_Into_Degrees_Latitude) {
   struct Case {
-    double degree_latitude_input;
-    double degree_longitude_input;
     double accel_y_input;
     double accel_deg_latitude_output;
   };
 
   const std::vector<Case> cases = {
       // Near equator at +1 m/s2
-      {0.0, 0.0, 1.0, 1.0 / 111111.11},
-      // 45 deg latitude at +1 m/s2
-      {0.0, 45.0, 1.0, 1.0 / 111111.11},
-      // 60 deg latitude at +1 m/s2
-      {0.0, 60.0, 1.0, 1.0 / 111111.11},
+      {1.0, 1.0 / 111111.11},
       // Near equator at -1 m/s2
-      {0.0, 0.0, -1.0, -1.0 / 111111.11},
-      // 45 deg latitude at -1 m/s2
-      {0.0, 45.0, -1.0, -1.0 / 111111.11},
-      // 60 deg latitude at -1 m/s2
-      {0.0, 60.0, -1.0, -1.0 / 111111.11}
+      {-1.0, -1.0 / 111111.11},
   };
 
   for (const auto &c : cases) {
     EXPECT_NEAR(
-        IMUUtils::Convert_Global_X_To_DegPerS2(c.degree_latitude_input, c.degree_longitude_input, c.accel_y_input),
+        IMUUtils::Convert_Global_Y_to_DegPerS2(c.accel_y_input),
         c.accel_deg_latitude_output, 1e-9
     );
   };
@@ -409,7 +398,7 @@ TEST(IMUUtils, KineticUpdates) {
     const auto initialState = IMUUtils::KineticState(initialTimePoint, 0.0, 0.0, 0.0, 0.0);
 
     const auto secondTimePoint = initialTimePoint + std::chrono::milliseconds(1);
-    IMUUtils::KineticState secondState = IMUUtils::Caclulate_Kinetic_Update(initialState, 1.0, 1.0, secondTimePoint);
+    IMUUtils::KineticState secondState = IMUUtils::CalculateKineticUpdate(initialState, 1.0, 1.0, secondTimePoint);
     EXPECT_EQ(secondState.timestamp, secondTimePoint);
     EXPECT_NEAR(secondState.accelerationEastWest, 1.0, 1e-12);
     EXPECT_NEAR(secondState.accelerationNorthSouth, 1.0, 1e-12);
@@ -417,7 +406,7 @@ TEST(IMUUtils, KineticUpdates) {
     EXPECT_NEAR(secondState.speedNorthSouth, .001, 1e-12);
 
     const auto thirdTimePoint = secondTimePoint + std::chrono::milliseconds(1);
-    IMUUtils::KineticState thirdState = IMUUtils::Caclulate_Kinetic_Update(secondState, 2.0, -1.0, thirdTimePoint);
+    IMUUtils::KineticState thirdState = IMUUtils::CalculateKineticUpdate(secondState, 2.0, -1.0, thirdTimePoint);
     EXPECT_EQ(thirdState.timestamp, thirdTimePoint);
     EXPECT_NEAR(thirdState.accelerationEastWest, 2.0, 1e-12);
     EXPECT_NEAR(thirdState.accelerationNorthSouth, -1.0, 1e-12);

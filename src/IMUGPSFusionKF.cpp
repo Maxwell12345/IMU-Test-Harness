@@ -91,7 +91,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector
 
     Eigen::Vector4d Betas;
     Betas << std::max(1.0 - mu_GPS - mu_IMU + beta_GPS_IMU, 0.0), std::max(mu_GPS - beta_GPS_IMU, 0.0), std::max(mu_IMU - beta_GPS_IMU, 0.0), std::max(beta_GPS_IMU, 0.0);
-    std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
+    // std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
    
     return Betas;
 }
