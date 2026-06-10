@@ -5,8 +5,8 @@
 #include <chrono>
 
 struct GpsUpdate {
-    std::chrono::steady_clock::time_point receiveTime;   // monotonic receive timestamp
-    std::chrono::system_clock::time_point wallTime;      // wall-clock for DB/logging
+    std::chrono::steady_clock::time_point receiveTime;    // monotonic receive timestamp
+    std::chrono::system_clock::time_point wallTime;       // wall-clock for DB/logging
     double latitude;                                      // decimal degrees
     double longitude;                                     // decimal degrees
     std::optional<double> heading;                        // course-over-ground degrees (from $GPRMC), nullopt if unavailable
