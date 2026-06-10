@@ -11,14 +11,20 @@
 #ifndef INU_DISPLAY_GPSMANAGER_HPP
 #define INU_DISPLAY_GPSMANAGER_HPP
 
+#include <condition_variable>
+#include <functional>
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
+#include <queue>
 #include <string>
 #include <thread>
 
 #include "utils.hpp"
+// #include "NMEAParserWrapper.hpp"
+#include "NMEAParser.hpp"
 
 class DatabaseManager;
+class GpsUpdate;
 
 struct GpsManagerStats {
   std::atomic<uint64_t> totalSentencesReceived{0};
@@ -31,7 +37,9 @@ struct GpsManagerStats {
 
 class GpsManager {
 public:
-  GpsManager(const std::string &comPort, unsigned int baudRate) {
+  GpsManager(const std::string &comPort,
+    unsigned int baudRate,
+    std::function<void(const GpsUpdate&)> gpsUpdateCallback):m_gpsUpdateCallback(gpsUpdateCallback) {
     if (comPort.empty()) {
       throw std::invalid_argument("GpsManager: specified com port cannot be empty");
     }
@@ -42,7 +50,10 @@ public:
     this->m_baudRate = baudRate;
   };
 
-  GpsManager(const std::string &comPort, unsigned int baudRate, boost::shared_ptr<DatabaseManager> databaseManager) {
+  GpsManager(const std::string &comPort,
+    unsigned int baudRate,
+    boost::shared_ptr<DatabaseManager> databaseManager,
+    std::function<void(const GpsUpdate&)> gpsUpdateCallback):m_gpsUpdateCallback(gpsUpdateCallback) {
     if (comPort.empty()) {
       throw std::invalid_argument("GpsManager: specified com port cannot be empty");
     }
@@ -70,26 +81,39 @@ public:
 private:
   void readLoop(std::stop_token stopToken);
 
-  std::optional<IMUUtils::GpsUpdate> parseNmea(const std::string &sentence);
+  void processQueue();
 
   bool validateFix(const IMUUtils::GpsUpdate &update) const;
 
   void publishUpdate(IMUUtils::GpsUpdate update);
 
 private:
+  std::atomic<bool> m_running;
+
+  std::optional<boost::asio::io_context> m_ioContext;
   std::string m_comPort;
   boost::asio::serial_port m_serialPort;
   unsigned int m_baudRate;
-  boost::shared_ptr<DatabaseManager> m_databaseManager;
-  std::optional<boost::asio::io_context> m_ioContext;
-  boost::asio::streambuf m_readBuf;
-  std::queue<std::string> m_sentenceQueue;
+
+  // read data from serial port into some buffer for future processing
   std::jthread m_readThread;
-  std::atomic<bool> m_running;
-  std::mutex m_statsMutex;
+  boost::asio::streambuf m_readBuf;
+
+  // clear data from serial/read buffer, process into parsed NMEA data, send updates
+  std::jthread m_queueThread;
   std::mutex m_queueMutex;
   std::condition_variable m_queueCv;
+  std::queue<std::string> m_sentenceQueue;
+
+  NMEAParser m_nmeaParser;
+
+  std::function<void(const GpsUpdate&)> m_gpsUpdateCallback;
+
+  std::mutex m_statsMutex;
   GpsManagerStats m_stats;
+
+  boost::shared_ptr<DatabaseManager> m_databaseManager;
+
 };
 
 #endif // INU_DISPLAY_GPSMANAGER_HPP
