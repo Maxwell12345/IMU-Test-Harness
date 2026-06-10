@@ -29,9 +29,9 @@ namespace {
 
 
 TEST(IMUManagerTest, GetStatsImuReject) {
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     sh2_SensorEvent_t events[] = {
         {
@@ -97,9 +97,9 @@ TEST(IMUManagerTest, GetStatsImuReject) {
 }
 
 TEST(IMUManagerTest, GetStatsImuAccept) {
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     std::vector<sh2_SensorEvent_t> events = {
         {
@@ -152,9 +152,9 @@ TEST(IMUManagerTest, GetStatsGpsReject) {
     const uint64_t GPS_TIMESTAMP_MS_INVALID= std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::milliseconds(900)).count();
 
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     IMUManagerStats stats = IMUManager::GetStats();
     EXPECT_EQ(stats.imuAccepted, 0);
@@ -212,9 +212,9 @@ TEST(IMUManagerTest, GetStatsGpsAccept) {
     const uint64_t GPS_TIMESTAMP_MS_INVALID= std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::milliseconds(900)).count();
 
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     IMUManagerStats stats = IMUManager::GetStats();
     EXPECT_EQ(stats.imuAccepted, 0);
@@ -245,9 +245,9 @@ TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     GpsUpdate gpsUpdate;
     gpsUpdate.latitude = 1;
@@ -268,9 +268,9 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
-    IMUManager imuManager(db,
-                                      ekfNoGps,
-                                      ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     const std::chrono::seconds STALE_TIME_OUT_S(10);
     const uint64_t GPS_TIMESTAMP_MS= std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -396,9 +396,10 @@ TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
 }
 
 TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
+
     sh2_Accelerometer la = IMUManager::m_sImuLinearAcceleration;
     sh2_RotationVectorWAcc rv = IMUManager::m_sImuRotationVector;
     EXPECT_NEAR(rv.i, 0, 1e-12);
@@ -468,9 +469,9 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
 }
 
 TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
-    IMUManager imuManager(db,
-                                      ekfNoGps,
-                                      ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
     double latitude = 80.0;
     double longitude = 0.0;
 

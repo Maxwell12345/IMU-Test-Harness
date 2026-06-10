@@ -36,9 +36,7 @@ public:
      * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
      * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
      */
-    IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
-               std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
-               std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
+    IMUManager(boost::shared_ptr<DatabaseManager> databaseManager);
 
     /**
      * @brief Destructor
@@ -46,6 +44,17 @@ public:
      * @remarks reset all static members to initial values
      */
     ~IMUManager();
+
+    /**
+     * @brief Installs ekf. If none is installed, calls to ekf will not be made.
+     * 
+     * @param ekfCallbackImuOnly ekf call without gps data
+     * @param ekfCallbackWithGps ekf call with gps
+     * 
+     * @return
+     */
+    static void InstallEkf(std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
+                    std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
 
     /**
      * @brief Returns the runtime statistics of this class.
@@ -193,6 +202,7 @@ private:
     static MagneticDeclination m_sMagneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
     static boost::shared_ptr<DatabaseManager> m_sDatabaseManager;   // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
 
+    static std::atomic<bool> m_sEkfInstalled;                                          // True if installed Ekf, else no ekf installed, no call to ekf will be made
     static std::function<void(double, Vector6d&)> m_sEkfCallbackImuOnly;               // EKF callback without new GPS data
     static std::function<void(double, Vector6d&, Vector6d&)> m_sEkfCallbackWithGps;    // EKF callback with new unused GPS data
 

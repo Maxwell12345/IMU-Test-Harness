@@ -62,9 +62,9 @@ int main() {
                             ekf.Step(dt, z_GPS, z_IMU);
                         };
 
-    IMUManager imuManager(db,
-                          ekfNoGps,
-                          ekfWithGps);
+    IMUManager imuManager(db);
+    IMUManager::InstallEkf(ekfNoGps,
+                           ekfWithGps);
 
     std::cout << "Reading csv files..." << std::endl;
 

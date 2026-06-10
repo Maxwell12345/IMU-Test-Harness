@@ -30,6 +30,7 @@ IMUManagerStats IMUManager::m_sStats;
 MagneticDeclination IMUManager::m_sMagneticDeclination;
 boost::shared_ptr<DatabaseManager> IMUManager::m_sDatabaseManager;
 
+std::atomic<bool> IMUManager::m_sEkfInstalled = false; 
 std::function<void(double, Vector6d&)> IMUManager::m_sEkfCallbackImuOnly;
 std::function<void(double, Vector6d&, Vector6d&)> IMUManager::m_sEkfCallbackWithGps;
 
@@ -37,24 +38,12 @@ namespace {
     std::FILE *file = std::fopen("output.csv", "w");
 }
 
-IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager,
-                       std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
-                       std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
+IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager) {
     if(databaseManager == nullptr) {
         throw std::invalid_argument("databaseManager is nullptr");
     }
 
-    if(!ekfCallbackImuOnly) {
-        throw std::invalid_argument("ekfCallbackImuOnly is nullptr");
-    }
-
-    if(!ekfCallbackWithGps) {
-        throw std::invalid_argument("ekfCallbackWithGps is nullptr");
-    }
-
     m_sDatabaseManager = databaseManager;
-    m_sEkfCallbackImuOnly = ekfCallbackImuOnly;
-    m_sEkfCallbackWithGps = ekfCallbackWithGps;
 
     m_sMagneticDeclination.LoadCOF("./WMM.COF");
 
@@ -71,6 +60,22 @@ IMUManager::~IMUManager() {
     
     IMUManagerStats reset;
     m_sStats = reset;
+}
+
+void IMUManager::InstallEkf(std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
+                std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps) {
+
+    if(!ekfCallbackImuOnly) {
+        throw std::invalid_argument("ekfCallbackImuOnly is nullptr");
+    }
+
+    if(!ekfCallbackWithGps) {
+        throw std::invalid_argument("ekfCallbackWithGps is nullptr");
+    }
+
+    m_sEkfCallbackImuOnly = ekfCallbackImuOnly;
+    m_sEkfCallbackWithGps = ekfCallbackWithGps;
+    m_sEkfInstalled = true;
 }
 
 IMUManagerStats IMUManager::GetStats() {
@@ -136,6 +141,10 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
         m_sStats.imuAccepted++;
         
         if(!(m_sImuRotationVectorReady && m_sImuLinearAccelerationReady)) {
+            return;
+        }
+
+        if(m_sEkfInstalled == false) {
             return;
         }
 
