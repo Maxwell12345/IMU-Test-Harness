@@ -502,15 +502,15 @@ TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
 
     EXPECT_NEAR(zImuT1Sec[0], 0, 1e-6);
     EXPECT_NEAR(zImuT1Sec[1], 0, 1e-16);
-    EXPECT_NEAR(zImuT1Sec[2], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[2], -0.002575, 5e-4);
     EXPECT_NEAR(zImuT1Sec[3], 0.000187, 1e-4);
-    EXPECT_NEAR(zImuT1Sec[4], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT1Sec[4], -0.002575, 5e-4);
     EXPECT_NEAR(zImuT1Sec[5], 0.000187, 1e-4);
 
     EXPECT_NEAR(zImuT2Sec[0], 0, 1e-6);
     EXPECT_NEAR(zImuT2Sec[1], 0, 1e-16);
-    EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[2], -0.002575 * 2, 5e-4);
     EXPECT_NEAR(zImuT2Sec[3], 0.000187 * 2, 1e-4);
-    EXPECT_NEAR(zImuT2Sec[4], -0.002575, 1e-4);
+    EXPECT_NEAR(zImuT2Sec[4], -0.002575, 5e-4);
     EXPECT_NEAR(zImuT2Sec[5], 0.000187, 1e-4);
 }

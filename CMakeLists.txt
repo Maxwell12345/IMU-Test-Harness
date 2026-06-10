@@ -41,6 +41,7 @@ target_link_libraries(${PROJECT_NAME}
         sh2
         ${I2C_LIB}
         SQLiteCpp)
+target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
@@ -61,16 +62,17 @@ target_link_libraries(${PROJECT_NAME}_tests
          SQLiteCpp
          sqlite3
 )
+target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 
 target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"
 )
 
- include(GoogleTest)
- gtest_discover_tests(${PROJECT_NAME}_tests)
+include(GoogleTest)
+gtest_discover_tests(${PROJECT_NAME}_tests)
 
- add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
-     COMMAND ${PROJECT_NAME}_tests
-     WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
-     COMMENT "Running ${PROJECT_NAME}_tests"
- )
+add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
+    COMMAND ${PROJECT_NAME}_tests
+    WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
+    COMMENT "Running ${PROJECT_NAME}_tests"
+)
