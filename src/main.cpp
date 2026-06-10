@@ -1,5 +1,6 @@
 #include "IMUManager.hpp"
 #include "IMUGPSFusionKF.hpp"
+#include "DatabaseManager.hpp"
 
 #include "demo.hpp"
 
@@ -23,10 +24,6 @@ extern "C" {
 
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
-
-class DatabaseManager {
-    
-};
 
 static std::atomic<bool> g_running{true};
 
@@ -52,7 +49,8 @@ size_t ReadSensorCsv(const std::string& path, std::vector<SensorRow> &rows);
 size_t ReadGpsCsv(const std::string& path, std::vector<GpsRow> &rows);
 
 int main() {
-    boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>();
+    boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>("./IMUPROC.db");
+    db->Start();
 
     IMUGPSFusionKF_2D_ConstantAcceleration ekf;
     auto ekfNoGps = [&ekf](double dt, Vector6d& z_IMU) {
@@ -76,28 +74,6 @@ int main() {
     std::cout << sensorRowSize << " Sensor rows" << std::endl
               << gpsRowsSize << " Nmea rows" << std::endl;
 
-    
-    // size_t i = 0;
-    // size_t count = 0;
-    // while(true) {
-    //     auto& row = sensorRows[i];
-
-    //     if(row.sensorName == "LINEAR_ACCELERATION") {
-    //         printf("LIN_ACC %.10f, %.10f, %.10f\n", row.x.value(), row.y.value(), row.z.value());
-    //         count++;
-    //     } else if(row.sensorName == "ROTATION_VECTOR") {
-    //         printf("ROT_VEC %.10f, %.10f, %.10f, %.10f\n", row.i.value(), row.j.value(), row.k.value(), row.real.value());
-    //         count++;
-    //     }
-
-    //     if(count >= 20){
-    //         break;
-    //     }
-
-    //     i++;
-    // }
-              
-    // return 0;
 
     std::thread service_thread([&sensorRows, &gpsRows]() {
         size_t sensorIdx = 0;
@@ -118,6 +94,7 @@ int main() {
                 sh2_SensorValue value;
                 value.sensorId = row.sensorId;
                 value.timestamp = row.sensorTimestampUs;
+                value.status = row.status;
 
                 switch (value.sensorId) {
                     case SH2_LINEAR_ACCELERATION:
@@ -131,6 +108,7 @@ int main() {
                         value.un.rotationVector.j = row.j.value();
                         value.un.rotationVector.k = row.k.value();
                         value.un.rotationVector.real = row.real.value();
+                        value.un.rotationVector.accuracy = row.accuracy;
                         break;
                 }
 

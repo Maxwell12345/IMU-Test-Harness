@@ -115,6 +115,7 @@ void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
     m_sGpsSentToEkf = false;
     m_sLatestGps = update;
     m_sStats.gpsAccepted++;
+    m_sDatabaseManager->EnqueueGpsUpdate(update);
 }
 
 void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
@@ -317,6 +318,7 @@ void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
             imuAcc.z = sensorValue.un.linearAcceleration.z;
             m_sImuLinearAcceleration = imuAcc;
             m_sLastAccelerationVectorMachineTime.store(sensorValue.timestamp);
+            m_sDatabaseManager->EnqueueIMULinearAcceleration(sensorValue);
             break;
         }
         case SH2_ROTATION_VECTOR:
@@ -330,6 +332,7 @@ void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
             imuRot.accuracy = sensorValue.un.rotationVector.accuracy;
             m_sImuRotationVector = imuRot;
             m_sLastRotationVectorMachineTime.store(sensorValue.timestamp);
+            m_sDatabaseManager->EnqueueIMURotationVector(sensorValue);
             break;
     }
 
