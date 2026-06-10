@@ -16,7 +16,6 @@
 #include <string>
 #include "NMEAParserData.hpp"
 #include "NMEASentenceBase.hpp"
-#include "NMEAParserData.hpp"
 
 class NMEASentenceGGA : public NMEASentenceBase {
 public:

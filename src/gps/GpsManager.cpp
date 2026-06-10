@@ -7,7 +7,7 @@
  *
  ******************************************************************************/
 #include "GpsManager.hpp"
-#include ""
+#include "GpsUpdate.hpp"
 
 void GpsManager::start() {
     this->m_serialPort.emplace(this->m_ioContext, this->m_comPort);
@@ -89,17 +89,54 @@ void GpsManager::processQueue() {
             if (serialSentence.find("GGA") != std::string::npos) {
                 NMEASentenceGGA gga = m_nmeaParser.GetGGA();
 
+                NMEAParserData::GGA_DATA_T data = gga.GetSentenceData();
+
+                auto now = std::chrono::steady_clock::now();
+                auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()
+                ).count();
+
+                // TODO: Not sure what all the time fields mean.
+                GpsUpdate updatedGps = {
+                    now,
+                    now,
+                    data.m_dLatitude,
+                    data.m_dLongitude,
+                    std::nullopt,
+                    data.m_nGPSQuality,
+                    data.m_nSatsInView,
+                    data.m_dHDOP,
+                    ms_since_epoch,
+                    true
+                };
 
                 this->m_gpsUpdateCallback(updatedGps);
             }
-            else if (serialSentence.find("GSV") != std::string::npos) {
-                NMEASentenceGSV gsv = m_nmeaParser.GetGSV();
-            }
             else if (serialSentence.find("RMC") != std::string::npos) {
                 NMEASentenceRMC rmc = m_nmeaParser.GetRMC();
-            }
-            else if (serialSentence.find("GSA") != std::string::npos) {
-                NMEASentenceGSA gsa = m_nmeaParser.GetGSA();
+
+                NMEAParserData::RMC_DATA_T data = rmc.GetSentenceData();
+
+                auto now = std::chrono::steady_clock::now();
+                auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()
+                ).count();
+
+                // TODO: Not sure what all the time fields mean.
+                GpsUpdate updatedGps = {
+                    now,
+                    now,
+                    data.m_dLatitude,
+                    data.m_dLongitude,
+                    data.m_dTrackAngle,
+                    0,
+                    0,
+                    0,
+                    ms_since_epoch,
+                    true
+                };
+
+                this->m_gpsUpdateCallback(updatedGps);
             }
         }
         catch (std::exception &e) {
@@ -109,6 +146,7 @@ void GpsManager::processQueue() {
 }
 
 bool GpsManager::validateFix(const IMUUtils::GpsUpdate &update) const {
+    
 }
 
 void GpsManager::publishUpdate(IMUUtils::GpsUpdate update) {
