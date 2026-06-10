@@ -31,6 +31,13 @@ public:
     );
 
     /**
+     * @brief Wipes all Eigen values to zero.
+     * 
+     * @return 
+     */
+    void Clean();
+
+    /**
      * @brief Single shot multiple sensor context aware Kalman Filter approximation.
      *        This overloaded method assumes no GPS measurement. This implies Beta GPS = 0.
      *        Potentially prone to IMU overfitting.

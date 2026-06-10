@@ -52,6 +52,44 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     this->Update_Q(1.0/100.0, true);
 }
 
+void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
+    this->m_x = Vector6d::Zero();
+    this->m_P = Matrix6d::Zero();
+    this->m_R_GPS = Matrix6d::Zero();
+    this->m_R_IMU = Matrix6d::Zero();
+    this->m_Q = Matrix6d::Zero();
+    this->m_P_propagated_lag = Matrix6d::Zero();
+
+    this->m_H_GPS = Matrix6d::Zero();
+    this->m_H_IMU = Matrix6d::Zero();
+
+    this->m_I = Eigen::Matrix2d::Zero();
+    this->m_zero = Eigen::Matrix2d::Zero();
+
+    this->m_chiSquaredBetaLowerBound_GPS = 0.0;
+    this->m_chiSquaredBetaLowerBound_IMU = 0.0;
+    this->m_chiSquaredBetaUpperBound_GPS = 0.0;
+    this->m_chiSquaredBetaUpperBound_IMU = 0.0;
+
+    this->m_jerkPSD = 0.0;
+
+    this->m_N_GPS = 0;
+    this->m_L_GPS = 0;
+    this->m_l_GPS = 0;
+
+    this->m_N_IMU = 0;
+    this->m_L_IMU = 0;
+    this->m_l_IMU = 0;
+
+    this->m_N_Q = 0;
+    this->m_L_Q = 0;
+    this->m_l_Q = 0;
+
+    this->m_innocationQueue_GPS.clear();
+    this->m_innocationQueue_IMU.clear();
+    this->m_posteriorResidualQueue.clear();
+}
+
 Matrix6d IMUGPSFusionKF_2D_ConstantAcceleration::BuildFk(double dt) {
     Matrix6d Fk;
     

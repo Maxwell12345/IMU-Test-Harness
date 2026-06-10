@@ -78,3 +78,5 @@ venv/
 .DS_Store/
 compose.yml
 dockerfile
+
+.codex/
