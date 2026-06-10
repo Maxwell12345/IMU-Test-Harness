@@ -5,18 +5,18 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
-#include <format>
+// #include <format>
 
 namespace {
     struct RelationMapping {
         double bx_Multiplier;
         double by_Multiplier;
 
-        [[nodiscard]] std::string ToString() const {
-            char sign = by_Multiplier >= 0.0 ? '+' : '-';
-            return std::format("{:.2f} * b_x {} {:.2f} * b_y",
-                               bx_Multiplier, sign, std::abs(by_Multiplier));
-        }
+        // [[nodiscard]] std::string ToString() const {
+        //     char sign = by_Multiplier >= 0.0 ? '+' : '-';
+        //     return std::format("{:.2f} * b_x {} {:.2f} * b_y",
+        //                        bx_Multiplier, sign, std::abs(by_Multiplier));
+        // }
     };
 
     double CalculateGlobalX(double theta_t, double y_r, double x_r) {
@@ -36,8 +36,8 @@ namespace {
     }
 
     void RunOrientationTest(double degreesTrue, RelationMapping& globalXMap, RelationMapping& globalYMap) {
-        SCOPED_TRACE(std::format("heading={:.1f}°  global_X_map = {}  |  global_Y_map = {}",
-                                 degreesTrue, globalXMap.ToString(), globalYMap.ToString()));
+        //SCOPED_TRACE(std::format("heading={:.1f}°  global_X_map = {}  |  global_Y_map = {}",
+        //                          degreesTrue, globalXMap.ToString(), globalYMap.ToString()));
         double theta = DegreesToRadians(degreesTrue);
 
         auto mapFunc = [](RelationMapping& m, double boatX, double boatY) {
@@ -49,7 +49,7 @@ namespace {
         // boat stays still
         {
             x_r = 0.0; y_r = 0.0;
-            SCOPED_TRACE(std::format("boat stays still: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat stays still: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -57,7 +57,7 @@ namespace {
         // boat moves forward
         {
             x_r = 0.0; y_r = 1.0;
-            SCOPED_TRACE(std::format("boat moves forward: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves forward: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -65,7 +65,7 @@ namespace {
         // boat moves diagonally forward right
         {
             x_r = 1.0; y_r = 1.0;
-            SCOPED_TRACE(std::format("boat moves diagonally forward right: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves diagonally forward right: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -73,7 +73,7 @@ namespace {
         // boat moves right
         {
             x_r = 1.0; y_r = 0.0;
-            SCOPED_TRACE(std::format("boat moves right: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves right: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -81,7 +81,7 @@ namespace {
         // boat moves diagonally backward right
         {
             x_r = 1.0; y_r = -1.0;
-            SCOPED_TRACE(std::format("boat moves diagonally backward right: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves diagonally backward right: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -89,7 +89,7 @@ namespace {
         // boat moves backward
         {
             x_r = 0.0; y_r = -1.0;
-            SCOPED_TRACE(std::format("boat moves backward: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves backward: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -97,7 +97,7 @@ namespace {
         // boat moves diagonally backward left
         {
             x_r = -1.0; y_r = -1.0;
-            SCOPED_TRACE(std::format("boat moves diagonally backward left: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves diagonally backward left: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -105,7 +105,7 @@ namespace {
         // boat moves left
         {
             x_r = -1.0; y_r = 0.0;
-            SCOPED_TRACE(std::format("boat moves left: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves left: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }
@@ -113,7 +113,7 @@ namespace {
         // boat moves diagonally forward left
         {
             x_r = -1.0; y_r = 1.0;
-            SCOPED_TRACE(std::format("boat moves diagonally forward left: boat_x={}, boat_y={}", x_r, y_r));
+            //SCOPED_TRACE(std::format("boat moves diagonally forward left: boat_x={}, boat_y={}", x_r, y_r));
             EXPECT_NEAR(CalculateGlobalX(theta, y_r, x_r), mapFunc(globalXMap, x_r, y_r), 1e-9) << "global_x";
             EXPECT_NEAR(CalculateGlobalY(theta, y_r, x_r), mapFunc(globalYMap, x_r, y_r), 1e-9) << "global_y";
         }

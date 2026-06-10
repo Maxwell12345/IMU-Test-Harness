@@ -31,10 +31,11 @@ add_library(IMUPROC_LIB
 )
 
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${SH2_DIR})
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen)
+target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE IMUPROC_LIB sh2 ${I2C_LIB})
+target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
@@ -51,17 +52,19 @@ target_link_libraries(${PROJECT_NAME}_tests
          GTest::gtest_main
          GTest::gmock
          GTest::gmock_main
+         atomic
 )
+target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 
 target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"
 )
 
- include(GoogleTest)
- gtest_discover_tests(${PROJECT_NAME}_tests)
+include(GoogleTest)
+gtest_discover_tests(${PROJECT_NAME}_tests)
 
- add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
-     COMMAND ${PROJECT_NAME}_tests
-     WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
-     COMMENT "Running ${PROJECT_NAME}_tests"
- )
+add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
+    COMMAND ${PROJECT_NAME}_tests
+    WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
+    COMMENT "Running ${PROJECT_NAME}_tests"
+)

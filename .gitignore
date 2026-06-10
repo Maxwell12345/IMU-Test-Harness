@@ -73,3 +73,10 @@ vcpkg_installed/
 Testing/
 .cache/
 /cmake-build-debug/
+
+venv/
+.DS_Store/
+compose.yml
+dockerfile
+
+.codex/
