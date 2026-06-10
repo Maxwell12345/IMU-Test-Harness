@@ -22,9 +22,6 @@ last_est_lon = None
 last_est_lat = None
 last_time = None
 
-first_gps = True
-GPS_SKIPS = 2
-gps_n_skips = GPS_SKIPS
 
 for _, row in df.iterrows():
 
@@ -36,13 +33,10 @@ for _, row in df.iterrows():
     )
 
     if gps_available: 
-        if gps_n_skips == GPS_SKIPS:
-            last_est_lon = row["lon"]
-            last_est_lat = row["lat"]
-            # first_gps = False
-            gps_n_skips = 0
-            last_time = ts
-        gps_n_skips += 1
+        last_est_lon = row["lon"]
+        last_est_lat = row["lat"]
+        gps_n_skips = 0
+        last_time = ts
 
     elif last_est_lon is not None:
 

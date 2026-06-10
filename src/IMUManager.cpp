@@ -201,16 +201,20 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
     }
 }
 
-void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double timestampS) {
+void IMUManager::TESTSensorCallback(const sh2_SensorValue& val) {
     try {
         if(ValidateImuEvent(val) == false) {
             m_sStats.imuRejected++;
-            throw std::runtime_error("Sensor value out of range or Report type not supported");
         }
 
         StoreImuValue(val);
+        m_sStats.imuAccepted++;
         
         if(!(m_sImuRotationVectorReady && m_sImuLinearAccelerationReady)) {
+            return;
+        }
+
+        if(m_sEkfInstalled == false) {
             return;
         }
 
@@ -227,7 +231,6 @@ void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double tim
 
         if(gpsUpdateSnapshot.has_value() == false)
         {
-            throw std::runtime_error("No GPS data ever recorded");
             return;
         }
 
@@ -247,24 +250,27 @@ void IMUManager::TESTSensorCallback(const sh2_SensorValue& val, const double tim
         
         double dtSeconds = static_cast<double>(oldestHwTime - lastEKFHwTime) / 1e6;
 
+        double nowMs =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now().time_since_epoch()
+            ).count();
+
         m_sLastEKFMachineTime.store(oldestHwTime);
 
         if(gpsSentToEkfSnapshot == false) {
-        Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
-        fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-        m_sEkfCallbackWithGps(dtSeconds, zImu, zGps);
+            Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zGps[0], zGps[1], zImu[2], zImu[3], zImu[4], zImu[5]);
+            m_sEkfCallbackWithGps(dtSeconds, zImu, zGps);
 
-        std::lock_guard gpsMutex(m_sGpsMutex);
-        m_sGpsSentToEkf = true;
-    } else {
-        fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", timestampS, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
-        m_sEkfCallbackImuOnly(dtSeconds, zImu);
-    }
+            std::lock_guard gpsMutex(m_sGpsMutex);
+            m_sGpsSentToEkf = true;
+        } else {
+            fprintf(file, "%.10f, %.10f, %.10f, %.10f, %.10f, %.10f, %.10f\n", nowMs, zImu[0], zImu[1], zImu[2], zImu[3], zImu[4], zImu[5]);
+            m_sEkfCallbackImuOnly(dtSeconds, zImu);
+        }
 
         m_sImuRotationVectorReady = false;               
         m_sImuLinearAccelerationReady = false;  
-
-        m_sStats.imuAccepted++;
     } catch (const std::exception& e) {
         // TODO: Needs a way to log these errors, not to cerr in prod
         std::cerr << e.what() << std::endl;
@@ -345,9 +351,9 @@ Vector6d IMUManager::BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv,
                                                                   rv.j,
                                                                   rv.k);
     double magneticDeclination = m_sMagneticDeclination.CalculateDeclination(longitude,
-                                                                                        latitude,
-                                                                                        RADAR_HEIGHT_M,
-                                                                                        currentYear);
+                                                                             latitude,
+                                                                             RADAR_HEIGHT_M,
+                                                                             currentYear);
     double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading,
                                                          magneticDeclination);
                                                         

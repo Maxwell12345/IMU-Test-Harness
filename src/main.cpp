@@ -76,6 +76,29 @@ int main() {
     std::cout << sensorRowSize << " Sensor rows" << std::endl
               << gpsRowsSize << " Nmea rows" << std::endl;
 
+    
+    // size_t i = 0;
+    // size_t count = 0;
+    // while(true) {
+    //     auto& row = sensorRows[i];
+
+    //     if(row.sensorName == "LINEAR_ACCELERATION") {
+    //         printf("LIN_ACC %.10f, %.10f, %.10f\n", row.x.value(), row.y.value(), row.z.value());
+    //         count++;
+    //     } else if(row.sensorName == "ROTATION_VECTOR") {
+    //         printf("ROT_VEC %.10f, %.10f, %.10f, %.10f\n", row.i.value(), row.j.value(), row.k.value(), row.real.value());
+    //         count++;
+    //     }
+
+    //     if(count >= 20){
+    //         break;
+    //     }
+
+    //     i++;
+    // }
+              
+    // return 0;
+
     std::thread service_thread([&sensorRows, &gpsRows]() {
         size_t sensorIdx = 0;
         size_t gpsIdx = 0;
@@ -89,10 +112,6 @@ int main() {
         }
 
         while (g_running) {
-            if(sensorIdx % 100000 == 0) {
-                printf("Sensor Idx: %ld, Gps Idx: %ld\n", sensorIdx, gpsIdx);
-            }
-
             if(sensorRows[sensorIdx].epochS < gpsRows[gpsIdx].epochS) {
                 auto& row = sensorRows[sensorIdx];
 
@@ -115,7 +134,7 @@ int main() {
                         break;
                 }
 
-                IMUManager::TESTSensorCallback(value, sensorRows[sensorIdx].epochS);
+                IMUManager::TESTSensorCallback(value);
 
                 if(sensorIdx < sensorRows.size() - 1) {
                     ++sensorIdx;
@@ -174,39 +193,86 @@ static std::optional<double> ParseOpt(const std::string& s) {
     return s.empty() ? std::nullopt : std::optional<double>(std::stod(s));
 }
 
-size_t ReadSensorCsv(const std::string& path, std::vector<SensorRow>& rows) {
+size_t ReadSensorCsv(const std::string& path, std::vector<SensorRow>& rows)
+{
     std::ifstream f(path);
+    if (!f.is_open()) {
+        throw std::runtime_error("Failed to open CSV: " + path);
+    }
+
     std::string line;
+
+    // Skip header
     std::getline(f, line);
 
-
     while (std::getline(f, line)) {
-   
-        std::istringstream ss(line);
-        std::vector<std::string> cols;
-        std::string tok;
-        while (std::getline(ss, tok, ','))
-            cols.push_back(tok);
-        if (cols.size() > 14)
-            continue;
 
-        cols.resize(14);
+        // Remove CR from CRLF files
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+        // Skip blank lines
+        if (line.find_first_not_of(" \t") == std::string::npos) {
+            continue;
+        }
+
+        std::vector<std::string> cols;
+        cols.reserve(14);
+
+        std::string field;
+        bool inQuotes = false;
+
+        for (char c : line) {
+
+            if (c == '"') {
+                inQuotes = !inQuotes;
+                field += c;
+            }
+            else if (c == ',' && !inQuotes) {
+                cols.push_back(std::move(field));
+                field.clear();
+            }
+            else {
+                field += c;
+            }
+        }
+
+        // Push final field (preserves trailing empty column)
+        cols.push_back(std::move(field));
+
+        if (cols.size() != 14) {
+            std::cerr << "Skipping malformed row (" << cols.size()
+                      << " cols): " << line << '\n';
+            continue;
+        }
 
         auto& name = cols[3];
-        if (name.size() >= 2 && name.front() == '"') name = name.substr(1, name.size() - 2);
+        if (name.size() >= 2 &&
+            name.front() == '"' &&
+            name.back() == '"')
+        {
+            name = name.substr(1, name.size() - 2);
+        }
 
         rows.push_back({
-            std::stod(cols[0]),
-            std::stoll(cols[1]),
-            std::stoi(cols[2]),
-            name,
-            std::stoi(cols[4]),
-            std::stoi(cols[5]),
-            ParseOpt(cols[6]),  ParseOpt(cols[7]),  ParseOpt(cols[8]),
-            ParseOpt(cols[9]),  ParseOpt(cols[10]), ParseOpt(cols[11]),
-            ParseOpt(cols[12]), ParseOpt(cols[13])
+            std::stod(cols[0]),      // epoch_s
+            std::stoll(cols[1]),     // sensor_timestamp_us
+            std::stoi(cols[2]),      // sensor_id
+            name,                    // sensor_name
+            std::stoi(cols[4]),      // status
+            std::stoi(cols[5]),      // accuracy
+            ParseOpt(cols[6]),       // x
+            ParseOpt(cols[7]),       // y
+            ParseOpt(cols[8]),       // z
+            ParseOpt(cols[9]),       // i
+            ParseOpt(cols[10]),      // j
+            ParseOpt(cols[11]),      // k
+            ParseOpt(cols[12]),      // real
+            ParseOpt(cols[13])       // rotation_accuracy
         });
     }
+
     return rows.size();
 }
 
