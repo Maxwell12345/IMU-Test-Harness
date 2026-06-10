@@ -7,6 +7,7 @@
  *
  ******************************************************************************/
 #include "GpsManager.hpp"
+#include ""
 
 void GpsManager::start() {
     this->m_serialPort.emplace(this->m_ioContext, this->m_comPort);
@@ -78,15 +79,28 @@ void GpsManager::processQueue() {
                 this->m_sentenceQueue.pop();
             }
 
-            // call method from NMEAParserWrapper to process the sentence
-            // TODO: take the NMEAParserWrapper class defined inside Crusader NMEASocketManager.hpp, and combine all the Crusader NMEAParserWrapper code into our NMEAParser
-            //      We want the parser to combine the ProcessNMEABuffer methods together, and combine the ProcessRxCommand methods together
-            //      From there what we need is to take the new data and create an updated GPSUpdate object that will be sent using this->m_GpsUpdateCallback
 
-            // create a new GPS update using this most current information
+            NMEAParserData::ERROR_E e = m_nmeaParser.ProcessNMEABuffer(serialSentence.c_str(), serialSentence.size());
 
-            // send that update to everyone who needs it
-            // this->m_gpsUpdateCallback(updatedGps);
+            if (e != NMEAParserData::ERROR_E::ERROR_OK) {
+                std::cout << "Not a NMEA payload!\n";
+            }
+
+            if (serialSentence.find("GGA") != std::string::npos) {
+                NMEASentenceGGA gga = m_nmeaParser.GetGGA();
+
+
+                this->m_gpsUpdateCallback(updatedGps);
+            }
+            else if (serialSentence.find("GSV") != std::string::npos) {
+                NMEASentenceGSV gsv = m_nmeaParser.GetGSV();
+            }
+            else if (serialSentence.find("RMC") != std::string::npos) {
+                NMEASentenceRMC rmc = m_nmeaParser.GetRMC();
+            }
+            else if (serialSentence.find("GSA") != std::string::npos) {
+                NMEASentenceGSA gsa = m_nmeaParser.GetGSA();
+            }
         }
         catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
