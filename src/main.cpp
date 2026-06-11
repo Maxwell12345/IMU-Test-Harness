@@ -146,7 +146,7 @@ int main() {
 
     while (g_running) {
         char ch = 0;
-        if (::read(STDIN_FILENO, &ch, 1) == 1 && ch == 'C') {
+        if (::read(STDIN_FILENO, &ch, 1) == 1 && ch == '\x1B') {
             g_running = false;
             break;
         }

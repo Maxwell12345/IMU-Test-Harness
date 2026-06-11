@@ -149,7 +149,7 @@ private:
     std::jthread m_writerThread;
 
     std::mutex m_stateMutex;
-    std::queue<DatabaseRecord> m_recordQueue;
+    std::vector<DatabaseRecord> m_recordQueue;
     std::condition_variable_any m_queueCondition;
     
     DatabaseManagerStats m_stats;

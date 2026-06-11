@@ -29,12 +29,13 @@ void DatabaseManager::Stop() {
         return;
     }
 
+    m_writerThread.request_stop();
     m_queueCondition.notify_all();
 
     if (m_writerThread.joinable()) {
-        m_writerThread.request_stop();
         m_writerThread.join();
     }
+
 }
 
 bool DatabaseManager::IsRunning() const {
@@ -44,7 +45,7 @@ bool DatabaseManager::IsRunning() const {
 void DatabaseManager::EnqueueGpsUpdate(const GpsUpdate &update) {
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace(update);
+        m_recordQueue.emplace_back(update);
     }
     m_queueCondition.notify_one();
 }
@@ -52,7 +53,7 @@ void DatabaseManager::EnqueueGpsUpdate(const GpsUpdate &update) {
 void DatabaseManager::EnqueueIMULinearAcceleration(const sh2_SensorValue &measurement){
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace(IMULinearAccelerationRecord(measurement));
+        m_recordQueue.emplace_back(IMULinearAccelerationRecord(measurement));
     }
     m_queueCondition.notify_one();
 }
@@ -60,7 +61,7 @@ void DatabaseManager::EnqueueIMULinearAcceleration(const sh2_SensorValue &measur
 void DatabaseManager::EnqueueIMURotationVector(const sh2_SensorValue &measurement) {
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace(IMURotationVectorRecord(measurement));
+        m_recordQueue.emplace_back(IMURotationVectorRecord(measurement));
     }
     m_queueCondition.notify_one();
 }
@@ -68,7 +69,7 @@ void DatabaseManager::EnqueueIMURotationVector(const sh2_SensorValue &measuremen
 void DatabaseManager::EnqueueEkfOutput(const EkfOutputRecord &output) {
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace(output);
+        m_recordQueue.emplace_back(output);
     }
     m_queueCondition.notify_one();
 }
@@ -91,11 +92,7 @@ void DatabaseManager::WriterLoop(std::stop_token stopToken) {
                                       [&] { return stopToken.stop_requested() ||
                                            !m_recordQueue.empty();
                                        });
-
-            while (!m_recordQueue.empty()) {
-                batch.emplace_back(std::move(m_recordQueue.front()));
-                m_recordQueue.pop();
-            }
+            std::swap(batch, m_recordQueue);
         }
 
         if (!batch.empty()) {
@@ -107,11 +104,7 @@ void DatabaseManager::WriterLoop(std::stop_token stopToken) {
     // flush
     {
         std::lock_guard lock(m_stateMutex);
-        while (!m_recordQueue.empty())
-        {
-            batch.emplace_back(std::move(m_recordQueue.front()));
-            m_recordQueue.pop();
-        }
+        std::swap(batch, m_recordQueue);
     }
 
     if (!batch.empty()) {
