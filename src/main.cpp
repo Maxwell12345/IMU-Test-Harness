@@ -54,11 +54,11 @@ int main() {
 
     IMUGPSFusionKF_2D_ConstantAcceleration ekf;
     auto ekfNoGps = [&ekf](double dt, Vector6d& z_IMU) {
-                        ekf.Step(dt, z_IMU);
-                    };
+        auto p = ekf.Step(dt, z_IMU);
+    };
     auto ekfWithGps = [&ekf](double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
-                            ekf.Step(dt, z_GPS, z_IMU);
-                        };
+        auto p = ekf.Step(dt, z_GPS, z_IMU);
+    };
 
     IMUManager imuManager(db);
     IMUManager::InstallEkf(ekfNoGps,

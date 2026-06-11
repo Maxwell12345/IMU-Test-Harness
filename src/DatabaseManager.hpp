@@ -72,7 +72,7 @@ public:
      */
     void EnqueueGpsUpdate(const GpsUpdate& update);
 
-    void EnqueueEkfOutput(const EkfOutputRecord& output);
+    void EnqueueEkfOutput(const Vector6d& v, const Matrix6d& m);
 
     /**
      * @brief Enqueue SH2_ROTATION_VECTOR sensor output to m_recordQueue
@@ -153,7 +153,6 @@ private:
     std::condition_variable_any m_queueCondition;
     
     DatabaseManagerStats m_stats;
-    mutable std::mutex m_statsMutex;
     
     SQLite::Database m_sqliteConnection;
     std::filesystem::path m_databasePath;

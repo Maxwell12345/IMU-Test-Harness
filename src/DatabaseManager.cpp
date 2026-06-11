@@ -46,7 +46,9 @@ void DatabaseManager::EnqueueGpsUpdate(const GpsUpdate &update) {
     {
         std::lock_guard lock(m_stateMutex);
         m_recordQueue.emplace_back(update);
+        m_stats.currentQueueDepth = m_recordQueue.size();
     }
+    m_stats.gpsQueued++;
     m_queueCondition.notify_one();
 }
 
@@ -54,7 +56,9 @@ void DatabaseManager::EnqueueIMULinearAcceleration(const sh2_SensorValue &measur
     {
         std::lock_guard lock(m_stateMutex);
         m_recordQueue.emplace_back(IMULinearAccelerationRecord(measurement));
+        m_stats.currentQueueDepth = m_recordQueue.size();
     }
+    m_stats.imuLinearAccelerationQueued++;
     m_queueCondition.notify_one();
 }
 
@@ -62,20 +66,23 @@ void DatabaseManager::EnqueueIMURotationVector(const sh2_SensorValue &measuremen
     {
         std::lock_guard lock(m_stateMutex);
         m_recordQueue.emplace_back(IMURotationVectorRecord(measurement));
+        m_stats.currentQueueDepth = m_recordQueue.size();
     }
+    m_stats.imuRotationVectorQueued++;
     m_queueCondition.notify_one();
 }
 
-void DatabaseManager::EnqueueEkfOutput(const EkfOutputRecord &output) {
+void DatabaseManager::EnqueueEkfOutput(const Vector6d& v, const Matrix6d& m) {
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace_back(output);
+        m_recordQueue.emplace_back(EkfOutputRecord(v, m));
+        m_stats.currentQueueDepth = m_recordQueue.size();
     }
+    m_stats.ekfQueued++;
     m_queueCondition.notify_one();
 }
 
 DatabaseManagerStats DatabaseManager::GetStats() const {
-    std::lock_guard lock(m_statsMutex);
     return m_stats;
 }
 
@@ -151,7 +158,10 @@ void DatabaseManager::InitializeSchema() {
             x REAL,
             y REAL,
             vx REAL,
-            vy REAL
+            vy REAL,
+            ax REAL,
+            ay REAl,
+            cov_mat_str TEXT
         );
     )");
 }
@@ -182,8 +192,8 @@ void DatabaseManager::PrepareSqlStmts() {
 
     m_ekfStmt = std::make_unique<SQLite::Statement>(m_sqliteConnection,
                                                     R"(INSERT INTO ekf_output
-                                                    (timestamp, x, y, vx, vy)
-                                                    VALUES (?, ?, ?, ?, ?))");
+                                                    (timestamp, x, y, vx, vy, ax, ay, cov_mat_str)
+                                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?))");
 }
 
 void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
@@ -214,6 +224,8 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_gpsStmt->bind(8, static_cast<int64_t>(r.gpsTimestampMs));
                     m_gpsStmt->bind(9, static_cast<int>(r.valid));
                     m_gpsStmt->exec();
+
+                    m_stats.gpsWritten++;
                 }
 
                 else if constexpr (std::is_same_v<T, IMULinearAccelerationRecord>)
@@ -228,6 +240,8 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_laStmt->bind(5, r.y);
                     m_laStmt->bind(6, r.z);
                     m_laStmt->exec();
+
+                    m_stats.imuLinearAccelerationWritten++;
                 }
 
                 else if constexpr (std::is_same_v<T, IMURotationVectorRecord>)
@@ -244,6 +258,8 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_rvStmt->bind(7, r.real);
                     m_rvStmt->bind(8, r.accuracy);
                     m_rvStmt->exec();
+
+                    m_stats.imuRotationVectorWritten++;
                 }
 
                 else if constexpr (std::is_same_v<T, EkfOutputRecord>)
@@ -256,7 +272,12 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_ekfStmt->bind(3, r.y);
                     m_ekfStmt->bind(4, r.vx);
                     m_ekfStmt->bind(5, r.vy);
+                    m_ekfStmt->bind(6, r.ax);
+                    m_ekfStmt->bind(7, r.ay);
+                    m_ekfStmt->bind(8, r.covMatStr);
                     m_ekfStmt->exec();
+
+                    m_stats.ekfWritten++;
                 }
             },
             record);
@@ -266,6 +287,7 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
     }
     catch (const std::exception &e)
     {
+        m_stats.failedWrites++;
         std::cerr << "Database WriteBatch failed: " << e.what() << "\n";
     }
 }
