@@ -115,7 +115,6 @@ void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
     m_sGpsSentToEkf = false;
     m_sLatestGps = update;
     m_sStats.gpsAccepted++;
-    m_sDatabaseManager->EnqueueGpsUpdate(update);
 }
 
 void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {

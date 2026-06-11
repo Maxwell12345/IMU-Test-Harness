@@ -145,19 +145,19 @@ private:
      */
     void WriteBatch(std::vector<DatabaseRecord>& batch);
 
-    std::atomic<bool> m_running;
-    std::jthread m_writerThread;
+    std::atomic<bool> m_running;                    // atomic running flag
+    std::jthread m_writerThread;                    // joinable run thread
 
-    std::mutex m_stateMutex;
-    std::vector<DatabaseRecord> m_recordQueue;
-    std::condition_variable_any m_queueCondition;
+    std::mutex m_stateMutex;                        // mutex that protects read / write to queue
+    std::vector<DatabaseRecord> m_recordQueue;      // acts as queue, supports std::swap
+    std::condition_variable_any m_queueCondition;   // conditional used with timeout of 10ms as well
     
-    DatabaseManagerStats m_stats;
+    DatabaseManagerStats m_stats;                   // internal statistic tracking
     
     SQLite::Database m_sqliteConnection;
     std::filesystem::path m_databasePath;
 
-    std::unique_ptr<SQLite::Statement> m_gpsStmt;
+    std::unique_ptr<SQLite::Statement> m_gpsStmt;   // Ptr to preparable stmts, decrease overhead during run time
     std::unique_ptr<SQLite::Statement> m_laStmt;
     std::unique_ptr<SQLite::Statement> m_rvStmt;
     std::unique_ptr<SQLite::Statement> m_ekfStmt;
