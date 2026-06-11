@@ -22,6 +22,8 @@ public:
 
     void persistGyroscope(const std::vector<GyroscopeRecord>& batch);
     void persistAccelerometer(const std::vector<AccelerometerRecord>& batch);
+    void persistLinearAccel(const std::vector<LinearAccelRecord>& batch);
+    void persistRotationVector(const std::vector<RotationVectorRecord>& batch);
     void persistGps(const std::vector<GpsRecord>& batch);
 
 private:
@@ -41,6 +43,8 @@ private:
     DbHandle m_db;
     StmtHandle m_gyroInsert;
     StmtHandle m_accelInsert;
+    StmtHandle m_linAccInsert;
+    StmtHandle m_rotInsert;
     StmtHandle m_gpsInsert;
     std::mutex m_mutex;
 };

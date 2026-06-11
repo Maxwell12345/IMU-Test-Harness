@@ -83,20 +83,25 @@ private:
                           [this] { return !m_ready.empty() || m_stopRequested; });
 
             promoteStagingLocked();
-
-            while (!m_ready.empty()) {
-                std::vector<T> batch;
-                batch.swap(m_ready.front());
-                m_ready.pop_front();
-
-                lock.unlock();
-                flush(batch);
-                lock.lock();
-            }
+            drainReadyLocked(lock);
 
             if (m_stopRequested) {
+                promoteStagingLocked();
+                drainReadyLocked(lock);
                 return;
             }
+        }
+    }
+
+    void drainReadyLocked(std::unique_lock<std::mutex>& lock) {
+        while (!m_ready.empty()) {
+            std::vector<T> batch;
+            batch.swap(m_ready.front());
+            m_ready.pop_front();
+
+            lock.unlock();
+            flush(batch);
+            lock.lock();
         }
     }
 

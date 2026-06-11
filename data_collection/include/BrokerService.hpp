@@ -23,12 +23,16 @@ public:
 
     void enqueueGyroscope(const GyroscopeRecord& record);
     void enqueueAccelerometer(const AccelerometerRecord& record);
+    void enqueueLinearAccel(const LinearAccelRecord& record);
+    void enqueueRotationVector(const RotationVectorRecord& record);
     void enqueueGps(const GpsRecord& record);
 
 private:
     SqliteManager& m_sqliteManager;
     BatchQueue<GyroscopeRecord> m_gyroQueue;
     BatchQueue<AccelerometerRecord> m_accelQueue;
+    BatchQueue<LinearAccelRecord> m_linAccQueue;
+    BatchQueue<RotationVectorRecord> m_rotQueue;
     BatchQueue<GpsRecord> m_gpsQueue;
 };
 

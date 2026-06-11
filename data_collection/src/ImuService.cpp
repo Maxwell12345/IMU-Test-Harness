@@ -17,6 +17,8 @@ namespace {
 
 constexpr uint32_t kAccelIntervalUs = 2'500;
 constexpr uint32_t kGyroIntervalUs = 2'500;
+constexpr uint32_t kLinearAccelIntervalUs = 2'500;
+constexpr uint32_t kRotationVectorIntervalUs = 2'500;
 
 int64_t nowEpochNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -58,9 +60,12 @@ void ImuService::start() {
 
     enableSensor(SH2_ACCELEROMETER, kAccelIntervalUs);
     enableSensor(SH2_GYROSCOPE_CALIBRATED, kGyroIntervalUs);
+    enableSensor(SH2_LINEAR_ACCELERATION, kLinearAccelIntervalUs);
+    enableSensor(SH2_ROTATION_VECTOR, kRotationVectorIntervalUs);
 
     m_serviceThread = std::thread(&ImuService::serviceLoop, this);
-    LOG_INFO("ImuService") << "Started, streaming accelerometer + gyroscope";
+    LOG_INFO("ImuService") << "Started, streaming accelerometer, gyroscope, "
+                              "linear acceleration, rotation vector";
 }
 
 void ImuService::stop() {
@@ -94,24 +99,54 @@ void ImuService::handleSensorEvent(sh2_SensorEvent_t* event) {
     }
 
     const int64_t timestampNs = nowEpochNs();
+    const uint64_t sensorTimestampUs = value.timestamp;
+    const uint8_t calibAccuracy = static_cast<uint8_t>(value.status & 0x03);
 
     switch (value.sensorId) {
         case SH2_ACCELEROMETER: {
             AccelerometerRecord record{};
             record.timestampNs = timestampNs;
+            record.sensorTimestampUs = sensorTimestampUs;
             record.x = value.un.accelerometer.x;
             record.y = value.un.accelerometer.y;
             record.z = value.un.accelerometer.z;
+            record.calibAccuracy = calibAccuracy;
             m_broker.enqueueAccelerometer(record);
             break;
         }
         case SH2_GYROSCOPE_CALIBRATED: {
             GyroscopeRecord record{};
             record.timestampNs = timestampNs;
+            record.sensorTimestampUs = sensorTimestampUs;
             record.x = value.un.gyroscope.x;
             record.y = value.un.gyroscope.y;
             record.z = value.un.gyroscope.z;
+            record.calibAccuracy = calibAccuracy;
             m_broker.enqueueGyroscope(record);
+            break;
+        }
+        case SH2_LINEAR_ACCELERATION: {
+            LinearAccelRecord record{};
+            record.timestampNs = timestampNs;
+            record.sensorTimestampUs = sensorTimestampUs;
+            record.x = value.un.linearAcceleration.x;
+            record.y = value.un.linearAcceleration.y;
+            record.z = value.un.linearAcceleration.z;
+            record.calibAccuracy = calibAccuracy;
+            m_broker.enqueueLinearAccel(record);
+            break;
+        }
+        case SH2_ROTATION_VECTOR: {
+            RotationVectorRecord record{};
+            record.timestampNs = timestampNs;
+            record.sensorTimestampUs = sensorTimestampUs;
+            record.i = value.un.rotationVector.i;
+            record.j = value.un.rotationVector.j;
+            record.k = value.un.rotationVector.k;
+            record.real = value.un.rotationVector.real;
+            record.accuracyRad = value.un.rotationVector.accuracy;
+            record.calibAccuracy = calibAccuracy;
+            m_broker.enqueueRotationVector(record);
             break;
         }
         default:
