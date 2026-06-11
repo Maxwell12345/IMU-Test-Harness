@@ -80,3 +80,5 @@ venv/
 # dockerfile
 
 .codex/
+
+python/venv/
