@@ -245,7 +245,7 @@ private:
 
 private:
 
-    boost::shared_ptr<DatabaseManager> m_databaseManager;
+    boost::shared_ptr<DatabaseManager> m_databaseManager = nullptr;
 
     // Fusion filter members
     Vector6d m_x; 

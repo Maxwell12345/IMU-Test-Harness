@@ -254,7 +254,9 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
 
-    this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
+    if(this->m_databaseManager != nullptr){
+        this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
+    }
 
     return {this->m_x, priori_P};
 }
@@ -323,7 +325,9 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
 
-    this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
+    if(this->m_databaseManager != nullptr){
+        this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
+    }
 
     return {this->m_x, this->m_P};
 }
