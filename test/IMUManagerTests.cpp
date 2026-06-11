@@ -9,13 +9,10 @@
 #include "GpsUpdate.hpp"
 #include "IMUManager.hpp"
 #include "IMUGPSFusionKF.hpp"
-
-class DatabaseManager {
-
-};
+#include "DatabaseManager.hpp"
 
 namespace {
-    boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>();
+    boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>("./IMUPROC_tests.db");
 
     IMUGPSFusionKF_2D_ConstantAcceleration ekf;
 

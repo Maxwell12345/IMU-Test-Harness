@@ -69,7 +69,7 @@ TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps) {
 
     GpsUpdate gps{};
     gps.receiveTime = std::chrono::steady_clock::now();
-    gps.wallTime = std::chrono::system_clock::now();
+    gps.timestamp = 12345;
     gps.latitude = 47.319065;
     gps.longitude = 5.06832;
     gps.heading = 91.0;

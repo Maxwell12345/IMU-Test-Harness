@@ -10,6 +10,7 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
+find_package(SQLiteCpp REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
@@ -34,7 +35,12 @@ target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${SH2_DIR}
 target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE IMUPROC_LIB sh2 ${I2C_LIB})
+target_link_libraries(${PROJECT_NAME} 
+    PRIVATE
+        IMUPROC_LIB
+        sh2
+        ${I2C_LIB}
+        SQLiteCpp)
 target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
@@ -53,6 +59,8 @@ target_link_libraries(${PROJECT_NAME}_tests
          GTest::gmock
          GTest::gmock_main
          atomic
+         SQLiteCpp
+         sqlite3
 )
 target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 

@@ -64,7 +64,6 @@ GpsUpdate GpsManager::BuildGpsUpdate(const NmeaMessage& msg) {
     GpsUpdate update;
 
     update.receiveTime = std::chrono::steady_clock::now();
-    update.wallTime = std::chrono::system_clock::now();
     update.latitude = msg.lat;
     update.longitude = msg.lon;
     update.fixQuality = static_cast<uint8_t>(msg.fixQuality);

@@ -13,6 +13,7 @@
 
 #include "utils.hpp"
 #include "GpsUpdate.hpp"
+#include "DatabaseManager.hpp"
 #include "IMUManagerStats.hpp"
 #include "MagneticDeclination.hpp"
 
@@ -21,8 +22,6 @@ extern "C" {
 #include <sh2_SensorValue.h>
 #include "sh2_err.h"
 }
-
-class DatabaseManager;
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
