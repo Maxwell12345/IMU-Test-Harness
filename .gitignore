@@ -75,7 +75,7 @@ Testing/
 /cmake-build-debug/
 
 venv/
-.DS_Store/
+.DS_Store
 # compose.yml
 # dockerfile
 

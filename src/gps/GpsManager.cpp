@@ -7,12 +7,14 @@
  *
  ******************************************************************************/
 
- #include "GpsManager.hpp"
+#include "GpsManager.hpp"
+#include "DatabaseManager.hpp"
 
 #define NMEA_PORT "/dev/ttyACM0"
 
-GpsManager::GpsManager()
-    : m_nmeaReader(NMEA_PORT, 9600) {}
+GpsManager::GpsManager(boost::shared_ptr<DatabaseManager> databaseManager):
+    m_nmeaReader(NMEA_PORT, 9600),
+    m_databaseManager(databaseManager) {};
 
 void GpsManager::InstallCallback(std::function<void(const GpsUpdate&)> callback) {
     std::lock_guard<std::mutex> lock(m_callbackMutex);
@@ -36,6 +38,7 @@ void GpsManager::Start() {
             if (!msg.validChecksum) continue;
 
             GpsUpdate update = BuildGpsUpdate(msg);
+            m_databaseManager->EnqueueGpsUpdate(update);
 
             std::function<void(const GpsUpdate&)> callback;
 

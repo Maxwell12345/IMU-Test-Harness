@@ -13,6 +13,9 @@
 
 #include "NmeaReader.hpp"
 #include "GpsUpdate.hpp"
+#include "DatabaseManager.hpp"
+
+#include <boost/shared_ptr.hpp>
 
 #include <functional>
 #include <thread>
@@ -21,7 +24,7 @@
 
 class GpsManager {
 public:
-    GpsManager();
+    GpsManager(boost::shared_ptr<DatabaseManager> databaseManager);
 
     void InstallCallback(std::function<void(const GpsUpdate&)> callback);
     void Start();
@@ -29,6 +32,8 @@ public:
 
 private:
     GpsUpdate BuildGpsUpdate(const NmeaMessage& msg);
+
+    boost::shared_ptr<DatabaseManager> m_databaseManager;
 
     std::function<void(const GpsUpdate&)> m_callback;
     std::mutex m_callbackMutex;

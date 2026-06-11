@@ -26,7 +26,9 @@ static void enable_sensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
     }
 }
 
-RadarPositionNavigationController::RadarPositionNavigationController() {
+RadarPositionNavigationController::RadarPositionNavigationController():
+    m_databaseManager(boost::make_shared<DatabaseManager>("./IMUPROC.db")),
+    m_imuManager(m_databaseManager) {
     this->m_sh2ServiceIsRunning = false;
     this->m_isKFConfigured = false;
 
@@ -175,7 +177,8 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
         IMU_N,
         IMU_L,
         Q_N,
-        Q_L
+        Q_L,
+        m_databaseManager
     );
 }
 

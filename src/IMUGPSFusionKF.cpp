@@ -15,7 +15,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     unsigned N_IMU, 
     unsigned L_IMU, 
     unsigned N_Q,
-    unsigned L_Q 
+    unsigned L_Q,
+    boost::shared_ptr<DatabaseManager> databaseManager
 ) {
     this->m_x = x0;
     this->m_P = P0;
@@ -50,6 +51,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     this->m_l_Q = 0;
 
     this->Update_Q(1.0/100.0, true);
+
+    this->m_databaseManager = databaseManager;
 }
 
 void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
@@ -251,6 +254,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
 
+    this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
+
     return {this->m_x, priori_P};
 }
 
@@ -317,6 +322,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
 
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
+
+    this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
 
     return {this->m_x, this->m_P};
 }

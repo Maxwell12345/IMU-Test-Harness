@@ -12,6 +12,10 @@
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "bno085_hal.hpp"  // brings in sh2.h and sh2_err.h under extern "C"
+#include "DatabaseManager.hpp"
+
+#include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
 
 extern "C" {
 #include "sh2_SensorValue.h"
@@ -160,6 +164,9 @@ private:
     IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
     Vector6d m_latestX;
     Matrix6d m_latestP;
+
+    boost::shared_ptr<DatabaseManager> m_databaseManager;
+    IMUManager m_imuManager;
 
     FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
     FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);

@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include "IMUGPSFusionKF.hpp"
+#include "DatabaseManager.hpp"
+
+#include <boost/make_shared.hpp>
 
 TEST(IMUGPSFusionKF_2D_ConstantAcceleration, BuildFkMatchesConstantAccelerationModel) {
     using Mat6 = Eigen::Matrix<double, 6, 6>;
@@ -9,7 +12,8 @@ TEST(IMUGPSFusionKF_2D_ConstantAcceleration, BuildFkMatchesConstantAccelerationM
     Mat6 I6 = Mat6::Identity();
 
     IMUGPSFusionKF_2D_ConstantAcceleration kf(
-        x0, I6, I6, I6, I6, 0.0, 0.0, 1e6, 1e6, 5, 5, 5, 5, 5, 5
+        x0, I6, I6, I6, I6, 0.0, 0.0, 1e6, 1e6, 5, 5, 5, 5, 5, 5,
+        boost::make_shared<DatabaseManager>("./IMUPROC_tests.db")
     );
 
     const double dt = 0.1;
