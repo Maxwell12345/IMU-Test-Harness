@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <string>
 #include <thread>
 
 namespace {
@@ -24,6 +25,8 @@ void handleSignal(int) {
 constexpr uint16_t kUbloxVendorId = 0x1546;
 constexpr uint16_t kZedF9pProductId = 0x01a9;   // SparkFun GPS-RTK-SMA (ZED-F9P)
 constexpr uint16_t kUblox7ProductId = 0x01a7;   // VFAN-USB UG-353 (u-blox 7)
+
+constexpr auto kHeartbeatPeriod = std::chrono::seconds(60);
 
 void applyLogLevelFromEnv() {
     const char* level = std::getenv("DATA_COLLECTION_LOG_LEVEL");
@@ -41,6 +44,14 @@ void applyLogLevelFromEnv() {
     }
 }
 
+std::string databasePath() {
+    const char* path = std::getenv("DATA_COLLECTION_DB_PATH");
+    if (path != nullptr && path[0] != '\0') {
+        return path;
+    }
+    return "imu_data.db";
+}
+
 }  // namespace
 
 int main() {
@@ -51,7 +62,8 @@ int main() {
     LOG_INFO("main") << "IMU + GPS data collection harness starting";
 
     try {
-        SqliteManager sqliteManager("imu_data.db");
+        const std::string dbPath = databasePath();
+        SqliteManager sqliteManager(dbPath);
         BrokerService broker(sqliteManager);
 
         ImuService imuService(broker);
@@ -59,14 +71,32 @@ int main() {
         GpsService vfanGps(broker, "vfan-ug353", kUbloxVendorId, kUblox7ProductId);
 
         broker.start();
-        imuService.start();
+
+        try {
+            imuService.start();
+        } catch (const std::exception& e) {
+            LOG_ERROR("main") << "IMU failed to start, continuing without it: " << e.what();
+        }
+
         sparkfunGps.start();
         vfanGps.start();
 
-        LOG_INFO("main") << "Running — send SIGINT (Ctrl+C) or SIGTERM to stop";
+        LOG_INFO("main") << "Running — stop with Ctrl+C, 'systemctl stop', or kill "
+                            "(SIGINT/SIGTERM)";
+
+        const auto startedAt = std::chrono::steady_clock::now();
+        auto lastHeartbeat = startedAt;
 
         while (g_running.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+            const auto now = std::chrono::steady_clock::now();
+            if (now - lastHeartbeat >= kHeartbeatPeriod) {
+                const auto uptime =
+                    std::chrono::duration_cast<std::chrono::seconds>(now - startedAt).count();
+                LOG_INFO("main") << "Alive, uptime " << uptime << "s";
+                lastHeartbeat = now;
+            }
         }
 
         LOG_INFO("main") << "Shutdown signal received, stopping services";

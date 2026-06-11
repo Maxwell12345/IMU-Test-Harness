@@ -1,0 +1,50 @@
+# systemd unit for the IMU + GPS data collection harness.
+#
+# Install:
+#   sudo cp deploy/data-collection.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now data-collection      # start now + on every boot
+#
+# Watch logs:      journalctl -u data-collection -f
+# Stop (via SSH):  sudo systemctl stop data-collection
+# Disable on boot: sudo systemctl disable data-collection
+#
+# Edit User, WorkingDirectory, and ExecStart below to match where you install
+# the binary on the Pi.
+
+[Unit]
+Description=IMU + GPS Data Collection Harness
+# Wait until local filesystems and basic device setup are ready before starting.
+After=local-fs.target
+
+[Service]
+Type=simple
+
+# Run as a normal user, not root. This user must be able to reach the sensors:
+#   - dialout : access to the USB GPS serial ports (/dev/ttyACM*)
+#   - i2c     : access to the BNO085 IMU on the I2C bus (/dev/i2c-*)
+User=pi
+SupplementaryGroups=dialout i2c
+
+# Where the binary lives, and where the relative paths resolve from.
+WorkingDirectory=/home/pi/imu-harness
+ExecStart=/home/pi/imu-harness/DATA_COLLECTION
+
+# systemd creates and owns /var/lib/imu-harness for this service; the DB lands
+# there so it survives restarts and is not written into the working directory.
+StateDirectory=imu-harness
+Environment=DATA_COLLECTION_DB_PATH=/var/lib/imu-harness/imu_data.db
+Environment=DATA_COLLECTION_LOG_LEVEL=info
+
+# If the process crashes (non-zero exit), restart it. A clean stop via
+# 'systemctl stop' exits 0 and will NOT trigger a restart.
+Restart=on-failure
+RestartSec=5
+
+# On stop, systemd sends SIGTERM (handled for a clean flush) and allows time to
+# drain queued records before escalating to SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
