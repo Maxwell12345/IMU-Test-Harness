@@ -26,11 +26,41 @@ using DatabaseRecord = std::variant<GpsUpdate,
 class DatabaseManager {
 
 public:
+    /**
+     * @brief constructor
+     * 
+     * @param databasePath a string that points to the *.db file
+     * 
+     * @return
+     */
     DatabaseManager(const std::filesystem::path& databasePath);
+
+    /**
+     * @brief destructor
+     * 
+     * @return
+     */
     ~DatabaseManager();
 
+    /**
+     * @brief stops and join m_writerThread
+     * 
+     * @return
+     */
     void Stop();
+
+    /**
+     * @brief starts m_writerThread once
+     * 
+     * @return
+     */
     void Start();
+
+    /**
+     * @brief getter of m_running
+     * 
+     * @return true if m_running == true, else false
+     */
     bool IsRunning() const;
 
     void EnqueueGpsUpdate(const GpsUpdate& update);
