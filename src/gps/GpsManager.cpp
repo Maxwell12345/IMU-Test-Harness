@@ -74,9 +74,15 @@ GpsUpdate GpsManager::BuildGpsUpdate(const NmeaMessage& msg) {
     update.hdop = msg.hdop;
     update.valid = msg.validChecksum && msg.validFix;
 
+    this->m_currentGpsPosition = std::make_pair(msg.lat, msg.lon);
+
     if (msg.type == "GPRMC" || msg.type == "GNRMC") {
         update.heading = msg.courseDeg;
     }
 
     return update;
+}
+
+std::optional<std::pair<double, double>> GpsManager::GetCurrentPosition() {
+    return this->m_currentGpsPosition;
 }

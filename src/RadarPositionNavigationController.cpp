@@ -182,9 +182,6 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
     );
 }
 
-// TODO: Remove this for prod.
-#include "REMOVE_LATER_KF_LOGGER.hpp"
-
 void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d& imuVec) {
     std::lock_guard<std::mutex> kfStepGuard(this->m_sKFUpdateMutex);
 
@@ -194,9 +191,6 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d& i
 
     try {
         std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
-
-        //TODO: Remove csv logging
-        LogKFCSV(output.first, output.second, imuVec);
 
         this->m_latestX = output.first;
         this->m_latestP = output.second;

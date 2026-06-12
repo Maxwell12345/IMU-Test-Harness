@@ -30,6 +30,8 @@ public:
     void Start();
     void Stop();
 
+    std::optional<std::pair<double, double>> GetCurrentPosition();
+
 private:
     GpsUpdate BuildGpsUpdate(const NmeaMessage& msg);
 
@@ -43,6 +45,8 @@ private:
     std::thread m_thread;
 
     NmeaReader m_nmeaReader;
+
+    std::optional<std::pair<double, double>> m_currentGpsPosition;
 };
 
 #endif // INU_DISPLAY_GPSMANAGER_HPP
