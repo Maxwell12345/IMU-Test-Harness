@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "RadarPositionNavigationController.hpp"
+#include "IMUManager.hpp"
 
 #define GPS_CHI_SQ_LOWER_BOUND 0.20
 #define GPS_CHI_SQ_UPPER_BOUND 0.95
@@ -26,9 +27,7 @@ static void enable_sensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
     }
 }
 
-RadarPositionNavigationController::RadarPositionNavigationController():
-    m_databaseManager(boost::make_shared<DatabaseManager>("./IMUPROC.db")),
-    m_imuManager(m_databaseManager) {
+RadarPositionNavigationController::RadarPositionNavigationController() {
     this->m_sh2ServiceIsRunning = false;
     this->m_isKFConfigured = false;
 
@@ -103,33 +102,39 @@ void RadarPositionNavigationController::StartIMUReader() {
 
 void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile, double imuLowerPercentile, double imuUpperPercentile) {
     Vector6d x0;
-    x0 << lon0, lat0, 1e-15, 1e-15, 1e-16, 1e-16;
+    x0 << lon0, lat0, 1e-15, -1e-15, 1e-16, -1e-16;
 
     Matrix6d P0 = Matrix6d::Zero();
-    P0(0, 0) = 1e-10;
-    P0(1, 1) = 1e-10;
-    P0(2, 2) = 1e-8;
-    P0(3, 3) = 1e-8;
-    P0(4, 4) = 1e-10;
-    P0(5, 5) = 1e-10;
+    P0(0, 0) = 1e-7;
+    P0(1, 1) = 1.2e-7;
+    P0(2, 2) = 1e-6;
+    P0(3, 3) = 1.01e-6;
+    P0(4, 4) = 2e-6;
+    P0(5, 5) = 1e-6;
 
     Matrix6d R0_GPS = Matrix6d::Zero();
-    R0_GPS(0, 0) = 1e-10;
-    R0_GPS(1, 1) = 1e-10;
+    R0_GPS(0, 0) = 1e-8;
+    R0_GPS(1, 1) = 1.1e-8;
+    R0_GPS(2, 2) = 1.1e-30;
+    R0_GPS(3, 3) = 1.01e-30;
+    R0_GPS(4, 4) = 1.21e-30;
+    R0_GPS(5, 5) = 1.4e-30;
 
     Matrix6d R0_IMU = Matrix6d::Zero();
-    R0_IMU(2, 2) = 1e-8;
-    R0_IMU(3, 3) = 1e-8;
-    R0_IMU(4, 4) = 1e-10;
-    R0_IMU(5, 5) = 1e-10;
+    R0_IMU(0, 0) = 1.1e-30;
+    R0_IMU(1, 1) = 1.01e-30;
+    R0_IMU(2, 2) = 1e-7;
+    R0_IMU(3, 3) = 1e-7;
+    R0_IMU(4, 4) = 1e-8;
+    R0_IMU(5, 5) = 1e-8;
 
     Matrix6d Q0 = Matrix6d::Zero();
     Q0(0, 0) = 1e-14;
-    Q0(1, 1) = 1e-14;
-    Q0(2, 2) = 1e-12;
-    Q0(3, 3) = 1e-12;
-    Q0(4, 4) = 1e-14;
-    Q0(5, 5) = 1e-14;
+    Q0(1, 1) = 1.5e-14;
+    Q0(2, 2) = 1e-8;
+    Q0(3, 3) = 1.2e-8;
+    Q0(4, 4) = 1e-8;
+    Q0(5, 5) = 1.3e-8;
 
     this->m_latestX = x0;
     this->m_latestP = P0;
@@ -156,11 +161,11 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
         throw std::runtime_error("IMU Chi SQ lower percentile is >= upper percentile");
     }
 
-    double chiSquaredBetaLowerBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile); 
-    double chiSquaredBetaUpperBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile); 
+    double chiSquaredBetaLowerBound_GPS = 0.1026 * 0.001; //boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile); 
+    double chiSquaredBetaUpperBound_GPS = 5.9915 * 0.001; //boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile); 
 
-    double chiSquaredBetaLowerBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile); 
-    double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile); 
+    double chiSquaredBetaLowerBound_IMU = 0.7107; //boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile); 
+    double chiSquaredBetaUpperBound_IMU = 9.4877; //boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile); 
 
     this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(
         x0,
@@ -177,8 +182,7 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
         IMU_N,
         IMU_L,
         Q_N,
-        Q_L,
-        m_databaseManager
+        Q_L
     );
 }
 
@@ -197,7 +201,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d& i
     }
     catch(const std::exception& e) {
         // TODO: Log this
-        std::cout << "[ERROR] " << e.what() << std::endl;
+        std::cout << "[ERROR] KFCallbackImuOnly: " << e.what() << std::endl;
         if (this->m_isKFConfigured) {
             double lat = this->m_latestX(1, 0);
             double lon = this->m_latestX(0, 0);
@@ -227,7 +231,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d& i
     }
     catch(const std::exception& e) {
         // TODO: Log this
-        std::cout << "[ERROR] " << e.what() << std::endl;
+        std::cout << "[ERROR] KFCallbackWithGps: " << e.what() << std::endl;
         if (this->m_isKFConfigured) {
             double lat = this->m_latestX(1, 0);
             double lon = this->m_latestX(0, 0);

@@ -1,4 +1,5 @@
 #include "IMUGPSFusionKF.hpp"
+#include "IMUManager.hpp"
 
 IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     Vector6d x0, 
@@ -15,8 +16,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     unsigned N_IMU, 
     unsigned L_IMU, 
     unsigned N_Q,
-    unsigned L_Q,
-    boost::shared_ptr<DatabaseManager> databaseManager
+    unsigned L_Q
 ) {
     this->m_x = x0;
     this->m_P = P0;
@@ -51,8 +51,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     this->m_l_Q = 0;
 
     this->Update_Q(1.0/100.0, true);
-
-    this->m_databaseManager = databaseManager;
 }
 
 void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
@@ -113,6 +111,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector
 
     Eigen::Vector4d Betas;
     Betas << std::max(1.0 - mu_IMU, 0.0), 0.0, std::max(mu_IMU, 0.0), 0.0;
+    // std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
 
     return Betas;
 }
@@ -205,6 +204,10 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     // Propagate process noise covariances
     // this->Update_Q(dt, false);
 
+    if (dt > 1.0 || dt <= 0.0) {
+        dt = 0.001;
+    }
+
     // Assemble transition state matrix
     Matrix6d F_k = this->BuildFk(dt);
 
@@ -254,9 +257,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
 
-    if(this->m_databaseManager != nullptr){
-        this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
-    }
+    IMUManager::LogEKFData(this->m_x, priori_P);
 
     return {this->m_x, priori_P};
 }
@@ -265,6 +266,10 @@ std::pair<Vector6d, Matrix6d>
 IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
     // Propagate process noise covariances
     // this->Update_Q(dt, true);
+
+    if (dt > 1.0 || dt <= 0.0) {
+        dt = 0.001;
+    }
 
     // Assemble transition state matrix
     Matrix6d F_k = this->BuildFk(dt);
@@ -308,6 +313,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     // Calculate fused postiori x and P.
     this->m_x = Betas(0) * priori_x + Betas(1) * postiori_x_GPS + Betas(2) * postiori_x_IMU + Betas(3) * postiori_x_GPS_IMU;
 
+
     Vector6d x_innovation_IMU = this->m_x - postiori_x_IMU;
     Vector6d x_innovation_GPS = this->m_x - postiori_x_GPS;
     Vector6d x_innovation_GPS_IMU = this->m_x - postiori_x_GPS_IMU;
@@ -325,9 +331,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     Vector6d posteriorResidual = this->m_x - priori_x;
     this->PushInnovationQ(posteriorResidual, this->m_P);
 
-    if(this->m_databaseManager != nullptr){
-        this->m_databaseManager->EnqueueEkfOutput(this->m_x, priori_P);
-    }
+    IMUManager::LogEKFData(this->m_x, priori_P);
 
     return {this->m_x, this->m_P};
 }

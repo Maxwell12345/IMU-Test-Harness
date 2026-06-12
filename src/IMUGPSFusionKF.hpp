@@ -4,8 +4,6 @@
 #include <Eigen/Dense> 
 #include <boost/shared_ptr.hpp>
 
-#include "DatabaseManager.hpp"
-
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
@@ -31,8 +29,7 @@ public:
         unsigned N_IMU, // Adaptive R_IMU approx sample depth
         unsigned L_IMU, // Adaptive R_IMU update frequency
         unsigned N_Q, // Adaptive Q approx sample depth
-        unsigned L_Q, // Adaptive Q update frequency,
-        boost::shared_ptr<DatabaseManager> databaseManager
+        unsigned L_Q // Adaptive Q update frequency
     );
 
     /**
@@ -244,8 +241,6 @@ private:
     void PushInnovationQ(Vector6d &posteriorResidual, Matrix6d &postiori_P);
 
 private:
-
-    boost::shared_ptr<DatabaseManager> m_databaseManager = nullptr;
 
     // Fusion filter members
     Vector6d m_x; 

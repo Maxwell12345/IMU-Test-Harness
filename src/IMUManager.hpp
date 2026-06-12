@@ -55,6 +55,8 @@ public:
     static void InstallEkf(std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
                     std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
 
+    static void LogEKFData(Vector6d x, Matrix6d P);
+
     /**
      * @brief Returns the runtime statistics of this class.
      *

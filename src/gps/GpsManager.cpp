@@ -37,6 +37,8 @@ void GpsManager::Start() {
             if (!m_nmeaReader.readMessage(msg)) continue;
             if (!msg.validChecksum) continue;
 
+            if (msg.lat == 0 || msg.lon == 0) continue;
+
             GpsUpdate update = BuildGpsUpdate(msg);
             m_databaseManager->EnqueueGpsUpdate(update);
 

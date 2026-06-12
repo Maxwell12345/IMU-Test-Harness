@@ -59,14 +59,8 @@ struct EkfOutputRecord {
 
     std::string toString() const {
         char cs[512];
-        snprintf(cs, sizeof(cs), "Timestamp: %ld, x: %f, y: %f, vx: %f, vy: %f, ax: %f, ay: %f",
-                 timestamp,
-                 x,
-                 y,
-                 vx,
-                 vy,
-                 ax,
-                 ay);
+        snprintf(cs, sizeof(cs), "Timestamp: %.6f, x: %f, y: %f, vx: %f, vy: %f, ax: %f, ay: %f",
+         timestamp, x, y, vx, vy, ax, ay);
 
         return std::string(cs);
     }

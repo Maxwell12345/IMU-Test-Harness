@@ -17,7 +17,24 @@ std::atomic<bool> IMUManager::m_sGpsSentToEkf = false;
 std::atomic<bool> IMUManager::m_sImuRotationVectorReady = false;               
 std::atomic<bool> IMUManager::m_sImuLinearAccelerationReady = false;  
 
-std::optional<GpsUpdate> IMUManager::m_sLatestGps = std::nullopt;
+
+// TODO: REMOVE
+std::optional<GpsUpdate> IMUManager::m_sLatestGps = [] {
+    GpsUpdate g{};
+    g.receiveTime  = std::chrono::steady_clock::now();
+    g.latitude     = 30.273945465938247;
+    g.longitude    = -97.73461178364371;
+    g.heading      = std::nullopt;
+    g.fixQuality   = 0;
+    g.numSatellites = 5;
+    g.hdop         = 0.1;
+    g.gpsTimestampMs = static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count());
+    g.valid = true;
+    return g;
+}();  // DELETE_LATER: stub GPS fix for testing
 
 std::atomic<uint64_t> IMUManager::m_sLastAccelerationVectorMachineTime = 0;
 std::atomic<uint64_t> IMUManager::m_sLastRotationVectorMachineTime = 0;
@@ -90,6 +107,10 @@ std::optional<GpsUpdate> IMUManager::GetLatestGps() {
     std::lock_guard gpsMutex(m_sGpsMutex);
     std::optional<GpsUpdate> gpsSnapshot = m_sLatestGps;
     return gpsSnapshot;
+}
+
+void IMUManager::LogEKFData(Vector6d x, Matrix6d P) {
+    IMUManager::m_sDatabaseManager->EnqueueEkfOutput(x, P);
 }
 
 void IMUManager::UpdateLatestGps(const GpsUpdate& update) {
@@ -197,7 +218,7 @@ void IMUManager::SensorCallback(void* cookie, sh2_SensorEvent* event) {
         m_sImuLinearAccelerationReady = false;  
     } catch (const std::exception& e) {
         // TODO: Needs a way to log these errors, not to cerr in prod
-        std::cerr << e.what() << std::endl;
+        std::cerr << "[ERROR] SensorCallback: " << e.what() << std::endl;
     }
 }
 
