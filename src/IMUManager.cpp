@@ -14,9 +14,10 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager, std::
 
   m_databaseManager = databaseManager;
 
-  m_magneticDeclination.LoadCOF(m_cofPath);
+  m_magneticDeclination.LoadCOF(cofPath);
 
-  m_kineticState(steadyMin, 0.0, 0.0, 0.0, 0.0) m_imuRotationVector = {0, 0, 0, 0, 0};
+  m_kineticState = IMUUtils::KineticState(steadyMin, 0.0, 0.0, 0.0, 0.0); 
+  m_imuRotationVector = {0, 0, 0, 0, 0};
   m_imuLinearAcceleration = {0, 0, 0};
 }
 
@@ -42,13 +43,10 @@ void IMUManager::InstallEkf(
 IMUManagerStats IMUManager::GetStats() const { return m_stats; }
 
 std::optional<GpsUpdate> IMUManager::GetLatestGps() const {
-  std::lock_guard gpsMutex(m_gpsMutex);
   return m_latestGps;
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
-  std::lock_guard gpsGuard(m_gpsMutex);
-
   if (update.valid == false) {
     m_stats.gpsRejected++;
     return;
@@ -72,8 +70,10 @@ void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::SensorCallback(void *cookie, sh2_SensorEvent *event) {
-  (void)cookie;
-  OnSensorEvent(event);
+  const auto self = static_cast<IMUManager*>(cookie);
+  if(self != nullptr) {
+    self->OnSensorEvent(event);
+  }
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::OnSensorEvent(sh2_SensorEvent *event) {
@@ -118,31 +118,31 @@ int IMUManager::getCurrentYear() const {
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 double IMUManager::prepareEkfTiming() {
-  uint64_t accHwTime = m_lastAccelerationVectorMachineTime.load();
-  uint64_t rotHwTime = m_lastRotationVectorMachineTime.load();
-  uint64_t lastEKFhwTime = m_lastEKFMachineTime.load();
-  uint65_t oldestHwTime = std::min(accHwTime, rotHwTime);
+  uint64_t accHwTime = m_lastAccelerationVectorMachineTime;
+  uint64_t rotHwTime = m_lastRotationVectorMachineTime;
+  uint64_t lastEKFhwTime = m_lastEKFMachineTime;
+  uint64_t oldestHwTime = std::min(accHwTime, rotHwTime);
+
   double dtSeconds = static_cast<double>(oldestHwTime - lastEKFhwTime) / 1e6;
-  m_lastEKFMachineTime.store(oldestHwTime);
+  m_lastEKFMachineTime = oldestHwTime;
   return dtSeconds;
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
-void IMUManager::resetImuReadyFlags(bool &m_imuRotaitonVectorReady, bool &m_imuLInearAccelerationReady) {
+void IMUManager::resetImuReadyFlags() {
   m_imuRotationVectorReady = false;
   m_imuLinearAccelerationReady = false;
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::DispatchToEkf() {
   try {
-    sh2_RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector.load();
-    sh2_Accelerometer linearAccelerationSnapshot = m_imuLinearAcceleration.load();
+    sh2_RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
+    sh2_Accelerometer linearAccelerationSnapshot = m_imuLinearAcceleration;
 
     bool gpsSentToEkfSnapshot;
     std::optional<GpsUpdate> gpsUpdateSnapshot;
     {
-      std::lock_guard<std::mutex> sentToEkfGuard(m_gpsMutex);
-      gpsUpdateSnapshot = m_lastest Gps;
-      gpsSentToEkfSnapshot = m_gpsSentToEkf.load();
+      gpsUpdateSnapshot = m_latestGps;
+      gpsSentToEkfSnapshot = m_gpsSentToEkf;
     }
 
     if (gpsUpdateSnapshot.has_value() == false) {
@@ -154,18 +154,17 @@ void IMUManager::DispatchToEkf() {
 
     double dtSeconds = prepareEkfTiming();
 
-    if (gpsSendToEkfSnapshot == false) {
+    if (gpsSentToEkfSnapshot == false) {
       Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
       m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
-      std::lock_guard<std::mutex> guard(m_gpsMutex);
       m_gpsSentToEkf = true;
     } else {
       m_ekfCallbackImuOnly(dtSeconds, zImu);
     }
 
     resetImuReadyFlags();
-  } catch (cosnt std::exception &e) {
+  } catch (const std::exception &e) {
     std::cerr << "[ERROR] IMUManager::DispatchToEkf:" << e.what() << std::endl;
   }
 }
@@ -195,7 +194,7 @@ bool IMUManager::ValidateImuEvent(const sh2_SensorValue &sensorValue) {
   return true;
 };
 //-----------------------------------------------------------------------------------------------------------------------------------------
-void IMUManager::StoreImuValue(const sh2_SensorValue &sensorValue) {
+void IMUManager::StoreImuValue(const sh2_SensorValue& sensorValue) {
   switch (sensorValue.sensorId) {
   case SH2_LINEAR_ACCELERATION: {
     m_imuLinearAccelerationReady = true;
@@ -205,7 +204,7 @@ void IMUManager::StoreImuValue(const sh2_SensorValue &sensorValue) {
     imuAcc.y = sensorValue.un.linearAcceleration.y;
     imuAcc.z = sensorValue.un.linearAcceleration.z;
     m_imuLinearAcceleration = imuAcc;
-    m_lastAccelerationVectorMachineTime.store(sensorValue.timestamp);
+    this->m_lastAccelerationVectorMachineTime = sensorValue.timestamp;
     m_databaseManager->EnqueueIMULinearAcceleration(sensorValue);
     break;
   }
@@ -219,7 +218,7 @@ void IMUManager::StoreImuValue(const sh2_SensorValue &sensorValue) {
     imuRot.real = sensorValue.un.rotationVector.real;
     imuRot.accuracy = sensorValue.un.rotationVector.accuracy;
     m_imuRotationVector = imuRot;
-    m_lastRotationVectorMachineTime.store(sensorValue.timestamp);
+    m_lastRotationVectorMachineTime = sensorValue.timestamp;
     m_databaseManager->EnqueueIMURotationVector(sensorValue);
     break;
   }
@@ -251,14 +250,12 @@ Vector6d IMUManager::BuildImuMeasurementVector(
   double globalGeoAccelerationY = IMUUtils::Convert_Global_Y_to_DegPerS2(globalLinearAccelerationY);
 
   IMUUtils::KineticState kineticState;
-  {
-    std::lock_guard kineticStateGuard(m_kineticStateMutex);
     if (m_kineticState.timestamp == steadyMin) {
       m_kineticState.timestamp = std::chrono::steady_clock::now();
     }
     kineticState = IMUUtils::CalculateKineticUpdate(m_kineticState, globalGeoAccelerationX, globalGeoAccelerationY);
     m_kineticState = kineticState;
-  }
+  
 
   Vector6d imuVector = {0.0,
                         0.0,

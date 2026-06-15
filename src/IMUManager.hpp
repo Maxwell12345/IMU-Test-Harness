@@ -112,7 +112,7 @@ public:
    *         Exits if no GPS ever recoded
    *
    *
-   * @param [in] cookie (unused) Opaque user-data pointer passed by the SH2 driver
+   * @param [in] cookie Opaque user-data pointer passed by the SH2 driver
    * @param [in] event The pointer to an undecoded report coming from the IMU
    *
    * @throws SEE ABOVE, internally handled
@@ -166,7 +166,7 @@ private:
    *
    *
    */
-  getCurrentYear() const;
+  int getCurrentYear() const;
 
   /**
    *
@@ -209,7 +209,7 @@ private:
    *
    * @return
    */
-  static void StoreImuValue(const sh2_SensorValue &sensorValue);
+  void StoreImuValue(const sh2_SensorValue &sensorValue);
 
   /**
    * @brief Build an Eigen vector representation of GpsUpdate data

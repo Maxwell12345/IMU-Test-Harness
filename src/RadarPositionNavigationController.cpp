@@ -81,9 +81,11 @@ void RadarPositionNavigationController::StartIMUReader() {
 
   this->m_sh2IsOpen.store(true);
 
+  //TODO: Change the cookie to point to this->m_imuManager*, the cookie
+  //      Is there for us to reuse the imumanager, normal C pattern
   sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
 
-  enable_sensor(SH2_LINEAR_ACCE LERATION, 2500);
+  enable_sensor(SH2_LINEAR_ACCELERATION, 2500);
   enable_sensor(SH2_ROTATION_VECTOR, 2500);
 
   this->m_sh2ServiceIsRunning.store(true);
