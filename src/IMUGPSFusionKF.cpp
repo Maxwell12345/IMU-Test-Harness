@@ -16,7 +16,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     unsigned N_IMU, 
     unsigned L_IMU, 
     unsigned N_Q,
-    unsigned L_Q
+    unsigned L_Q 
 ) {
     this->m_x = x0;
     this->m_P = P0;
@@ -53,44 +53,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     this->Update_Q(1.0/100.0, true);
 }
 
-void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
-    this->m_x = Vector6d::Zero();
-    this->m_P = Matrix6d::Zero();
-    this->m_R_GPS = Matrix6d::Zero();
-    this->m_R_IMU = Matrix6d::Zero();
-    this->m_Q = Matrix6d::Zero();
-    this->m_P_propagated_lag = Matrix6d::Zero();
-
-    this->m_H_GPS = Matrix6d::Zero();
-    this->m_H_IMU = Matrix6d::Zero();
-
-    this->m_I = Eigen::Matrix2d::Zero();
-    this->m_zero = Eigen::Matrix2d::Zero();
-
-    this->m_chiSquaredBetaLowerBound_GPS = 0.0;
-    this->m_chiSquaredBetaLowerBound_IMU = 0.0;
-    this->m_chiSquaredBetaUpperBound_GPS = 0.0;
-    this->m_chiSquaredBetaUpperBound_IMU = 0.0;
-
-    this->m_jerkPSD = 0.0;
-
-    this->m_N_GPS = 0;
-    this->m_L_GPS = 0;
-    this->m_l_GPS = 0;
-
-    this->m_N_IMU = 0;
-    this->m_L_IMU = 0;
-    this->m_l_IMU = 0;
-
-    this->m_N_Q = 0;
-    this->m_L_Q = 0;
-    this->m_l_Q = 0;
-
-    this->m_innocationQueue_GPS.clear();
-    this->m_innocationQueue_IMU.clear();
-    this->m_posteriorResidualQueue.clear();
-}
-
 Matrix6d IMUGPSFusionKF_2D_ConstantAcceleration::BuildFk(double dt) {
     Matrix6d Fk;
     
@@ -111,7 +73,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector
 
     Eigen::Vector4d Betas;
     Betas << std::max(1.0 - mu_IMU, 0.0), 0.0, std::max(mu_IMU, 0.0), 0.0;
-    // std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
 
     return Betas;
 }
@@ -131,7 +92,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector
 
     Eigen::Vector4d Betas;
     Betas << std::max(1.0 - mu_GPS - mu_IMU + beta_GPS_IMU, 0.0), std::max(mu_GPS - beta_GPS_IMU, 0.0), std::max(mu_IMU - beta_GPS_IMU, 0.0), std::max(beta_GPS_IMU, 0.0);
-    // std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
+    std::cout << Betas(0) << " " << Betas(1) << " " << Betas(2) << " " << Betas(3)  << std::endl;
    
     return Betas;
 }
@@ -313,7 +274,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     // Calculate fused postiori x and P.
     this->m_x = Betas(0) * priori_x + Betas(1) * postiori_x_GPS + Betas(2) * postiori_x_IMU + Betas(3) * postiori_x_GPS_IMU;
 
-
     Vector6d x_innovation_IMU = this->m_x - postiori_x_IMU;
     Vector6d x_innovation_GPS = this->m_x - postiori_x_GPS;
     Vector6d x_innovation_GPS_IMU = this->m_x - postiori_x_GPS_IMU;
@@ -401,7 +361,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Ma
 
         this->m_R_GPS = innovationSum + this->m_H_GPS * postiori_P * this->m_H_GPS.transpose(); 
 
-        double epsilon = 1e10;
+        double epsilon = 1e-8;
         this->m_R_GPS(2, 2) = epsilon + 1e-6;
         this->m_R_GPS(3, 3) = epsilon - 1.2e-6;
         this->m_R_GPS(4, 4) = epsilon + 1.07e-6;
@@ -415,7 +375,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Ma
 
     this->m_l_GPS++;
 }
-
 
 void 
 IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual,Matrix6d& postiori_P) {
@@ -440,7 +399,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual,Mat
 
         this->m_R_IMU = innovationSum + this->m_H_IMU * postiori_P * this->m_H_IMU.transpose(); 
 
-        double epsilon = 1e10;
+        double epsilon = 1e-6;
         this->m_R_IMU(0, 0) = epsilon + 1e-6;
         this->m_R_IMU(1, 1) = epsilon - 1.5e-6;
         this->m_R_IMU(2, 2) = epsilon + 1.09e-6;
@@ -480,7 +439,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationQ(Vector6d &posteriorResid
 
         this->m_Q = residualSum + postiori_P - this->m_P_propagated_lag; 
 
-        double epsilon = 1e-13;
+        double epsilon = 1e-6;
         this->m_Q(0,0) = std::max(this->m_Q(0,0), epsilon + 2e-14);
         this->m_Q(1,1) = std::max(this->m_Q(1,1), epsilon - 2e-14);
         this->m_Q(2,2) = std::max(this->m_Q(2,2), epsilon + 3e-14);
@@ -488,7 +447,47 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationQ(Vector6d &posteriorResid
         this->m_Q(4,4) = std::max(this->m_Q(4,4), epsilon + 4e-14);
         this->m_Q(5,5) = std::max(this->m_Q(5,5), epsilon - 4e-14);
 
+        std::cout << this->m_Q(0,0) << " " << this->m_Q(1,1) << std::endl;
+
         this->m_l_Q = 0;
     }
     this->m_l_Q++;
+}
+
+void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
+    this->m_x = Vector6d::Zero();
+    this->m_P = Matrix6d::Zero();
+    this->m_R_GPS = Matrix6d::Zero();
+    this->m_R_IMU = Matrix6d::Zero();
+    this->m_Q = Matrix6d::Zero();
+    this->m_P_propagated_lag = Matrix6d::Zero();
+
+    this->m_H_GPS = Matrix6d::Zero();
+    this->m_H_IMU = Matrix6d::Zero();
+
+    this->m_I = Eigen::Matrix2d::Zero();
+    this->m_zero = Eigen::Matrix2d::Zero();
+
+    this->m_chiSquaredBetaLowerBound_GPS = 0.0;
+    this->m_chiSquaredBetaLowerBound_IMU = 0.0;
+    this->m_chiSquaredBetaUpperBound_GPS = 0.0;
+    this->m_chiSquaredBetaUpperBound_IMU = 0.0;
+
+    this->m_jerkPSD = 0.0;
+
+    this->m_N_GPS = 0;
+    this->m_L_GPS = 0;
+    this->m_l_GPS = 0;
+
+    this->m_N_IMU = 0;
+    this->m_L_IMU = 0;
+    this->m_l_IMU = 0;
+
+    this->m_N_Q = 0;
+    this->m_L_Q = 0;
+    this->m_l_Q = 0;
+
+    this->m_innocationQueue_GPS.clear();
+    this->m_innocationQueue_IMU.clear();
+    this->m_posteriorResidualQueue.clear();
 }

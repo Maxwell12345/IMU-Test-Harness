@@ -161,10 +161,10 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
         throw std::runtime_error("IMU Chi SQ lower percentile is >= upper percentile");
     }
 
-    double chiSquaredBetaLowerBound_GPS = 0.1026 * 0.001; //boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile); 
-    double chiSquaredBetaUpperBound_GPS = 5.9915 * 0.001; //boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile); 
+    double chiSquaredBetaLowerBound_GPS = 0.1026; //boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile); 
+    double chiSquaredBetaUpperBound_GPS = 5.9915 * 2; //boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile); 
 
-    double chiSquaredBetaLowerBound_IMU = 0.7107; //boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile); 
+    double chiSquaredBetaLowerBound_IMU = 0.7107 * 3; //boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile); 
     double chiSquaredBetaUpperBound_IMU = 9.4877; //boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile); 
 
     this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(
