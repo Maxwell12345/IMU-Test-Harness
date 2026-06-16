@@ -17,7 +17,6 @@ GpsService::GpsService(std::string path,
     try {
         ConfigureSerialPort();
     } catch (std::runtime_error& e) {
-        utils::LOG_ERROR(e.what());
         throw;
     }
 }

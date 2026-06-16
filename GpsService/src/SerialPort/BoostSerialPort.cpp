@@ -4,7 +4,7 @@ BoostSerialPort::BoostSerialPort() : m_serial(m_io) {
     
 }
 
-void BoostSerialPort::Open(const std::string& port) override {
+void BoostSerialPort::Open(const std::string& port) {
     boost::system::error_code ec;
     m_serial.open(port, ec);
 
@@ -13,11 +13,11 @@ void BoostSerialPort::Open(const std::string& port) override {
     }
 }
 
-void BoostSerialPort::SetBaudRate(unsigned int rate) override {
+void BoostSerialPort::SetBaudRate(unsigned int rate) {
     m_serial.set_option(boost::asio::serial_port_base::baud_rate(rate));
 }
 
-std::string BoostSerialPort::ReadLine() override {
+std::string BoostSerialPort::ReadLine() {
     boost::asio::streambuf buf;
     boost::asio::read_until(m_serial, buf, "\n");
     std::istream is(&buf);
@@ -26,6 +26,6 @@ std::string BoostSerialPort::ReadLine() override {
     return line;
 }
 
-void BoostSerialPort::Close() override { 
+void BoostSerialPort::Close() { 
     m_serial.close();
 }

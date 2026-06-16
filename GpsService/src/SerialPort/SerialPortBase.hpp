@@ -1,6 +1,8 @@
 #ifndef SERIAL_PORT_HP
 #define SERIAL_PORT_HP
 
+#include <string>
+
 class SerialPortBase {
 public:
     virtual ~SerialPortBase() = default;

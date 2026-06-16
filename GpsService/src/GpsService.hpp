@@ -6,6 +6,7 @@
 #include <thread>
 
 #include <boost/asio.hpp>
+#include <gtest/gtest_prod.h> 
 
 class SerialPortBase;
 
@@ -28,11 +29,12 @@ private:
     std::atomic<bool> m_running;
 
     boost::asio::io_context m_io;
-    // boost::asio::serial_port m_serial;
     std::unique_ptr<SerialPortBase> m_serial;
 
     std::string m_path;
     unsigned int m_baudRate;
+
+    FRIEND_TEST(GpsServiceTest, Initial_Values);
 };
 
 #endif
