@@ -35,22 +35,7 @@ public:
    * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
    * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
    */
-  explicit IMUManager(boost::shared_ptr<DatabaseManager> databaseManager = nullptr, std::string cofPath = "./WMM.COF");
-
-  /**
-   * @brief Destructor
-   *
-   * @remarks reset all static members to initial values
-   */
-  ~IMUManager();
-
-  /**
-   * @ brief Delete Pattern
-   *
-   * @remarks safety mechanism to garuntee only one instance of IMUManager exists at a time
-   */
-  IMUManager(const IMUManager &) = delete;
-  IMUManager &operator=(const IMUManager &) = delete;
+  IMUManager(boost::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "./WMM.COF");
 
   /**
    * @brief Installs ekf. If none is installed, calls to ekf will not be made.
@@ -155,30 +140,19 @@ private:
    *
    *
    */
-  sh2_RotationVectorWAcc loadRotationVectorSnapshot();
+  int GetCurrentYear() const;
 
   /**
    *
    *
    */
-  sh2_Accelerometer loadLinearAccelerationSnapshot();
-  /**
-   *
-   *
-   */
-  int getCurrentYear() const;
+  double PrepareEkfTiming();
 
   /**
    *
    *
    */
-  double prepareEkfTiming();
-
-  /**
-   *
-   *
-   */
-  void resetImuReadyFlags();
+  void ResetImuReadyFlags();
 
   /**
    * @brief Checks if a number is out of numerical bounds
@@ -272,6 +246,12 @@ private:
   FRIEND_TEST(IMUManagerTest, StoreImuValueReturnsVoid);
   FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
   FRIEND_TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector);
+  FRIEND_TEST(IMUManagerTest, IngestSensorValueThrowsRuntimeError);
+  FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsFalse);
+  FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsTrue);
+  FRIEND_TEST(IMUManagerTest, GetCurrentYearReturnsYear);
+  FRIEND_TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds);
+  FRIEND_TEST(IMUManagerTest, ResetImuReadyFlagsExpectsFalse);
 };
 
 #endif

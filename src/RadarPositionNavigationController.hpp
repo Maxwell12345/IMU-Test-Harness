@@ -22,7 +22,7 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController();
+  RadarPositionNavigationController(boost::shared_ptr<DatabaseManager> dbManager);
 
   ~RadarPositionNavigationController();
 
@@ -158,10 +158,13 @@ private:
   sh2_Hal_t m_hal{};
   std::atomic<bool> m_sh2IsOpen{false};
 
+  boost::shared_ptr<DatabaseManager> m_dbManager;
+
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   Vector6d m_latestX;
   Matrix6d m_latestP;
+  IMUManager m_imuManager;
 
   FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);

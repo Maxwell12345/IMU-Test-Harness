@@ -26,10 +26,10 @@ static void enable_sensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
   }
 }
 
-RadarPositionNavigationController::RadarPositionNavigationController() {
+RadarPositionNavigationController::RadarPositionNavigationController(boost::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"){
+  this->m_dbManager = std::move(dbManager);
   this->m_sh2ServiceIsRunning = false;
   this->m_isKFConfigured = false;
-
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
 }
@@ -47,7 +47,8 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
     this->m_isKFConfigured = true;
   }
 
-  IMUManager::InstallEkf(
+
+  m_imuManager.InstallEkf(
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
       [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); }
   );
@@ -83,7 +84,7 @@ void RadarPositionNavigationController::StartIMUReader() {
 
   //TODO: Change the cookie to point to this->m_imuManager*, the cookie
   //      Is there for us to reuse the imumanager, normal C pattern
-  sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
+  sh2_setSensorCallback(IMUManager::SensorCallback, static_cast<void*>(&m_imuManager));
 
   enable_sensor(SH2_LINEAR_ACCELERATION, 2500);
   enable_sensor(SH2_ROTATION_VECTOR, 2500);
@@ -227,7 +228,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
   }
 }
 
-void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) { IMUManager::UpdateLatestGps(gpsUpdate); }
+void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) { m_imuManager.UpdateLatestGps(gpsUpdate); }
 
 void RadarPositionNavigationController::TotalDestruction() {
   this->StopRadarPNT();

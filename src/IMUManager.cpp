@@ -12,7 +12,7 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager, std::
     throw std::invalid_argument("databaseManager is nullptr");
   }
 
-  m_databaseManager = databaseManager;
+  m_databaseManager = std::move(databaseManager);
 
   m_magneticDeclination.LoadCOF(cofPath);
 
@@ -21,7 +21,6 @@ IMUManager::IMUManager(boost::shared_ptr<DatabaseManager> databaseManager, std::
   m_imuLinearAcceleration = {0, 0, 0};
 }
 
-IMUManager::~IMUManager() = default;
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::InstallEkf(
     std::function<void(double, Vector6d &)> ekfCallbackImuOnly, std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps
@@ -70,9 +69,14 @@ void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
 void IMUManager::SensorCallback(void *cookie, sh2_SensorEvent *event) {
-  const auto self = static_cast<IMUManager*>(cookie);
-  if(self != nullptr) {
-    self->OnSensorEvent(event);
+  try{
+    const auto self = static_cast<IMUManager*>(cookie);
+    if(self != nullptr) {
+      self->OnSensorEvent(event);
+    } 
+    throw std::invalid_argument("Cookie (IMUManager Instance) was a nullptr");
+  } catch (const std::exception &e) {
+    std::cerr << "[ERROR] IMUManager::SensorCallback" << e.what() << std::endl;
   }
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
@@ -109,15 +113,17 @@ void IMUManager::IngestSensorValue(const sh2_SensorValue &value) {
   }
 }
 
-bool IMUManager::ReadyForEkf() const { return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady; }
+bool IMUManager::ReadyForEkf() const { 
+  return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady;
+}
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int IMUManager::getCurrentYear() const {
+int IMUManager::GetCurrentYear() const {
   auto ymdNow = std::chrono::system_clock::now();
   const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
   return static_cast<int>(ymd.year());
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
-double IMUManager::prepareEkfTiming() {
+double IMUManager::PrepareEkfTiming() {
   uint64_t accHwTime = m_lastAccelerationVectorMachineTime;
   uint64_t rotHwTime = m_lastRotationVectorMachineTime;
   uint64_t lastEKFhwTime = m_lastEKFMachineTime;
@@ -128,7 +134,7 @@ double IMUManager::prepareEkfTiming() {
   return dtSeconds;
 }
 //-----------------------------------------------------------------------------------------------------------------------------------------
-void IMUManager::resetImuReadyFlags() {
+void IMUManager::ResetImuReadyFlags() {
   m_imuRotationVectorReady = false;
   m_imuLinearAccelerationReady = false;
 }
@@ -149,10 +155,10 @@ void IMUManager::DispatchToEkf() {
       throw std::runtime_error("No GPS data ever recorded");
     }
 
-    int year = getCurrentYear();
+    int year = GetCurrentYear();
     Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot, linearAccelerationSnapshot, gpsUpdateSnapshot.value(), year);
 
-    double dtSeconds = prepareEkfTiming();
+    double dtSeconds = PrepareEkfTiming();
 
     if (gpsSentToEkfSnapshot == false) {
       Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
@@ -163,7 +169,7 @@ void IMUManager::DispatchToEkf() {
       m_ekfCallbackImuOnly(dtSeconds, zImu);
     }
 
-    resetImuReadyFlags();
+    ResetImuReadyFlags();
   } catch (const std::exception &e) {
     std::cerr << "[ERROR] IMUManager::DispatchToEkf:" << e.what() << std::endl;
   }
