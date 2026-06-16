@@ -5,6 +5,9 @@
 
 #include "SerialPortBase.hpp"
 
+/**
+ * @brief Boost serial thin wrapper class to support DI. Refer to Boost for documentation
+ */
 class BoostSerialPort : public SerialPortBase {
 public:
     BoostSerialPort();

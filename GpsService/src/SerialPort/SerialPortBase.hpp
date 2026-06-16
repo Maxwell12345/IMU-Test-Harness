@@ -3,6 +3,9 @@
 
 #include <string>
 
+/**
+ * @brief Serial Port Base class for DI. To be inherited by Boost wrapper and mock class
+ */
 class SerialPortBase {
 public:
     virtual ~SerialPortBase() = default;
