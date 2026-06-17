@@ -1,6 +1,8 @@
 #include "BoostSerialPort.hpp"
 
-BoostSerialPort::BoostSerialPort() : m_serial(m_io) {
+BoostSerialPort::BoostSerialPort(std::function<void(boost::asio::serial_port& m_serial)> callback) :
+                                                                   m_serial(m_io),
+                                                                   m_callback(callback) {
     
 }
 
@@ -17,13 +19,8 @@ void BoostSerialPort::SetBaudRate(unsigned int rate) {
     m_serial.set_option(boost::asio::serial_port_base::baud_rate(rate));
 }
 
-std::string BoostSerialPort::ReadLine() {
-    boost::asio::streambuf buf;
-    boost::asio::read_until(m_serial, buf, "\n");
-    std::istream is(&buf);
-    std::string line;
-    std::getline(is, line);
-    return line;
+void BoostSerialPort::Callback() {
+    m_callback(m_serial);
 }
 
 void BoostSerialPort::Close() { 

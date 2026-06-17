@@ -7,7 +7,7 @@ class MockSerialPort : public SerialPortBase {
 public:
     void Open(const std::string& port) override;
     void SetBaudRate(unsigned int rate) override;
-    std::string ReadLine() override;
+    void Callback() override;
     void Close() override;
 };
 
