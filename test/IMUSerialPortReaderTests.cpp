@@ -3,7 +3,7 @@
 #include "IMUSerialPortReader.hpp"
 
 TEST(IMUSerialPortReaderTest, ValidateCalculateCRC16CCITTFalseChecksum) {
-    IMUSerialPortReader reader("/dev/ttyUSB0", 115200u, nullptr);
+    IMUSerialPortReader reader("/dev/ttyUSB0", 115200u);
 
     unsigned char empty[1] = {0x00};
     EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(empty, 0), 0xFFFFUL);
