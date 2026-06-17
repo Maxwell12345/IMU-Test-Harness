@@ -1,7 +1,7 @@
 #include <thread>
 #include <boost/filesystem.hpp>
+#include <iostream>
 
-#include "Utils.hpp"
 #include "SerialComService.hpp"
 #include "SerialPort/SerialPortBase.hpp"
 
@@ -12,6 +12,7 @@ SerialComService::SerialComService(std::string path,
                                    m_path(path),
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
+    // TODO: Remove try catch in both serial com service classes and add exception to docs regarding constructor and ConfigureSerialPort
     try {
         ConfigureSerialPort();
     } catch (std::runtime_error& e) {
@@ -45,7 +46,7 @@ void SerialComService::Stop() {
 
     if (m_runThread.joinable()) {
         m_runThread.join();
-        utils::LOG_INFO("Joined Serial Reading thread");
+        std::cout << "Joined Serial Reading thread" << std::endl;
     }
 }
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <atomic>
 #include <functional>
+#include <thread>
 
 #include <boost/asio.hpp>
 #include <gtest/gtest_prod.h> 
