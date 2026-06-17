@@ -1,7 +1,7 @@
 #include <thread>
 #include <boost/filesystem.hpp>
 
-#include "Utils.hpp"
+#include "utils.hpp"
 #include "SerialComService.hpp"
 #include "SerialPort/SerialPortBase.hpp"
 
@@ -45,7 +45,7 @@ void SerialComService::Stop() {
 
     if (m_runThread.joinable()) {
         m_runThread.join();
-        utils::LOG_INFO("Joined Serial Reading thread");
+        IMUUtils::LOG_INFO("Joined Serial Reading thread");
     }
 }
 

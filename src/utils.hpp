@@ -21,60 +21,90 @@
 
 namespace IMUUtils
 {
-    inline double METERS_PER_DEGREE = 111111.1;
-    inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
-    inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
+  inline double METERS_PER_DEGREE = 111111.1;
+  inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
+  inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
 
-    struct GpsUpdate {
-        std::chrono::steady_clock::time_point rxTimestamp;
-        std::chrono::system_clock::time_point gpsTimestamp;
-        double latitude;
-        double longitude;
+  inline void LOG_DEBUG(std::string str, bool flush = false) {
+      std::cout << "[DEBUG] " << str;
 
-        GpsUpdate():
-            rxTimestamp(std::chrono::steady_clock::now()) {}
+      if (flush) {
+          std::cout.flush();
+      }
+      else {
+          std::cout << '\n';
+      }
+  }
 
-        GpsUpdate(double latitude, double longitude, std::chrono::system_clock::time_point gpsTimestamp):
-            rxTimestamp(std::chrono::steady_clock::now()),
-            gpsTimestamp(gpsTimestamp),
-            latitude(latitude),
-            longitude(longitude) {}
-    };
+  inline void LOG_INFO(std::string str, bool flush = false) {
+      std::cout << "[INFO] " << str;
 
-    struct KineticState {
-        std::chrono::steady_clock::time_point timestamp;
-        double speedEastWest{};
-        double speedNorthSouth{};
-        double accelerationEastWest{};
-        double accelerationNorthSouth{};
+      if (flush) {
+          std::cout.flush();
+      }
+      else {
+          std::cout << '\n';
+      }
+  }
 
-        KineticState():
-            timestamp(std::chrono::steady_clock::now()) {}
+  inline void LOG_WARN(std::string str) {
+      std::cout << "[WARN] " << str << std::endl;
+  }
 
-        KineticState(double v_x, double v_y, double a_x, double a_y):
-            timestamp(std::chrono::steady_clock::now()),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
+  inline void LOG_ERROR(std::string str) {
+      std::cout << "[ERROR] " << str << std::endl;
+  }
 
-        KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
-            timestamp(tp),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
+  struct GpsUpdate {
+      std::chrono::steady_clock::time_point rxTimestamp;
+      std::chrono::system_clock::time_point gpsTimestamp;
+      double latitude;
+      double longitude;
 
-        KineticState& operator=(const KineticState& other) {
-          timestamp = other.timestamp;
-          speedEastWest = other.speedEastWest;
-          speedNorthSouth = other.speedNorthSouth;
-          accelerationEastWest = other.accelerationEastWest;
-          accelerationNorthSouth = other.accelerationNorthSouth;
+      GpsUpdate():
+          rxTimestamp(std::chrono::steady_clock::now()) {}
 
-          return *this;
-        }
-    };
+      GpsUpdate(double latitude, double longitude, std::chrono::system_clock::time_point gpsTimestamp):
+          rxTimestamp(std::chrono::steady_clock::now()),
+          gpsTimestamp(gpsTimestamp),
+          latitude(latitude),
+          longitude(longitude) {}
+  };
+
+  struct KineticState {
+      std::chrono::steady_clock::time_point timestamp;
+      double speedEastWest{};
+      double speedNorthSouth{};
+      double accelerationEastWest{};
+      double accelerationNorthSouth{};
+
+      KineticState():
+          timestamp(std::chrono::steady_clock::now()) {}
+
+      KineticState(double v_x, double v_y, double a_x, double a_y):
+          timestamp(std::chrono::steady_clock::now()),
+          speedEastWest(v_x),
+          speedNorthSouth(v_y),
+          accelerationEastWest(a_x),
+          accelerationNorthSouth(a_y) {}
+
+      KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
+          timestamp(tp),
+          speedEastWest(v_x),
+          speedNorthSouth(v_y),
+          accelerationEastWest(a_x),
+          accelerationNorthSouth(a_y) {}
+
+      KineticState& operator=(const KineticState& other) {
+        timestamp = other.timestamp;
+        speedEastWest = other.speedEastWest;
+        speedNorthSouth = other.speedNorthSouth;
+        accelerationEastWest = other.accelerationEastWest;
+        accelerationNorthSouth = other.accelerationNorthSouth;
+
+        return *this;
+      }
+  };
 
   /**
    * @brief Converts Degrees to Radians from IMU readings.
