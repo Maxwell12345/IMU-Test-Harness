@@ -7,7 +7,7 @@
 #include <variant>
 #include <stdexcept>
 
-#include "SerialDataModel.hpp"
+#include "imu_data.hpp"
 
 struct IMURotationVectorRecord {
     double timestamp;
@@ -27,7 +27,7 @@ struct IMURotationVectorRecord {
                                accuracy(0)
                                {};
 
-    IMURotationVectorRecord(const RotationVectorWAcc& v) {
+    IMURotationVectorRecord(const Raw_RotationVectorWAcc& v) {
         timestamp = std::chrono::duration<double>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();

@@ -52,7 +52,7 @@ void DatabaseManager::EnqueueGpsUpdate(const GpsUpdate &update) {
     m_queueCondition.notify_one();
 }
 
-void DatabaseManager::EnqueueIMULinearAcceleration(const LinearAcceleration& la){
+void DatabaseManager::EnqueueIMULinearAcceleration(const Raw_Accelerometer& la){
     {
         std::lock_guard lock(m_stateMutex);
         m_recordQueue.emplace_back(IMULinearAccelerationRecord(la));
@@ -62,7 +62,7 @@ void DatabaseManager::EnqueueIMULinearAcceleration(const LinearAcceleration& la)
     m_queueCondition.notify_one();
 }
 
-void DatabaseManager::EnqueueIMURotationVector(const RotationVectorWAcc& rv) {
+void DatabaseManager::EnqueueIMURotationVector(const Raw_RotationVectorWAcc& rv) {
     {
         std::lock_guard lock(m_stateMutex);
         m_recordQueue.emplace_back(IMURotationVectorRecord(rv));

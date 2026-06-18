@@ -68,13 +68,13 @@ void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
   m_stats.gpsAccepted++;
 }
 
-void IMUManager::SensorCallback(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv) {
-  if (ValidateImuEvent(optLa, optRv) == false) {
+void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa) {
+  if (ValidateImuEvent(optRv, optLa) == false) {
     m_stats.imuRejected++;
     throw std::runtime_error("Sensor value out of range or Report type not supported");
   }
 
-  StoreImuValue(optLa, optRv);
+  StoreImuValue(optRv, optLa);
   m_stats.imuAccepted++;
 
   if (ReadyForEkf()) {
@@ -87,8 +87,8 @@ bool IMUManager::ReadyForEkf() const {
 }
 
 void IMUManager::DispatchToEkf() {
-  RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
-  LinearAcceleration linearAccelerationSnapshot = m_imuLinearAcceleration;
+  Raw_RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
+  Raw_Accelerometer linearAccelerationSnapshot = m_imuLinearAcceleration;
 
   bool gpsSentToEkfSnapshot;
   std::optional<GpsUpdate> gpsUpdateSnapshot;
@@ -146,7 +146,7 @@ void IMUManager::ResetImuReadyFlags() {
   m_imuLinearAccelerationReady = false;
 }
 
-bool IMUManager::ValidateImuEvent(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv) {
+bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa) {
   if(optLa.has_value()) {
     return !(IsInvalidRange(optLa.value().x) ||
              IsInvalidRange(optLa.value().y) ||
@@ -166,7 +166,7 @@ bool IMUManager::ValidateImuEvent(const std::optional<LinearAcceleration>& optLa
   return false;
 };
 
-void IMUManager::StoreImuValue(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv) {
+void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa) {
   if(optLa.has_value()) {
     m_imuLinearAccelerationReady = true;
     m_imuLinearAcceleration = optLa.value();
@@ -185,8 +185,8 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
   return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const RotationVectorWAcc &rv,
-                                               const LinearAcceleration &la,
+Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+                                               const Raw_Accelerometer &la,
                                                const GpsUpdate &gps,
                                                int currentYear) {
   double latitude = gps.latitude;

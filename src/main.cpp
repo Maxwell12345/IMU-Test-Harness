@@ -47,10 +47,12 @@
 #include <csignal>
 #include <iostream>
 
+#include <boost/asio.hpp>
+
 #include "utils.hpp"
 #include "SerialComService.hpp"
+#include "IMUSerialPortReader.hpp"
 #include "SerialPort/BoostSerialPort.hpp"
-#include <boost/asio.hpp>
 
 std::atomic<bool> keepRunning{true};
 
