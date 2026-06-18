@@ -21,60 +21,60 @@
 
 namespace IMUUtils
 {
-    inline double METERS_PER_DEGREE = 111111.1;
-    inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
-    inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
+  inline double METERS_PER_DEGREE = 111111.1;
+  inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
+  inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
 
-    struct GpsUpdate {
-        std::chrono::steady_clock::time_point rxTimestamp;
-        std::chrono::system_clock::time_point gpsTimestamp;
-        double latitude;
-        double longitude;
+  struct GpsUpdate {
+      std::chrono::steady_clock::time_point rxTimestamp;
+      std::chrono::system_clock::time_point gpsTimestamp;
+      double latitude;
+      double longitude;
 
-        GpsUpdate():
-            rxTimestamp(std::chrono::steady_clock::now()) {}
+      GpsUpdate():
+          rxTimestamp(std::chrono::steady_clock::now()) {}
 
-        GpsUpdate(double latitude, double longitude, std::chrono::system_clock::time_point gpsTimestamp):
-            rxTimestamp(std::chrono::steady_clock::now()),
-            gpsTimestamp(gpsTimestamp),
-            latitude(latitude),
-            longitude(longitude) {}
-    };
+      GpsUpdate(double latitude, double longitude, std::chrono::system_clock::time_point gpsTimestamp):
+          rxTimestamp(std::chrono::steady_clock::now()),
+          gpsTimestamp(gpsTimestamp),
+          latitude(latitude),
+          longitude(longitude) {}
+  };
 
-    struct KineticState {
-        std::chrono::steady_clock::time_point timestamp;
-        double speedEastWest{};
-        double speedNorthSouth{};
-        double accelerationEastWest{};
-        double accelerationNorthSouth{};
+  struct KineticState {
+      std::chrono::steady_clock::time_point timestamp;
+      double speedEastWest{};
+      double speedNorthSouth{};
+      double accelerationEastWest{};
+      double accelerationNorthSouth{};
 
-        KineticState():
-            timestamp(std::chrono::steady_clock::now()) {}
+      KineticState():
+          timestamp(std::chrono::steady_clock::now()) {}
 
-        KineticState(double v_x, double v_y, double a_x, double a_y):
-            timestamp(std::chrono::steady_clock::now()),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
+      KineticState(double v_x, double v_y, double a_x, double a_y):
+          timestamp(std::chrono::steady_clock::now()),
+          speedEastWest(v_x),
+          speedNorthSouth(v_y),
+          accelerationEastWest(a_x),
+          accelerationNorthSouth(a_y) {}
 
-        KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
-            timestamp(tp),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
+      KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
+          timestamp(tp),
+          speedEastWest(v_x),
+          speedNorthSouth(v_y),
+          accelerationEastWest(a_x),
+          accelerationNorthSouth(a_y) {}
 
-        KineticState& operator=(const KineticState& other) {
-          timestamp = other.timestamp;
-          speedEastWest = other.speedEastWest;
-          speedNorthSouth = other.speedNorthSouth;
-          accelerationEastWest = other.accelerationEastWest;
-          accelerationNorthSouth = other.accelerationNorthSouth;
+      KineticState& operator=(const KineticState& other) {
+        timestamp = other.timestamp;
+        speedEastWest = other.speedEastWest;
+        speedNorthSouth = other.speedNorthSouth;
+        accelerationEastWest = other.accelerationEastWest;
+        accelerationNorthSouth = other.accelerationNorthSouth;
 
-          return *this;
-        }
-    };
+        return *this;
+      }
+  };
 
   /**
    * @brief Converts Degrees to Radians from IMU readings.

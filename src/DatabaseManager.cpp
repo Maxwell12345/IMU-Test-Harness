@@ -52,20 +52,20 @@ void DatabaseManager::EnqueueGpsUpdate(const GpsUpdate &update) {
     m_queueCondition.notify_one();
 }
 
-void DatabaseManager::EnqueueIMULinearAcceleration(const sh2_SensorValue &measurement){
+void DatabaseManager::EnqueueIMULinearAcceleration(const Raw_Accelerometer& la){
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace_back(IMULinearAccelerationRecord(measurement));
+        m_recordQueue.emplace_back(IMULinearAccelerationRecord(la));
         m_stats.currentQueueDepth = m_recordQueue.size();
     }
     m_stats.imuLinearAccelerationQueued++;
     m_queueCondition.notify_one();
 }
 
-void DatabaseManager::EnqueueIMURotationVector(const sh2_SensorValue &measurement) {
+void DatabaseManager::EnqueueIMURotationVector(const Raw_RotationVectorWAcc& rv) {
     {
         std::lock_guard lock(m_stateMutex);
-        m_recordQueue.emplace_back(IMURotationVectorRecord(measurement));
+        m_recordQueue.emplace_back(IMURotationVectorRecord(rv));
         m_stats.currentQueueDepth = m_recordQueue.size();
     }
     m_stats.imuRotationVectorQueued++;
@@ -182,13 +182,13 @@ void DatabaseManager::PrepareSqlStmts() {
 
     m_laStmt = std::make_unique<SQLite::Statement>(m_sqliteConnection,
                                                    R"(INSERT INTO imu_linear_accel
-                                                    (timestamp, status, hw_timestamp_us, x, y, z)
-                                                    VALUES (?, ?, ?, ?, ?, ?))");
+                                                    (timestamp, hw_timestamp_us, x, y, z)
+                                                    VALUES (?, ?, ?, ?, ?))");
 
     m_rvStmt = std::make_unique<SQLite::Statement>(m_sqliteConnection,
                                                    R"(INSERT INTO imu_rotation_vector
-                                                    (timestamp, status, hw_timestamp_us, i, j, k, real, accuracy)
-                                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?))");
+                                                    (timestamp, hw_timestamp_us, i, j, k, real, accuracy)
+                                                    VALUES (?, ?, ?, ?, ?, ?, ?))");
 
     m_ekfStmt = std::make_unique<SQLite::Statement>(m_sqliteConnection,
                                                     R"(INSERT INTO ekf_output
@@ -234,11 +234,10 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_laStmt->clearBindings();
 
                     m_laStmt->bind(1, r.timestamp);
-                    m_laStmt->bind(2, r.status);
-                    m_laStmt->bind(3, static_cast<int64_t>(r.hwTimestampUs));
-                    m_laStmt->bind(4, r.x);
-                    m_laStmt->bind(5, r.y);
-                    m_laStmt->bind(6, r.z);
+                    m_laStmt->bind(2, static_cast<int64_t>(r.hwTimestampUs));
+                    m_laStmt->bind(3, r.x);
+                    m_laStmt->bind(4, r.y);
+                    m_laStmt->bind(5, r.z);
                     m_laStmt->exec();
 
                     m_stats.imuLinearAccelerationWritten++;
@@ -250,13 +249,12 @@ void DatabaseManager::WriteBatch(std::vector<DatabaseRecord> &batch) {
                     m_rvStmt->clearBindings();
 
                     m_rvStmt->bind(1, r.timestamp);
-                    m_rvStmt->bind(2, r.status);
-                    m_rvStmt->bind(3, static_cast<int64_t>(r.hwTimestampUs));
-                    m_rvStmt->bind(4, r.i);
-                    m_rvStmt->bind(5, r.j);
-                    m_rvStmt->bind(6, r.k);
-                    m_rvStmt->bind(7, r.real);
-                    m_rvStmt->bind(8, r.accuracy);
+                    m_rvStmt->bind(2, static_cast<int64_t>(r.hwTimestampUs));
+                    m_rvStmt->bind(3, r.i);
+                    m_rvStmt->bind(4, r.j);
+                    m_rvStmt->bind(5, r.k);
+                    m_rvStmt->bind(6, r.real);
+                    m_rvStmt->bind(7, r.accuracy);
                     m_rvStmt->exec();
 
                     m_stats.imuRotationVectorWritten++;
