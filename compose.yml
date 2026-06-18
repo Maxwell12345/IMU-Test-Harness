@@ -1,0 +1,8 @@
+services:
+  debian:
+    build:
+      dockerfile: dockerfile
+      context: .
+    volumes:
+      - ./:/home/inu-display
+    command: ["sleep", "infinity"]

@@ -5,6 +5,28 @@
 #include <ostream>
 
 /**
+ * @brief Raw serial port rotation quaternion with acc. c-struct.
+ */
+typedef struct Raw_RotationVectorWAcc {
+    float i; 
+    float j; 
+    float k; 
+    float real; 
+    float accuracy; 
+    uint64_t timestamp;
+} Raw_RotationVectorWAcc_t;
+
+/**
+ * @brief Raw serial port accelerometer vector c-struct.
+ */
+typedef struct Raw_Accelerometer {
+    float x;
+    float y;
+    float z;
+    uint64_t timestamp;
+} Raw_Accelerometer_t;
+
+/**
  * @brief Raw 3-axis accelerometer measurement from the BNO085.
  */
 struct AccelerometerData {

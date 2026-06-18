@@ -76,7 +76,9 @@ Testing/
 
 venv/
 .DS_Store/
-compose.yml
-dockerfile
+# compose.yml
+# dockerfile
 
 .codex/
+
+python/venv/

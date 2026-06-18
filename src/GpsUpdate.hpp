@@ -3,10 +3,13 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
 
 struct GpsUpdate {
     std::chrono::steady_clock::time_point receiveTime;   // monotonic receive timestamp
-    std::chrono::system_clock::time_point wallTime;      // wall-clock for DB/logging
+    double timestamp = std::chrono::duration<double>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();                                        // wall-clock for DB/logging
     double latitude;                                      // decimal degrees
     double longitude;                                     // decimal degrees
     std::optional<double> heading;                        // course-over-ground degrees (from $GPRMC), nullopt if unavailable
@@ -18,7 +21,7 @@ struct GpsUpdate {
 
     GpsUpdate& operator=(const GpsUpdate& other) {
         receiveTime = other.receiveTime;
-        wallTime = other.wallTime;
+        timestamp = other.timestamp;
         latitude = other.latitude;
         longitude = other.longitude;
         heading = other.heading;

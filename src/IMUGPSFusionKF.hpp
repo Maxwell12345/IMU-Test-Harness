@@ -1,3 +1,6 @@
+#ifndef IMU_GPS_FUSION_KF_HPP
+#define IMU_GPS_FUSION_KF_HPP
+
 #include <iostream>
 #include <Eigen/Dense> 
 #include <deque>
@@ -274,3 +277,4 @@ private:
     AlignedVector6dDeque m_posteriorResidualQueue;
 };
 
+#endif
