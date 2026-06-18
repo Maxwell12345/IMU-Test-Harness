@@ -16,12 +16,7 @@
 #include "IMUManagerStats.hpp"
 #include "MagneticDeclination.hpp"
 #include "utils.hpp"
-
-extern "C" {
-#include "sh2_err.h"
-#include <sh2.h>
-#include <sh2_SensorValue.h>
-}
+#include "SerialDataModel.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
@@ -35,7 +30,7 @@ public:
    * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
    * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
    */
-  IMUManager(boost::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "./WMM.COF");
+  IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "./WMM.COF");
 
   /**
    * @brief Installs ekf. If none is installed, calls to ekf will not be made.
@@ -45,9 +40,8 @@ public:
    *
    * @return
    */
-  void InstallEkf(
-      std::function<void(double, Vector6d &)> ekfCallbackImuOnly, std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps
-  );
+  void InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
+                  std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps);
 
   /**
    * @brief Returns the runtime statistics of this class.
@@ -107,13 +101,13 @@ public:
    * @throws runtime_error if sensorId is not supported
    * @throws runtime_error if sensor report invalid measurements
    */
-  static void SensorCallback(void *cookie, sh2_SensorEvent *event);
+  void SensorCallback(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
 
   /**
    *
    *
    */
-  void IngestSensorValue(const sh2_SensorValue &value);
+  void IngestSensorValue(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
 
 private:
   /**
@@ -127,14 +121,6 @@ private:
    *
    */
   void DispatchToEkf();
-
-  /**
-   * @brief Decodes sh2 sensor event
-   *
-   * @param cookie A value that will be passed to the sensor callback function.
-   * @param event
-   */
-  void OnSensorEvent(sh2_SensorEvent *event);
 
   /**
    *
@@ -161,7 +147,14 @@ private:
    *
    * @return true if number is out of bounds else false
    */
-  template <typename T> static bool IsInvalidRange(T x) { return std::isnan(x) || std::isinf(x); }
+  template <typename T> static bool IsInvalidRange(T x) {
+    T maxLimit = std::numeric_limits<T>::max();
+    T minLimit = std::numeric_limits<T>::min();
+    return (x <= minLimit) ||
+           (x >= maxLimit) ||
+            std::isnan(x)  ||
+           !std::isfinite(x);
+  }
 
   /**
    * @brief Validates incoming IMU events for troublesome values
@@ -170,7 +163,7 @@ private:
    *
    * @return True if the sensor event contains usable IMU data
    */
-  static bool ValidateImuEvent(const sh2_SensorValue &sensorValue);
+  static bool ValidateImuEvent(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
 
   /**
    * @brief Storing IMU Value to its respective static member variable
@@ -183,7 +176,7 @@ private:
    *
    * @return
    */
-  void StoreImuValue(const sh2_SensorValue &sensorValue);
+  void StoreImuValue(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
 
   /**
    * @brief Build an Eigen vector representation of GpsUpdate data
@@ -192,7 +185,7 @@ private:
    *
    * @return Vector6d EKF-ready GPS measurement vector [x, y, 0, 0, 0, 0]^T in local coordinates.
    */
-  static Vector6d BuildGpsMeasurementVector(const GpsUpdate &gps);
+  Vector6d BuildGpsMeasurementVector(const GpsUpdate &gps);
 
   /**
    * @brief Build an Eigen vector representation of SensorValue data
@@ -208,15 +201,16 @@ private:
    *
    * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
    */
-  Vector6d BuildImuMeasurementVector(const sh2_RotationVectorWAcc &rv, const sh2_Accelerometer &la, const GpsUpdate &gps, int currentYear);
+  Vector6d BuildImuMeasurementVector(const RotationVectorWAcc &rv,
+                                     const LinearAcceleration &la,
+                                     const GpsUpdate &gps,
+                                     int currentYear);
 
-  bool m_imuRotationVectorReady = false;     // True when class is updated with new RotationVector measurement and not used yet in EKF
-  bool m_imuLinearAccelerationReady = false; // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
-  sh2_RotationVectorWAcc m_imuRotationVector = {}; // Internal RotationVector measurement state
-  sh2_Accelerometer m_imuLinearAcceleration = {};  // Internal LinearAcceleration measurement state
+  bool m_imuRotationVectorReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
+  bool m_imuLinearAccelerationReady = false;        // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
+  RotationVectorWAcc m_imuRotationVector = {};      // Internal RotationVector measurement state
+  LinearAcceleration m_imuLinearAcceleration = {};  // Internal LinearAcceleration measurement state
 
-  uint64_t m_lastRotationVectorMachineTime = 0;     // Machine time of rotation vector from IMU in micro seconds
-  uint64_t m_lastAccelerationVectorMachineTime = 0; // Machine time of the acceleration vector from IMU in micro seconds
   uint64_t m_lastEKFMachineTime = 0;                // Machine time of the oldest time used in the EKF innovation in micro seconds
 
   bool m_gpsSentToEkf = false;          // Flag indicating latestGps is sent to ekf
@@ -230,10 +224,8 @@ private:
 
   IMUManagerStats m_stats; // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
 
-  MagneticDeclination
-      m_magneticDeclination; // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
-  boost::shared_ptr<DatabaseManager>
-      m_databaseManager; // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
+  MagneticDeclination m_magneticDeclination;            // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
+  std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
 
   std::function<void(double, Vector6d &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
   std::function<void(double, Vector6d &, Vector6d &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data

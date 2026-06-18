@@ -16,19 +16,8 @@
 #define Q_N 100
 #define Q_L 10
 
-static void enable_sensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
-  sh2_SensorConfig_t cfg{};
-  cfg.reportInterval_us = interval_us;
-
-  if (sh2_setSensorConfig(sensor_id, &cfg) != SH2_OK) {
-    // TODO: Log this
-    std::cerr << "[WARN] Failed to enable sensor id=" << sensor_id << "\n";
-  }
-}
-
-RadarPositionNavigationController::RadarPositionNavigationController(boost::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"){
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"){
   this->m_dbManager = std::move(dbManager);
-  this->m_sh2ServiceIsRunning = false;
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
@@ -52,54 +41,20 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
       [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); }
   );
-
-  StartIMUReader();
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
-  this->m_sh2ServiceIsRunning.store(false);
-
   if (this->m_serviceThread.joinable()) {
     this->m_serviceThread.join();
   }
-
-  if (this->m_sh2IsOpen.exchange(false)) {
-    sh2_close();
-  }
 }
 
-void RadarPositionNavigationController::StartIMUReader() {
-  if (this->m_sh2ServiceIsRunning) {
-    return;
-  }
-
-  this->m_hal = bno085_hal_create();
-
-  if (sh2_open(&this->m_hal, nullptr, nullptr) != SH2_OK) {
-    std::cerr << "[ERROR] sh2_open failed\n";
-    return;
-  }
-
-  this->m_sh2IsOpen.store(true);
-
-  //TODO: Change the cookie to point to this->m_imuManager*, the cookie
-  //      Is there for us to reuse the imumanager, normal C pattern
-  sh2_setSensorCallback(IMUManager::SensorCallback, static_cast<void*>(&m_imuManager));
-
-  enable_sensor(SH2_LINEAR_ACCELERATION, 2500);
-  enable_sensor(SH2_ROTATION_VECTOR, 2500);
-
-  this->m_sh2ServiceIsRunning.store(true);
-
-  this->m_serviceThread = std::thread([this]() {
-    while (this->m_sh2ServiceIsRunning.load()) {
-      sh2_service();
-    }
-  });
-}
-
-void RadarPositionNavigationController::ConfigureKalmanFilter(
-    double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile, double imuLowerPercentile, double imuUpperPercentile
+void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0,
+                                                              double lon0,
+                                                              double gpsLowerPercentile,
+                                                              double gpsUpperPercentile,
+                                                              double imuLowerPercentile,
+                                                              double imuUpperPercentile
 ) {
   Vector6d x0;
   x0 << lon0, lat0, 1e-15, 1e-15, 1e-16, 1e-16;

@@ -11,18 +11,13 @@
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
-#include "bno085_hal.hpp" // brings in sh2.h and sh2_err.h under extern "C"
-
-extern "C" {
-#include "sh2_SensorValue.h"
-}
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(boost::shared_ptr<DatabaseManager> dbManager);
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager);
 
   ~RadarPositionNavigationController();
 
@@ -38,7 +33,7 @@ public:
   std::function<void(const GpsUpdate &)> GetGPSCallback();
 
   /**
-   * @brief Starts the IMU sh2 listener and begins self tracking process. We assume all order
+   * @brief Begins self tracking process. We assume all order
    *        position derivatives are 0.
    *
    * @param [in] lat0 the initial starting latitude position of the radar.
@@ -53,7 +48,7 @@ public:
   void StartAndConfigureRadarPNT(double lat0, double lon0);
 
   /**
-   * @brief Stops the IMU sh2 listener and does NOT self tracking process.
+   * @brief Stops self tracking process.
    *
    * @return
    *
@@ -66,7 +61,7 @@ public:
   void StopRadarPNT();
 
   /**
-   * @brief Stops the IMU sh2 listener and DOES self tracking process.
+   * @brief Stops self tracking process.
    *
    * @return
    *
@@ -77,17 +72,6 @@ public:
   void TotalDestruction();
 
 private:
-  /**
-   * @brief Starts the sh2 listener service.
-   *
-   * @return
-   *
-   * @remarks This service runs an indefinite while loop dependent on m_sh2ServiceIsRunning.
-   *
-   * @exception
-   */
-  void StartIMUReader();
-
   /**
    * @brief Sets initial conditions in KF.
    *
@@ -152,13 +136,10 @@ private:
   void _GPSCallback(const GpsUpdate &gpsUpdate);
 
 private:
-  std::atomic<bool> m_sh2ServiceIsRunning;
   std::atomic<bool> m_isKFConfigured;
   std::thread m_serviceThread;
-  sh2_Hal_t m_hal{};
-  std::atomic<bool> m_sh2IsOpen{false};
 
-  boost::shared_ptr<DatabaseManager> m_dbManager;
+  std::shared_ptr<DatabaseManager> m_dbManager;
 
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;

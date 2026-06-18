@@ -13,10 +13,11 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 
 #include "GpsUpdate.hpp"
-#include "DatabaseManagerStats.hpp"
-#include "IMULinearAccelerationRecord.hpp"
-#include "IMURotationVectorRecord.hpp"
 #include "EkfOutputRecord.hpp"
+#include "SerialDataModel.hpp"
+#include "DatabaseManagerStats.hpp"
+#include "IMURotationVectorRecord.hpp"
+#include "IMULinearAccelerationRecord.hpp"
 
 using DatabaseRecord = std::variant<GpsUpdate,
                                     IMULinearAccelerationRecord,
@@ -77,24 +78,24 @@ public:
     /**
      * @brief Enqueue SH2_ROTATION_VECTOR sensor output to m_recordQueue
      * 
-     * @remarks converts sh2_SensorValue to IMURotationVectorRecord
+     * @remarks converts RotationVectorWAcc to IMURotationVectorRecord
      * 
-     * @param [in] measurement sensor value
+     * @param [in] rv sensor value
      * 
      * @return 
      */
-    void EnqueueIMURotationVector(const sh2_SensorValue& measurement);
+    void EnqueueIMURotationVector(const RotationVectorWAcc& rv);
 
     /**
      * @brief Enqueue SH2_LINEAR_ACCELERATION sensor output to m_recordQueue
      * 
-     * @remarks converts sh2_SensorValue to IMULinearAccelerationVectorRecord
+     * @remarks converts LinearAcceleration to IMULinearAccelerationVectorRecord
      * 
-     * @param [in] measurement sensor value
+     * @param [in] la sensor value
      * 
      * @return 
      */
-    void EnqueueIMULinearAcceleration(const sh2_SensorValue& measurement);
+    void EnqueueIMULinearAcceleration(const LinearAcceleration& la);
 
     /**
      * @brief accessor to atomic number of items in queue, written items, failed writes

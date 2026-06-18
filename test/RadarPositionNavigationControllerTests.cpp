@@ -19,7 +19,7 @@
 //     std::atomic<int> forceOpenFailure{0};
 // }
 // namespace {
-//     boost::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>("./IMUPROC_tests.db");
+//     std::shared_ptr<DatabaseManager> db = boost::make_shared<DatabaseManager>("./IMUPROC_tests.db");
 // }
 
 // sh2_Hal_t bno085_hal_create() {

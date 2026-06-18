@@ -12,11 +12,7 @@ SerialComService::SerialComService(std::string path,
                                    m_path(path),
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
-    try {
-        ConfigureSerialPort();
-    } catch (std::runtime_error& e) {
-        throw;
-    }
+    ConfigureSerialPort();
 }
 
 SerialComService::~SerialComService() {
