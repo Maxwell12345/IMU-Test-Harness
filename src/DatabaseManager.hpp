@@ -14,7 +14,7 @@
 
 #include "GpsUpdate.hpp"
 #include "EkfOutputRecord.hpp"
-#include "SerialDataModel.hpp"
+#include "imu_data.hpp"
 #include "DatabaseManagerStats.hpp"
 #include "IMURotationVectorRecord.hpp"
 #include "IMULinearAccelerationRecord.hpp"
@@ -76,26 +76,26 @@ public:
     void EnqueueEkfOutput(const Vector6d& v, const Matrix6d& m);
 
     /**
-     * @brief Enqueue SH2_ROTATION_VECTOR sensor output to m_recordQueue
+     * @brief Enqueue rotation vector sensor output to m_recordQueue
      * 
-     * @remarks converts RotationVectorWAcc to IMURotationVectorRecord
+     * @remarks converts Raw_RotationVectorWAcc to IMURotationVectorRecord
      * 
      * @param [in] rv sensor value
      * 
      * @return 
      */
-    void EnqueueIMURotationVector(const RotationVectorWAcc& rv);
+    void EnqueueIMURotationVector(const Raw_RotationVectorWAcc& rv);
 
     /**
-     * @brief Enqueue SH2_LINEAR_ACCELERATION sensor output to m_recordQueue
+     * @brief Enqueue Linear acceleration sensor output to m_recordQueue
      * 
-     * @remarks converts LinearAcceleration to IMULinearAccelerationVectorRecord
+     * @remarks converts Raw_Accelerometer to IMULinearAccelerationVectorRecord
      * 
      * @param [in] la sensor value
      * 
      * @return 
      */
-    void EnqueueIMULinearAcceleration(const LinearAcceleration& la);
+    void EnqueueIMULinearAcceleration(const Raw_Accelerometer& la);
 
     /**
      * @brief accessor to atomic number of items in queue, written items, failed writes

@@ -47,10 +47,12 @@
 #include <csignal>
 #include <iostream>
 
+#include <boost/asio.hpp>
+
 #include "utils.hpp"
 #include "SerialComService.hpp"
-#include "SerialPort/BoostSerialPort.hpp"
-#include <boost/asio.hpp>
+#include "IMUSerialPortReader.hpp"
+#include "BoostSerialPort.hpp"
 
 std::atomic<bool> keepRunning{true};
 
@@ -70,7 +72,12 @@ int main(int argc,char** argv) {
             std::istream is(&buf);
             std::string line;
             std::getline(is, line);
+<<<<<<< HEAD
             IMUUtils::LOG_DEBUG(line, true);
+=======
+            // TODO: LOG_DEBUG HERE
+            std::cout << "[DEBUG]" << line << std::endl;
+>>>>>>> main
         };
 
         std::string path = "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7CMb151406-if00-port0";
@@ -87,6 +94,7 @@ int main(int argc,char** argv) {
         comService.Stop();
 
         return EXIT_SUCCESS;
+<<<<<<< HEAD
     } catch(const std::invalid_argument &e) {
         IMUUtils::LOG_ERROR(e.what());
     } catch (const std::runtime_error &e) {
@@ -95,4 +103,10 @@ int main(int argc,char** argv) {
     }
 
     return EXIT_SUCCESS;
+=======
+    } catch (std::runtime_error &e) {
+        //TODO: LOG_ERROR HERE
+        std::cout << "[ERROR]" << e.what() << std::endl;
+    }
+>>>>>>> main
 }

@@ -11,6 +11,7 @@
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
+#include "IMUSerialPortReader.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
@@ -140,6 +141,7 @@ private:
   std::thread m_serviceThread;
 
   std::shared_ptr<DatabaseManager> m_dbManager;
+  IMUSerialPortReader m_imuSerialPortReader;
 
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;

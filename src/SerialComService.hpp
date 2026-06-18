@@ -4,6 +4,7 @@
 #include <string>
 #include <atomic>
 #include <functional>
+#include <thread>
 
 #include <boost/asio.hpp>
 #include <gtest/gtest_prod.h> 
@@ -21,7 +22,7 @@ public:
      */
     SerialComService(std::string path,
                      unsigned int baudRate,
-                     std::unique_ptr<SerialPortBase> serialPort);
+                     std::shared_ptr<SerialPortBase> serialPort);
 
     ~SerialComService();
 
@@ -65,7 +66,7 @@ private:
     std::atomic<bool> m_running;                    // Processing thread status flag
 
     boost::asio::io_context m_io;               // Asio context
-    std::unique_ptr<SerialPortBase> m_serial;   // Pointer to a DI serial object. This serial contains the callback.
+    std::shared_ptr<SerialPortBase> m_serial;   // Pointer to a DI serial object. This serial contains the callback.
 
     std::string m_path;         // Serial port file descriptor
     unsigned int m_baudRate;    // Serial port baud rate

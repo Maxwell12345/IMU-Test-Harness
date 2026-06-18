@@ -24,14 +24,14 @@ TEST(IMUManagerTest, GetStatsImuReject) {
   IMUManager imuManager(db);
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
-  std::optional<LinearAcceleration> optLa {
-    LinearAcceleration{1,
+  std::optional<Raw_Accelerometer> optLa {
+    Raw_Accelerometer{1,
                        NAN,
                        5,
                        1000000}};
 
-  std::optional<RotationVectorWAcc> optRv = {
-    RotationVectorWAcc{1,
+  std::optional<Raw_RotationVectorWAcc> optRv = {
+    Raw_RotationVectorWAcc{1,
                        1,
                        INFINITY,
                        1,
@@ -45,7 +45,7 @@ TEST(IMUManagerTest, GetStatsImuReject) {
   EXPECT_EQ(stats.gpsRejected, 0);
   EXPECT_EQ(stats.dbEnqueueFailures, 0);
 
-  EXPECT_THROW(imuManager.SensorCallback(std::nullopt, optRv), std::runtime_error);
+  EXPECT_THROW(imuManager.SensorCallback(optRv, std::nullopt), std::runtime_error);
   stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 0);
   EXPECT_EQ(stats.imuRejected, 1);
@@ -53,7 +53,7 @@ TEST(IMUManagerTest, GetStatsImuReject) {
   EXPECT_EQ(stats.gpsRejected, 0);
   EXPECT_EQ(stats.dbEnqueueFailures, 0);
 
-  EXPECT_THROW(imuManager.SensorCallback(optLa, std::nullopt), std::runtime_error);
+  EXPECT_THROW(imuManager.SensorCallback(std::nullopt, optLa), std::runtime_error);
   stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 0);
   EXPECT_EQ(stats.imuRejected, 2);
@@ -74,15 +74,15 @@ TEST(IMUManagerTest, GetStatsImuAccept) {
   IMUManager imuManager(db);
   // imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
-  std::optional<LinearAcceleration> optLa = {
-    LinearAcceleration{1,
+  std::optional<Raw_Accelerometer> optLa = {
+    Raw_Accelerometer{1,
                        1,
                        5,
                        1000000}
   };
 
-  std::optional<RotationVectorWAcc> optRv = {
-    RotationVectorWAcc{0.7,
+  std::optional<Raw_RotationVectorWAcc> optRv = {
+    Raw_RotationVectorWAcc{0.7,
                        0.5,
                        0.1,
                        1,
@@ -97,7 +97,7 @@ TEST(IMUManagerTest, GetStatsImuAccept) {
   EXPECT_EQ(stats.gpsRejected, 0);
   EXPECT_EQ(stats.dbEnqueueFailures, 0);
 
-  imuManager.SensorCallback(optLa, std::nullopt);
+  imuManager.SensorCallback(std::nullopt, optLa);
   stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 1);
   EXPECT_EQ(stats.imuRejected, 0);
@@ -105,7 +105,7 @@ TEST(IMUManagerTest, GetStatsImuAccept) {
   EXPECT_EQ(stats.gpsRejected, 0);
   EXPECT_EQ(stats.dbEnqueueFailures, 0);
 
-  imuManager.SensorCallback(std::nullopt, optRv);
+  imuManager.SensorCallback(optRv, std::nullopt);
   stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 2);
   EXPECT_EQ(stats.imuRejected, 0);
@@ -306,16 +306,16 @@ TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
 
 TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
   IMUManager imuManager(db);
-  LinearAcceleration la = {
+  Raw_Accelerometer la = {
     1,
     2,
     3,
     1000000
   };
 
-  EXPECT_TRUE(imuManager.ValidateImuEvent(la, std::nullopt));
+  EXPECT_TRUE(imuManager.ValidateImuEvent(std::nullopt, la));
 
-  RotationVectorWAcc rv = {
+  Raw_RotationVectorWAcc rv = {
     0.7,
     0.5,
     0.3,
@@ -324,7 +324,7 @@ TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
     1000000
   };
 
-  EXPECT_TRUE(imuManager.ValidateImuEvent(std::nullopt, rv));
+  EXPECT_TRUE(imuManager.ValidateImuEvent(rv, std::nullopt));
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
@@ -333,28 +333,28 @@ TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
   float maxLimitF = std::numeric_limits<float>::max();
   uint64_t maxLimitD = std::numeric_limits<uint64_t>::max();
 
-  std::vector<std::optional<LinearAcceleration>> casesLA = {
-    {LinearAcceleration {maxLimitF, 1, 1, 100000}},
-    {LinearAcceleration {1, maxLimitF, 1, 100000}},
-    {LinearAcceleration {1, 1, maxLimitF, 100000}},
-    {LinearAcceleration {1, 1, 1, maxLimitD}},
+  std::vector<std::optional<Raw_Accelerometer>> casesLA = {
+    {Raw_Accelerometer {maxLimitF, 1, 1, 100000}},
+    {Raw_Accelerometer {1, maxLimitF, 1, 100000}},
+    {Raw_Accelerometer {1, 1, maxLimitF, 100000}},
+    {Raw_Accelerometer {1, 1, 1, maxLimitD}},
   };
 
   for (auto &c : casesLA) {
-    EXPECT_FALSE(imuManager.ValidateImuEvent(c, std::nullopt));
+    EXPECT_FALSE(imuManager.ValidateImuEvent(std::nullopt, c));
   }
 
-  std::vector<std::optional<RotationVectorWAcc>> casesRV = {
-    {RotationVectorWAcc {maxLimitF, 1, 1, 1, 1, 100000}},
-    {RotationVectorWAcc {1, maxLimitF, 1, 1, 1, 100000}},
-    {RotationVectorWAcc {1, 1, maxLimitF, 1, 1, 100000}},
-    {RotationVectorWAcc {1, 1, 1, maxLimitF, 1, 100000}},
-    {RotationVectorWAcc {1, 1, 1, 1, maxLimitF, 100000}},
-    {RotationVectorWAcc {1, 1, 1, 1, 1, maxLimitD}},
+  std::vector<std::optional<Raw_RotationVectorWAcc>> casesRV = {
+    {Raw_RotationVectorWAcc {maxLimitF, 1, 1, 1, 1, 100000}},
+    {Raw_RotationVectorWAcc {1, maxLimitF, 1, 1, 1, 100000}},
+    {Raw_RotationVectorWAcc {1, 1, maxLimitF, 1, 1, 100000}},
+    {Raw_RotationVectorWAcc {1, 1, 1, maxLimitF, 1, 100000}},
+    {Raw_RotationVectorWAcc {1, 1, 1, 1, maxLimitF, 100000}},
+    {Raw_RotationVectorWAcc {1, 1, 1, 1, 1, maxLimitD}},
   };
 
   for (auto &c : casesRV) {
-    EXPECT_FALSE(imuManager.ValidateImuEvent(std::nullopt, c));
+    EXPECT_FALSE(imuManager.ValidateImuEvent(c, std::nullopt));
   }
 
   EXPECT_FALSE(imuManager.ValidateImuEvent(std::nullopt, std::nullopt));
@@ -364,8 +364,8 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
   IMUManager imuManager(db);
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
-  LinearAcceleration la = imuManager.m_imuLinearAcceleration;
-  RotationVectorWAcc rv = imuManager.m_imuRotationVector;
+  Raw_Accelerometer la = imuManager.m_imuLinearAcceleration;
+  Raw_RotationVectorWAcc rv = imuManager.m_imuRotationVector;
   EXPECT_NEAR(rv.i, 0, 1e-12);
   EXPECT_NEAR(rv.j, 0, 1e-12);
   EXPECT_NEAR(rv.k, 0, 1e-12);
@@ -377,22 +377,22 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
   EXPECT_NEAR(la.z, 0, 1e-12);
   EXPECT_NEAR(la.timestamp, 0, 1e-12);
 
-  std::optional<LinearAcceleration> optLa = {
-    LinearAcceleration{1,
+  std::optional<Raw_Accelerometer> optLa = {
+    Raw_Accelerometer{1,
                        1,
                        5,
                        100000}
   };
 
-  imuManager.StoreImuValue(optLa, std::nullopt);
+  imuManager.StoreImuValue(std::nullopt, optLa);
   la = imuManager.m_imuLinearAcceleration;
   EXPECT_NEAR(la.x, 1, 1e-12);
   EXPECT_NEAR(la.y, 1, 1e-12);
   EXPECT_NEAR(la.z, 5, 1e-12);
   EXPECT_NEAR(la.timestamp, 100000, 1e-12);
 
-  std::optional<RotationVectorWAcc> optRv = {
-    RotationVectorWAcc{0.7,
+  std::optional<Raw_RotationVectorWAcc> optRv = {
+    Raw_RotationVectorWAcc{0.7,
                        0.5,
                        0.1,
                        1,
@@ -400,7 +400,7 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
                        100000}
   };
 
-  imuManager.StoreImuValue(std::nullopt, optRv);
+  imuManager.StoreImuValue(optRv, std::nullopt);
   rv = imuManager.m_imuRotationVector;
   EXPECT_NEAR(rv.i, 0.7, 1e-4);
   EXPECT_NEAR(rv.j, 0.5, 1e-4);
@@ -427,9 +427,9 @@ TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
   double latitude = 80.0;
   double longitude = 0.0;
 
-  RotationVectorWAcc rv = {0.032959, -0.061829, -0.706909, 0.703796, 0, 0};
+  Raw_RotationVectorWAcc rv = {0.032959, -0.061829, -0.706909, 0.703796, 0, 0};
 
-  LinearAcceleration la = {20, 50, 0, 0};
+  Raw_Accelerometer la = {20, 50, 0, 0};
 
   GpsUpdate gps;
   gps.latitude = 80.0;

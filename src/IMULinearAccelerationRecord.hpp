@@ -7,7 +7,7 @@
 #include <variant>
 #include <stdexcept>
 
-#include "SerialDataModel.hpp"
+#include "imu_data.hpp"
 
 struct IMULinearAccelerationRecord {
     double timestamp;
@@ -22,7 +22,7 @@ struct IMULinearAccelerationRecord {
                                    y(0),
                                    z(0){};
 
-    IMULinearAccelerationRecord(const LinearAcceleration& v) {
+    IMULinearAccelerationRecord(const Raw_Accelerometer& v) {
         timestamp = std::chrono::duration<double>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();

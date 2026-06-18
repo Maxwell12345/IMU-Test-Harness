@@ -25,36 +25,6 @@ namespace IMUUtils
   inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
   inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
 
-  inline void LOG_DEBUG(std::string str, bool flush = false) {
-      std::cout << "[DEBUG] " << str;
-
-      if (flush) {
-          std::cout.flush();
-      }
-      else {
-          std::cout << '\n';
-      }
-  }
-
-  inline void LOG_INFO(std::string str, bool flush = false) {
-      std::cout << "[INFO] " << str;
-
-      if (flush) {
-          std::cout.flush();
-      }
-      else {
-          std::cout << '\n';
-      }
-  }
-
-  inline void LOG_WARN(std::string str) {
-      std::cout << "[WARN] " << str << std::endl;
-  }
-
-  inline void LOG_ERROR(std::string str) {
-      std::cout << "[ERROR] " << str << std::endl;
-  }
-
   struct GpsUpdate {
       std::chrono::steady_clock::time_point rxTimestamp;
       std::chrono::system_clock::time_point gpsTimestamp;

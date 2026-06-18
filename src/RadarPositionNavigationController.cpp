@@ -16,11 +16,17 @@
 #define Q_N 100
 #define Q_L 10
 
-RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"){
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
+                                                                                                                  m_imuSerialPortReader("/dev/ttyUSB0", 9600){
   this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
+
+  auto callbackLambda = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa){
+    imuManager.SensorCallback(optRv, optLa);
+  };
+  this->m_imuSerialPortReader.InstallVectorCallback(callbackLambda);
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }
