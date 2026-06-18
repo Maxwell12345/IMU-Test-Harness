@@ -2,217 +2,248 @@
 #define IMU_MANAGER_HPP
 #pragma once
 
-#include <chrono>
 #include <atomic>
-#include <optional>
+#include <chrono>
 #include <functional>
+#include <optional>
 
-#include <Eigen/Dense> 
-#include <gtest/gtest_prod.h> 
+#include <Eigen/Dense>
 #include <boost/shared_ptr.hpp>
+#include <gtest/gtest_prod.h>
 
-#include "utils.hpp"
-#include "GpsUpdate.hpp"
 #include "DatabaseManager.hpp"
+#include "GpsUpdate.hpp"
 #include "IMUManagerStats.hpp"
 #include "MagneticDeclination.hpp"
-
-extern "C" {
-#include <sh2.h>
-#include <sh2_SensorValue.h>
-#include "sh2_err.h"
-}
+#include "utils.hpp"
+#include "imu_data.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class IMUManager {
 public:
-    /**
-     * @brief Constructor
-     *
-     * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
-     * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
-     * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
-     */
-    IMUManager(boost::shared_ptr<DatabaseManager> databaseManager);
+  /**
+   * @brief Constructor
+   *
+   * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
+   * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
+   * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
+   *
+   * @throws std::invalid_argument when databaseManager is nullptr
+   */
+  IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "./WMM.COF");
 
-    /**
-     * @brief Destructor
-     *
-     * @remarks reset all static members to initial values
-     */
-    ~IMUManager();
+  /**
+   * @brief Installs ekf. If none is installed, calls to ekf will not be made.
+   *
+   * @param ekfCallbackImuOnly ekf call without gps data
+   * @param ekfCallbackWithGps ekf call with gps
+   *
+   * @throws std::invalid_argument when ekfCallbackImuOnly is nullptr
+   * @throws std::invalid_argument when ekfCallbackWithGps is nullptr
+   *
+   * @return
+   */
+  void InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
+                  std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps);
 
-    /**
-     * @brief Installs ekf. If none is installed, calls to ekf will not be made.
-     * 
-     * @param ekfCallbackImuOnly ekf call without gps data
-     * @param ekfCallbackWithGps ekf call with gps
-     * 
-     * @return
-     */
-    static void InstallEkf(std::function<void(double, Vector6d&)> ekfCallbackImuOnly,
-                    std::function<void(double, Vector6d&, Vector6d&)> ekfCallbackWithGps);
+  /**
+   * @brief Returns the runtime statistics of this class.
+   *
+   * @remarks The statistic includes:
+   *      - number of imu measurements accepted and rejected
+   *      - number of gps measurements accepted and rejected
+   *      - number of failed ekfCallbacks
+   *      - number of db enqueue failures
+   *
+   * @return IMUManagerStats include
+   */
+  IMUManagerStats GetStats() const;
 
-    /**
-     * @brief Returns the runtime statistics of this class.
-     *
-     * @remarks The statistic includes:
-     *      - number of imu measurements accepted and rejected
-     *      - number of gps measurements accepted and rejected
-     *      - number of failed ekfCallbacks
-     *      - number of db enqueue failures
-     *
-     * @return IMUManagerStats include
-     */
-    static IMUManagerStats GetStats();
+  /**
+   * @brief Returns the current GPS status if available
+   *
+   * @return std::optional<GpsUpdate> if gps data is available, else nullopt
+   */
+  std::optional<GpsUpdate> GetLatestGps() const;
 
-    /**
-     * @brief Returns the current GPS status if available
-     *
-     * @return std::optional<GpsUpdate> if gps data is available, else nullopt
-     */
-    static std::optional<GpsUpdate> GetLatestGps();
+  /**
+   * @brief Method used to update IMUManager gps data
+   *
+   * @remarks Gps will not update if:
+   *      - Incoming data is older than current GPS data
+   *      - Older than 5 seconds from steady_clock::now()
+   *      - Marked as update.valid == false
+   *
+   * @param [in] update gps data to be updated to
+   *
+   * @return
+   */
+  void UpdateLatestGps(const GpsUpdate &update);
 
-    /**
-     * @brief Method used to update IMUManager gps data
-     *
-     * @remarks Gps will not update if:
-     *      - Incoming data is older than current GPS data
-     *      - Older than 5 seconds from steady_clock::now()
-     *      - Marked as update.valid == false
-     *
-     * @param [in] update gps data to be updated to
-     * 
-     * @return
-     */
-    static void UpdateLatestGps(const GpsUpdate& update);
-
-    /**
-     * @brief Call back upon host receives event from IMU sensor.
-     * 
-     * @remark Method does not throw exception because it is a callback from C,
-     *         but will cerr if:
-     *      - m_sInstance is nullptr
-     *      - event is nullptr
-     *      - failure to decode event
-     *      - out of bound IMU measurements
-     *      - unsupported IMU report type
-     *      - no gps ever recorded
-     *         Exits if no GPS ever recoded
-     *
-     *
-     * @param [in] cookie (unused) Opaque user-data pointer passed by the SH2 driver
-     * @param [in] event The pointer to an undecoded report coming from the IMU
-     *
-     * @throws SEE ABOVE, internally handled
-     * @throws runtime_error if m_sInstance does not exist
-     * @throws runtime_error if event is nullptr
-     * @throws runtime_error if decode event failure
-     * @throws runtime_error if sensorId is not supported
-     * @throws runtime_error if sensor report invalid measurements
-     */
-    static void SensorCallback(void* cookie, sh2_SensorEvent* event);
-
-    static void TESTSensorCallback(const sh2_SensorValue& val);
+  /**
+   * @brief Call back upon host receives event from IMU sensor.
+   *
+   * @param [in] optLa Optional Linear Acceleration IMU measurement 
+   * @param [in] optRv Optional Rotation Vector with Accuracy IMU measurement 
+   *
+   * @throws runtime_error if sensor report invalid measurements
+   *
+   * @return
+   */
+  void SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa);
 
 private:
+  /**
+   * @brief checks whether:
+   *    - Ekf callbacks are installed
+   *    - m_imuRotationVector is updated with new unused data
+   *    - m_imuLinearAcceleration is updated with new unused data
+   *
+   *  @returns true if all of the above is true
+   */
+  bool ReadyForEkf() const;
 
-    /**
-     * @brief Checks if a number is out of numerical bounds
-     *
-     * @param [in] x number to be checked
-     *
-     * @return true if number is out of bounds else false
-     */
-    template <typename T>
-    static bool IsInvalidRange(T x)
-    {
-        return std::isnan(x) || std::isinf(x);
-    }
+  /**
+   * @brief helper function that invokes EKF callback. The function takes a snapshot of
+   *    m_imuRotationVector, m_imuLienarAcceleration, m_latesetGps then use it to calculate
+   *    true heading, 6d-Vector and Matrix used to feed into the EKF.
+   *
+   * @throws runtime_error if there has never been a gps update (same as std::nullopt)
+   *
+   * @return
+   */
+  void DispatchToEkf();
 
-    /**
-     * @brief Validates incoming IMU events for troublesome values
-     *
-     * @param [in] sensorValue imu sensor value containing sensor type and measurement data
-     *
-     * @return True if the sensor event contains usable IMU data
-     */
-    static bool ValidateImuEvent(const sh2_SensorValue& sensorValue);
+  /**
+   * @brief uses system_clock::now() to get current calendar year
+   *
+   * @return current year in YYYY format
+   */
+  int GetCurrentYear() const;
 
-    /**
-     * @brief Storing IMU Value to its respective static member variable
-     *
-     * @remarks IMU sensor ids maps to the following static member variables:
-     *      SH2_LINEAR_ACCELERATION -> s_ImuAccelerometer
-     *      SH2_MAGNETIC_FIELD_CALIBRATED -> s_ImuMagnetometer
-     *
-     * @param sensorValue reference to the decoded sensor value
-     *
-     * @return
-     */
-    static void StoreImuValue(const sh2_SensorValue& sensorValue);
+  /**
+   * @brief Calculates dt from last EKF invocation
+   *
+   * @remarks Assume m_imuRotationVector and m_imuLinearAcceleration are newly updated and unused
+   *    and m_lastEKFMachineTime exists:
+   *    dt = firstNewlyArrivedImuMeausurementTimestamp - m_lastEKFMachineTime
+   *
+   * @returns dt in seconds
+   */
+  double PrepareEkfTiming();
 
-    /**
-     * @brief Build an Eigen vector representation of GpsUpdate data
-     * 
-     * @param [in] gps gps data struct
-     *
-     * @return Vector6d EKF-ready GPS measurement vector [x, y, 0, 0, 0, 0]^T in local coordinates.
-     */
-    static Vector6d BuildGpsMeasurementVector(const GpsUpdate& gps);
+  /**
+   * @brief Resets both m_imuRotationVectorReady and m_imuLinearAccelerationReady to false
+   *
+   * @return
+   */
+  void ResetImuReadyFlags();
 
-    /**
-     * @brief Build an Eigen vector representation of SensorValue data
-     * 
-     * @remarks Converts local IMU measurents and gps data to velocity and acceleration
-     *      in Global frame of reference in Geodetic units. Applies Magnetic Declination
-     *      to rotation vector using GPS coordinate.
-     * 
-     * @param [in] rv the rotation vector snapshot from IMU (i, j, k, w)
-     * @param [in] la the linear acceleration measurement snapshot from IMU (m/s^2)
-     * @param [in] gps the latest gps snapshot
-     * @param [in] currentYear the current year YYYY
-     *
-     * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
-     */
-    static Vector6d BuildImuMeasurementVector(const sh2_RotationVectorWAcc& rv, const sh2_Accelerometer& la, const GpsUpdate& gps, int currentYear);
-    
-    static std::atomic<bool> m_sImuRotationVectorReady;               // True when class is updated with new RotationVector measurement and not used yet in EKF
-    static std::atomic<bool> m_sImuLinearAccelerationReady;           // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
-    static std::atomic<sh2_RotationVectorWAcc> m_sImuRotationVector;  // Internal RotationVector measurement state
-    static std::atomic<sh2_Accelerometer> m_sImuLinearAcceleration;   // Internal LinearAcceleration measurement state
+  /**
+   * @brief Checks if a number is out of numerical bounds
+   *
+   * @param [in] x number to be checked
+   *
+   * @return true if number is out of bounds else false
+   */
+  template <typename T>
+  static bool IsInvalidRange(T x) {
+    T maxLimit = std::numeric_limits<T>::max();
+    T minLimit = std::numeric_limits<T>::min();
+    return (x <= minLimit) ||
+           (x >= maxLimit) ||
+            std::isnan(x)  ||
+           !std::isfinite(x);
+  }
 
-    static std::atomic<uint64_t> m_sLastRotationVectorMachineTime;      // Machine time of rotation vector from IMU in micro seconds
-    static std::atomic<uint64_t> m_sLastAccelerationVectorMachineTime;  // Machine time of the acceleration vector from IMU in micro seconds
-    static std::atomic<uint64_t> m_sLastEKFMachineTime;                 // Machine time of the oldest time used in the EKF innovation in micro seconds
-    
-    static std::mutex m_sGpsMutex;                       // Mutex used when m_sLatestGps is read/written
-    static std::atomic<bool> m_sGpsSentToEkf;            // Flag indicating latestGps is sent to ekf
-    static std::optional<GpsUpdate> m_sLatestGps;        // Internal GpsUpdate data state
+  /**
+   * @brief Validates incoming IMU events for troublesome values
+   *
+   * @param [in] optLa optional imu sensor linear acceleration
+   * @param [in] optRv optional imu sensor rotation vector
+   *
+   * @return True if the sensor event contains usable IMU data
+   */
+  static bool ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa);
 
-    // TODO: atomic, also refactor KineticState struct
-    static std::mutex m_sKineticStateMutex;              // Mutex used when m_sKineticState is read/written
-    static IMUUtils::KineticState m_sKineticState;       // Internal KineticState data state
-    
-    static IMUManagerStats m_sStats;                            // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
+  /**
+   * @brief Storing IMU Value to its respective member variable
+   *
+   * @param [in] optLa optional imu sensor linear acceleration
+   * @param [in] optRv optional imu sensor rotation vector
+   *
+   * @return
+   */
+  void StoreImuValue(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa);
 
-    static MagneticDeclination m_sMagneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
-    static boost::shared_ptr<DatabaseManager> m_sDatabaseManager;   // UNIMPLEMENTED shared ptr to DatabaseManager used to store incoming data persistently
+  /**
+   * @brief Build an Eigen vector representation of GpsUpdate data
+   *
+   * @param [in] gps gps data struct
+   *
+   * @return Vector6d EKF-ready GPS measurement vector [x, y, 0, 0, 0, 0]^T in local coordinates.
+   */
+  Vector6d BuildGpsMeasurementVector(const GpsUpdate &gps);
 
-    static std::atomic<bool> m_sEkfInstalled;                                          // True if installed Ekf, else no ekf installed, no call to ekf will be made
-    static std::function<void(double, Vector6d&)> m_sEkfCallbackImuOnly;               // EKF callback without new GPS data
-    static std::function<void(double, Vector6d&, Vector6d&)> m_sEkfCallbackWithGps;    // EKF callback with new unused GPS data
+  /**
+   * @brief Build an Eigen vector representation of SensorValue data
+   *
+   * @remarks Converts local IMU measurents and gps data to velocity and acceleration
+   *      in Global frame of reference in Geodetic units. Applies Magnetic Declination
+   *      to rotation vector using GPS coordinate.
+   *
+   * @param [in] rv the rotation vector snapshot from IMU (i, j, k, w)
+   * @param [in] la the linear acceleration measurement snapshot from IMU (m/s^2)
+   * @param [in] gps the latest gps snapshot
+   * @param [in] currentYear the current year YYYY
+   *
+   * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
+   */
+  Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+                                     const Raw_Accelerometer &la,
+                                     const GpsUpdate &gps,
+                                     int currentYear);
 
-    FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
-    FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
-    FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
-    FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsTrue);
-    FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsFalse);
-    FRIEND_TEST(IMUManagerTest, StoreImuValueReturnsVoid);
-    FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
-    FRIEND_TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector);
+  bool m_imuRotationVectorReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
+  bool m_imuLinearAccelerationReady = false;        // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
+  Raw_RotationVectorWAcc m_imuRotationVector = {};      // Internal RotationVector measurement state
+  Raw_Accelerometer m_imuLinearAcceleration = {};       // Internal LinearAcceleration measurement state
+
+  uint64_t m_lastEKFMachineTime = 0;                // Machine time of the oldest time used in the EKF innovation in micro seconds
+
+  bool m_gpsSentToEkf = false;          // Flag indicating latestGps is sent to ekf
+  bool m_ekfInstalled = false;          // True if installed Ekf, else no ekf installed, no call to ekf will be made
+  std::optional<GpsUpdate> m_latestGps; // Internal GpsUpdate data state
+
+  // TODO: atomic, also refactor KineticState struct
+  std::mutex m_kineticStateMutex;        // Mutex used when m_kineticState is read/written
+  mutable std::mutex m_gpsMutex;         // Mutex used when m_latestGps is read/written
+  IMUUtils::KineticState m_kineticState; // Internal KineticState data state
+
+  IMUManagerStats m_stats; // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
+
+  MagneticDeclination m_magneticDeclination;            // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
+  std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
+
+  std::function<void(double, Vector6d &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
+  std::function<void(double, Vector6d &, Vector6d &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data
+
+  FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
+  FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
+  FRIEND_TEST(IMUManagerTest, GetLatestGpsReturnsNullopt);
+  FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsTrue);
+  FRIEND_TEST(IMUManagerTest, ValidateImuEventReturnsFalse);
+  FRIEND_TEST(IMUManagerTest, StoreImuValueReturnsVoid);
+  FRIEND_TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector);
+  FRIEND_TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector);
+  FRIEND_TEST(IMUManagerTest, IngestSensorValueThrowsRuntimeError);
+  FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsFalse);
+  FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsTrue);
+  FRIEND_TEST(IMUManagerTest, GetCurrentYearReturnsYear);
+  FRIEND_TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds);
+  FRIEND_TEST(IMUManagerTest, ResetImuReadyFlagsExpectsFalse);
 };
 
 #endif

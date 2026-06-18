@@ -2,7 +2,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <thread>
-#include <yaml-cpp/yaml.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "RadarPositionNavigationController.hpp"
 
@@ -17,29 +17,24 @@
 #define Q_N 100
 #define Q_L 10
 
-RadarPositionNavigationController::RadarPositionNavigationController() {
-  this->m_sh2ServiceIsRunning = false;
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager)
+    : m_imuManager(dbManager, "./WMM.COF"), m_imuSerialPortReader("/dev/ttyUSB0", 9600) {
+  this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
-
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
-  this->m_gpsChiSqLowerBound;
+
+  auto callbackLambda = [&imuManager =
+                             this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa) {
+    imuManager.SensorCallback(optRv, optLa);
+  };
+  this->m_imuSerialPortReader.InstallVectorCallback(callbackLambda);
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }
 
 std::function<void(const GpsUpdate &)> RadarPositionNavigationController::GetGPSCallback() {
   return [this](const GpsUpdate &gpsUpdate) { this->_GPSCallback(gpsUpdate); };
-}
-
-void RadarPositionNavigationController::EnableSensor(sh2_SensorId_t sensor_id, uint32_t interval_us) {
-  sh2_SensorConfig_t cfg{};
-  cfg.reportInterval_us = interval_us;
-
-  if (sh2_setSensorConfig(sensor_id, &cfg) != SH2_OK) {
-    // TODO: Log this
-    std::cerr << "[WARN] Failed to enable sensor id=" << sensor_id << "\n";
-  }
 }
 
 void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, double lon0) {
@@ -50,52 +45,16 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
     this->m_isKFConfigured = true;
   }
 
-  IMUManager::InstallEkf(
+  m_imuManager.InstallEkf(
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
       [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); }
   );
-
-  StartIMUReader();
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
-  this->m_sh2ServiceIsRunning.store(false);
-
   if (this->m_serviceThread.joinable()) {
     this->m_serviceThread.join();
   }
-
-  if (this->m_sh2IsOpen.exchange(false)) {
-    sh2_close();
-  }
-}
-
-void RadarPositionNavigationController::StartIMUReader() {
-  if (this->m_sh2ServiceIsRunning) {
-    return;
-  }
-
-  this->m_hal = bno085_hal_create();
-
-  if (sh2_open(&this->m_hal, nullptr, nullptr) != SH2_OK) {
-    std::cerr << "[ERROR] sh2_open failed\n";
-    return;
-  }
-
-  this->m_sh2IsOpen.store(true);
-
-  sh2_setSensorCallback(IMUManager::SensorCallback, nullptr);
-
-  enable_sensor(SH2_LINEAR_ACCELERATION, 2500);
-  enable_sensor(SH2_ROTATION_VECTOR, 2500);
-
-  this->m_sh2ServiceIsRunning.store(true);
-
-  this->m_serviceThread = std::thread([this]() {
-    while (this->m_sh2ServiceIsRunning.load()) {
-      sh2_service();
-    }
-  });
 }
 
 void RadarPositionNavigationController::ConfigureKalmanFilter(
@@ -161,18 +120,11 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(
   );
 }
 
-void RadarPositionNavigationController::ParseYamlToKalmanFilter() {
-  YAML::Node root = YAML::LoadFile("compose.yaml");
-  YAML::Node section = root["kalmanvalues"];
-
-  this->m_gps_chi_squared_lower_bound = section["gps_chi_squared_lower_bound"].as<double>();
-  this->m_gps_chi_squared_upper_bound = section["gps_chi_squared_upper_bound"].as<double>();
-  this->m_imu_chi_squared_lower_bound = section["imu_chi_squared_lower_bound"].as<double>();
-  this->m_imu_chi_squared_upper_bound = section["imu_chi_squared_upper_bound"].as<double>();
-}
+// TODO: Remove this for prod.
+#include "REMOVE_LATER_KF_LOGGER.hpp"
 
 void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &imuVec) {
-  std::lock_guard<std::mutex> kfStepGuard(this->m_sKFUpdateMutex);
+  std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
   if (!this->m_isKFConfigured.load()) {
     return;
@@ -180,6 +132,9 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
 
   try {
     std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
+
+    // TODO: Remove csv logging
+    LogKFCSV(output.first, output.second, imuVec);
 
     this->m_latestX = output.first;
     this->m_latestP = output.second;
@@ -201,7 +156,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
 }
 
 void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &imuVec, Vector6d &gpsVec) {
-  std::lock_guard<std::mutex> kfStepGuard(this->m_sKFUpdateMutex);
+  std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
   if (!this->m_isKFConfigured.load()) {
     return;
@@ -209,6 +164,9 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
 
   try {
     std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
+
+    // TODO: Remove csv logging
+    LogKFCSV(output.first, output.second, imuVec, &gpsVec);
 
     this->m_latestX = output.first;
     this->m_latestP = output.second;
@@ -229,12 +187,12 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
   }
 }
 
-void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) { IMUManager::UpdateLatestGps(gpsUpdate); }
+void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) { m_imuManager.UpdateLatestGps(gpsUpdate); }
 
 void RadarPositionNavigationController::TotalDestruction() {
   this->StopRadarPNT();
 
-  std::lock_guard<std::mutex> kfStepGuard(this->m_sKFUpdateMutex);
+  std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
   if (this->m_isKFConfigured.load()) {
     this->m_kf.Clean();

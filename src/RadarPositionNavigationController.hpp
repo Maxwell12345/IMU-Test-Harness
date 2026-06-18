@@ -11,18 +11,14 @@
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
-#include "bno085_hal.hpp" // brings in sh2.h and sh2_err.h under extern "C"
-
-extern "C" {
-#include "sh2_SensorValue.h"
-}
+#include "IMUSerialPortReader.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController();
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager);
 
   ~RadarPositionNavigationController();
 
@@ -38,7 +34,7 @@ public:
   std::function<void(const GpsUpdate &)> GetGPSCallback();
 
   /**
-   * @brief Starts the IMU sh2 listener and begins self tracking process. We assume all order
+   * @brief Begins self tracking process. We assume all order
    *        position derivatives are 0.
    *
    * @param [in] lat0 the initial starting latitude position of the radar.
@@ -53,7 +49,7 @@ public:
   void StartAndConfigureRadarPNT(double lat0, double lon0);
 
   /**
-   * @brief Stops the IMU sh2 listener and does NOT self tracking process.
+   * @brief Stops self tracking process.
    *
    * @return
    *
@@ -66,7 +62,7 @@ public:
   void StopRadarPNT();
 
   /**
-   * @brief Stops the IMU sh2 listener and DOES self tracking process.
+   * @brief Stops self tracking process.
    *
    * @return
    *
@@ -150,7 +146,6 @@ private:
    * @exception
    */
   void _GPSCallback(const GpsUpdate &gpsUpdate);
-
   /**
    * @brief Ingest YAML file, parses Tuned Kalman Filter values.
    *
@@ -163,16 +158,17 @@ private:
   void ParseYamlToKalmanFilter();
 
 private:
-  std::atomic<bool> m_sh2ServiceIsRunning;
   std::atomic<bool> m_isKFConfigured;
   std::thread m_serviceThread;
-  sh2_Hal_t m_hal{};
-  std::atomic<bool> m_sh2IsOpen{false};
 
-  std::mutex m_sKFUpdateMutex;
+  std::shared_ptr<DatabaseManager> m_dbManager;
+  IMUSerialPortReader m_imuSerialPortReader;
+
+  std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   Vector6d m_latestX;
   Matrix6d m_latestP;
+  IMUManager m_imuManager;
   double m_gpsChiSqLowerBound;
   double m_gpsChiSqUpperBound;
   double m_imuChiSqLowerBound;
