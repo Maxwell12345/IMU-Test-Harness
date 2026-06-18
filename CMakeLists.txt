@@ -11,6 +11,7 @@ find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
 find_package(SQLiteCpp REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
@@ -20,13 +21,16 @@ add_library(IMUPROC_LIB
 )
 
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(IMUPROC_LIB PUBLIC ${YAML_CPP_INCLUDE_DIR})
 target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         IMUPROC_LIB
-        SQLiteCpp)
+        SQLiteCpp
+        yaml-cpp
+)
 target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")

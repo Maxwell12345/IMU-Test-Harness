@@ -15,8 +15,8 @@
 #include "GpsUpdate.hpp"
 #include "IMUManagerStats.hpp"
 #include "MagneticDeclination.hpp"
-#include "utils.hpp"
 #include "imu_data.hpp"
+#include "utils.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
@@ -45,8 +45,9 @@ public:
    *
    * @return
    */
-  void InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
-                  std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps);
+  void InstallEkf(
+      std::function<void(double, Vector6d &)> ekfCallbackImuOnly, std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps
+  );
 
   /**
    * @brief Returns the runtime statistics of this class.
@@ -85,8 +86,8 @@ public:
   /**
    * @brief Call back upon host receives event from IMU sensor.
    *
-   * @param [in] optLa Optional Linear Acceleration IMU measurement 
-   * @param [in] optRv Optional Rotation Vector with Accuracy IMU measurement 
+   * @param [in] optLa Optional Linear Acceleration IMU measurement
+   * @param [in] optRv Optional Rotation Vector with Accuracy IMU measurement
    *
    * @throws runtime_error if sensor report invalid measurements
    *
@@ -148,14 +149,10 @@ private:
    *
    * @return true if number is out of bounds else false
    */
-  template <typename T>
-  static bool IsInvalidRange(T x) {
+  template <typename T> static bool IsInvalidRange(T x) {
     T maxLimit = std::numeric_limits<T>::max();
     T minLimit = std::numeric_limits<T>::min();
-    return (x <= minLimit) ||
-           (x >= maxLimit) ||
-            std::isnan(x)  ||
-           !std::isfinite(x);
+    return (x <= minLimit) || (x >= maxLimit) || std::isnan(x) || !std::isfinite(x);
   }
 
   /**
@@ -166,7 +163,7 @@ private:
    *
    * @return True if the sensor event contains usable IMU data
    */
-  static bool ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa);
+  static bool ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv, const std::optional<Raw_Accelerometer> &optLa);
 
   /**
    * @brief Storing IMU Value to its respective member variable
@@ -176,7 +173,7 @@ private:
    *
    * @return
    */
-  void StoreImuValue(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa);
+  void StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optRv, const std::optional<Raw_Accelerometer> &optLa);
 
   /**
    * @brief Build an Eigen vector representation of GpsUpdate data
@@ -201,17 +198,14 @@ private:
    *
    * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
    */
-  Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
-                                     const Raw_Accelerometer &la,
-                                     const GpsUpdate &gps,
-                                     int currentYear);
+  Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la, const GpsUpdate &gps, int currentYear);
 
-  bool m_imuRotationVectorReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
-  bool m_imuLinearAccelerationReady = false;        // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
-  Raw_RotationVectorWAcc m_imuRotationVector = {};      // Internal RotationVector measurement state
-  Raw_Accelerometer m_imuLinearAcceleration = {};       // Internal LinearAcceleration measurement state
+  bool m_imuRotationVectorReady = false;     // True when class is updated with new RotationVector measurement and not used yet in EKF
+  bool m_imuLinearAccelerationReady = false; // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
+  Raw_RotationVectorWAcc m_imuRotationVector = {}; // Internal RotationVector measurement state
+  Raw_Accelerometer m_imuLinearAcceleration = {};  // Internal LinearAcceleration measurement state
 
-  uint64_t m_lastEKFMachineTime = 0;                // Machine time of the oldest time used in the EKF innovation in micro seconds
+  uint64_t m_lastEKFMachineTime = 0; // Machine time of the oldest time used in the EKF innovation in micro seconds
 
   bool m_gpsSentToEkf = false;          // Flag indicating latestGps is sent to ekf
   bool m_ekfInstalled = false;          // True if installed Ekf, else no ekf installed, no call to ekf will be made
@@ -224,7 +218,8 @@ private:
 
   IMUManagerStats m_stats; // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
 
-  MagneticDeclination m_magneticDeclination;            // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
+  MagneticDeclination
+      m_magneticDeclination; // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
   std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
 
   std::function<void(double, Vector6d &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
