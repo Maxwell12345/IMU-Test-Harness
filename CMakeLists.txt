@@ -15,30 +15,19 @@ find_package(SQLiteCpp REQUIRED)
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
-set(SH2_DIR ${CMAKE_SOURCE_DIR}/third_party/sh2)
-
-add_library(sh2 STATIC
-    ${SH2_DIR}/sh2.c
-    ${SH2_DIR}/sh2_util.c
-    ${SH2_DIR}/shtp.c
-	${SH2_DIR}/sh2_SensorValue.c
-)
-target_include_directories(sh2 PUBLIC ${SH2_DIR})
-
 find_library(I2C_LIB i2c REQUIRED)
 
 add_library(IMUPROC_LIB
 		${PROJ_SRC}
 )
 
-target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${SH2_DIR})
+target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         IMUPROC_LIB
-        sh2
         ${I2C_LIB}
         SQLiteCpp)
 target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
@@ -52,7 +41,6 @@ file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 target_link_libraries(${PROJECT_NAME}_tests
     PRIVATE
          IMUPROC_LIB
-         sh2
          ${I2C_LIB}
          GTest::gtest
          GTest::gtest_main
