@@ -40,3 +40,32 @@ contains something like "UART" or "cp210x" and reading the tty input. Another me
 code to the ESP device without being able to see it run. If you want to see it execute in a tty-like terminal, run the following command instead `idf.py -p <full_path_to_port_from_step_1_here> flash monitor` or 
 you can simply run `idf.py -p <full_path_to_port_from_step_1_here> monitor` after flashing to the device. 
 4. You should now be seeing output from your code on the screen.
+
+# Automation
+## Deploy
+```bash
+./deploy.sh
+```
+
+With explicit port and baud:
+
+```bash
+./deploy.sh /dev/ttyUSB0 115200
+```
+
+Exit monitor:
+
+```text
+Ctrl+]
+```
+
+## Test
+```bash
+./test.sh
+```
+
+If needed:
+
+```bash
+chmod +x deploy.sh test.sh
+```
