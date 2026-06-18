@@ -148,7 +148,8 @@ private:
    *
    * @return true if number is out of bounds else false
    */
-  template <typename T> static bool IsInvalidRange(T x) {
+  template <typename T>
+  static bool IsInvalidRange(T x) {
     T maxLimit = std::numeric_limits<T>::max();
     T minLimit = std::numeric_limits<T>::min();
     return (x <= minLimit) ||
@@ -160,20 +161,22 @@ private:
   /**
    * @brief Validates incoming IMU events for troublesome values
    *
-   * @param [in] sensorValue imu sensor value containing sensor type and measurement data
+   * @param [in] optLa optional imu sensor linear acceleration
+   * @param [in] optRv optional imu sensor rotation vector
    *
    * @return True if the sensor event contains usable IMU data
    */
-  static bool ValidateImuEvent(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
+  static bool ValidateImuEvent(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv);
 
   /**
-   * @brief Storing IMU Value to its respective static member variable
+   * @brief Storing IMU Value to its respective member variable
    *
-   * @param sensorValue reference to the decoded sensor value
+   * @param [in] optLa optional imu sensor linear acceleration
+   * @param [in] optRv optional imu sensor rotation vector
    *
    * @return
    */
-  void StoreImuValue(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
+  void StoreImuValue(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv);
 
   /**
    * @brief Build an Eigen vector representation of GpsUpdate data

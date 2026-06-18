@@ -146,7 +146,7 @@ void IMUManager::ResetImuReadyFlags() {
   m_imuLinearAccelerationReady = false;
 }
 
-bool IMUManager::ValidateImuEvent(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv) {
+bool IMUManager::ValidateImuEvent(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv) {
   if(optLa.has_value()) {
     return !(IsInvalidRange(optLa.value().x) ||
              IsInvalidRange(optLa.value().y) ||
@@ -166,7 +166,7 @@ bool IMUManager::ValidateImuEvent(std::optional<LinearAcceleration> optLa, std::
   return false;
 };
 
-void IMUManager::StoreImuValue(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv) {
+void IMUManager::StoreImuValue(const std::optional<LinearAcceleration>& optLa, const std::optional<RotationVectorWAcc>& optRv) {
   if(optLa.has_value()) {
     m_imuLinearAccelerationReady = true;
     m_imuLinearAcceleration = optLa.value();
