@@ -1,15 +1,12 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
-extern "C" {
 #include "sh2.h"
 #include "sh2_SensorValue.h"
 #include "sh2_util.h"
 #include "shtp.h"
-}
 
-extern "C" void app_main(void) {
+void app_main(void) {
     printf("ESP32 SH2 mock startup\n");
 
     sh2_ProductIds_t productIds{};

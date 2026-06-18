@@ -11,7 +11,7 @@ find_package(GTest REQUIRED)
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(SRC
-    "${PROJECT_ROOT}/main/utils.cpp"
+    "${PROJECT_ROOT}/main/utils.c"
 )
 
 set(TEST_SRC

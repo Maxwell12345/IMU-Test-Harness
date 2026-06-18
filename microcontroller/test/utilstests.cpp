@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
-#include "utils.hpp"
+
+extern "C" {
+#include "utils.h"
+}
 
 TEST(ImuMathTest, AddReturnsSum) {
     EXPECT_FLOAT_EQ(Add(2.0f, 3.0f), 5.0f);

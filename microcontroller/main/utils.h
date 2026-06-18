@@ -1,7 +1,7 @@
-#ifndef UTILS_HPP
-#define UTILS_HPP
+#ifndef UTILS_H
+#define UTILS_H
 
 float Add(float a, float b);
 float DegreesToRadians(float degrees);
 
-#endif // UTILS_HPP
+#endif // UTILS_H

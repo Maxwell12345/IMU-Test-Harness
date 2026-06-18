@@ -1,4 +1,4 @@
-#include "utils.hpp"
+#include "utils.h"
 
 float Add(float a, float b) {
     return a + b;
