@@ -87,7 +87,12 @@ int main(int argc,char** argv) {
         comService.Stop();
 
         return EXIT_SUCCESS;
-    } catch (std::runtime_error &e) {
+    } catch(const std::invalid_argument &e) {
         IMUUtils::LOG_ERROR(e.what());
+    } catch (const std::runtime_error &e) {
+        IMUUtils::LOG_ERROR(e.what());
+        return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }

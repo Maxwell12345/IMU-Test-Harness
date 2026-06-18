@@ -51,11 +51,15 @@ private:
     void ConfigureSerialPort();
 
     /**
-     * @brief Invoke Boost Serial Port API and read data from m_serial
+     * @brief Verify POSIX serial com path is valid
      *
-     * @return Com data as a string
+     * @remark POSIX path regex must be of the form ^/dev/[^\s]+$
+     *
+     * @param [in] path that path to the serial com port
+     *
+     * @return true if path has the valid regex, else false
      */
-    std::string ReadFromPort();
+    static bool VerifyPath(const std::string& path);
 
     std::jthread m_runThread;                       // Serial port processing thread
     std::atomic<bool> m_running;                    // Processing thread status flag
@@ -66,8 +70,10 @@ private:
     std::string m_path;         // Serial port file descriptor
     unsigned int m_baudRate;    // Serial port baud rate
 
-    FRIEND_TEST(SerialComServiceTest, Initial_Values);
-    FRIEND_TEST(SerialComServiceTest, Service_Loop_Status);
+    FRIEND_TEST(SerialComServiceTest, InitialValues);
+    FRIEND_TEST(SerialComServiceTest, ServiceLoopStatus);
+    FRIEND_TEST(SerialComServiceTest, VerifyPathReturnsTrue);
+    FRIEND_TEST(SerialComServiceTest, VerifyPathReturnsFalse);
 };
 
 #endif
