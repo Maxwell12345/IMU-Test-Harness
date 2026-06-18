@@ -50,13 +50,6 @@ private:
      */
     void ConfigureSerialPort();
 
-    /**
-     * @brief Invoke Boost Serial Port API and read data from m_serial
-     *
-     * @return Com data as a string
-     */
-    std::string ReadFromPort();
-
     std::jthread m_runThread;                       // Serial port processing thread
     std::atomic<bool> m_running;                    // Processing thread status flag
 
