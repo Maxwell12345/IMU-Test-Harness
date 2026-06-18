@@ -29,6 +29,8 @@ public:
    * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for persistence.
    * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS available).
    * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
+   *
+   * @throws std::invalid_argument when databaseManager is nullptr
    */
   IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "./WMM.COF");
 
@@ -37,6 +39,9 @@ public:
    *
    * @param ekfCallbackImuOnly ekf call without gps data
    * @param ekfCallbackWithGps ekf call with gps
+   *
+   * @throws std::invalid_argument when ekfCallbackImuOnly is nullptr
+   * @throws std::invalid_argument when ekfCallbackWithGps is nullptr
    *
    * @return
    */
@@ -80,51 +85,41 @@ public:
   /**
    * @brief Call back upon host receives event from IMU sensor.
    *
-   * @remark Method does not throw exception because it is a callback from C,
-   *         but will cerr if:
-   *      - m_sInstance is nullptr
-   *      - event is nullptr
-   *      - failure to decode event
-   *      - out of bound IMU measurements
-   *      - unsupported IMU report type
-   *      - no gps ever recorded
-   *         Exits if no GPS ever recoded
+   * @param [in] optLa Optional Linear Acceleration IMU measurement 
+   * @param [in] optRv Optional Rotation Vector with Accuracy IMU measurement 
    *
-   *
-   * @param [in] cookie Opaque user-data pointer passed by the SH2 driver
-   * @param [in] event The pointer to an undecoded report coming from the IMU
-   *
-   * @throws SEE ABOVE, internally handled
-   * @throws runtime_error if m_sInstance does not exist
-   * @throws runtime_error if event is nullptr
-   * @throws runtime_error if decode event failure
-   * @throws runtime_error if sensorId is not supported
    * @throws runtime_error if sensor report invalid measurements
+   *
+   * @return
    */
   void SensorCallback(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
 
-  /**
-   *
-   *
-   */
-  void IngestSensorValue(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv);
-
 private:
   /**
+   * @brief checks whether:
+   *    - Ekf callbacks are installed
+   *    - m_imuRotationVector is updated with new unused data
+   *    - m_imuLinearAcceleration is updated with new unused data
    *
-   *
+   *  @returns true if all of the above is true
    */
   bool ReadyForEkf() const;
 
   /**
+   * @brief helper function that invokes EKF callback. The function takes a snapshot of
+   *    m_imuRotationVector, m_imuLienarAcceleration, m_latesetGps then use it to calculate
+   *    true heading, 6d-Vector and Matrix used to feed into the EKF.
    *
+   * @throws runtime_error if there has never been a gps update (same as std::nullopt)
    *
+   * @return
    */
   void DispatchToEkf();
 
   /**
+   * @brief uses system_clock::now() to get current calendar year
    *
-   *
+   * @return current year in YYYY format
    */
   int GetCurrentYear() const;
 

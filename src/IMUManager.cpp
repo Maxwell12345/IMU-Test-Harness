@@ -86,6 +86,42 @@ bool IMUManager::ReadyForEkf() const {
   return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady;
 }
 
+void IMUManager::DispatchToEkf() {
+  RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
+  LinearAcceleration linearAccelerationSnapshot = m_imuLinearAcceleration;
+
+  bool gpsSentToEkfSnapshot;
+  std::optional<GpsUpdate> gpsUpdateSnapshot;
+  {
+    std::lock_guard gpsGuard(m_gpsMutex);
+    gpsUpdateSnapshot = m_latestGps;
+    gpsSentToEkfSnapshot = m_gpsSentToEkf;
+  }
+
+  if (gpsUpdateSnapshot.has_value() == false) {
+    throw std::runtime_error("No GPS data ever recorded");
+  }
+
+  int year = GetCurrentYear();
+  Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
+                                            linearAccelerationSnapshot,
+                                            gpsUpdateSnapshot.value(),
+                                            year);
+
+  double dtSeconds = PrepareEkfTiming();
+
+  if (gpsSentToEkfSnapshot == false) {
+    Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+    m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
+
+    m_gpsSentToEkf = true;
+  } else {
+    m_ekfCallbackImuOnly(dtSeconds, zImu);
+  }
+
+  ResetImuReadyFlags();
+}
+
 int IMUManager::GetCurrentYear() const {
   auto ymdNow = std::chrono::system_clock::now();
   const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
@@ -106,45 +142,6 @@ double IMUManager::PrepareEkfTiming() {
 void IMUManager::ResetImuReadyFlags() {
   m_imuRotationVectorReady = false;
   m_imuLinearAccelerationReady = false;
-}
-
-void IMUManager::DispatchToEkf() {
-  try {
-    RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
-    LinearAcceleration linearAccelerationSnapshot = m_imuLinearAcceleration;
-
-    bool gpsSentToEkfSnapshot;
-    std::optional<GpsUpdate> gpsUpdateSnapshot;
-    {
-      gpsUpdateSnapshot = m_latestGps;
-      gpsSentToEkfSnapshot = m_gpsSentToEkf;
-    }
-
-    if (gpsUpdateSnapshot.has_value() == false) {
-      throw std::runtime_error("No GPS data ever recorded");
-    }
-
-    int year = GetCurrentYear();
-    Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
-                                              linearAccelerationSnapshot,
-                                              gpsUpdateSnapshot.value(),
-                                              year);
-
-    double dtSeconds = PrepareEkfTiming();
-
-    if (gpsSentToEkfSnapshot == false) {
-      Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
-      m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
-
-      m_gpsSentToEkf = true;
-    } else {
-      m_ekfCallbackImuOnly(dtSeconds, zImu);
-    }
-
-    ResetImuReadyFlags();
-  } catch (const std::exception &e) {
-    std::cerr << "[ERROR] IMUManager::DispatchToEkf:" << e.what() << std::endl;
-  }
 }
 
 bool IMUManager::ValidateImuEvent(std::optional<LinearAcceleration> optLa, std::optional<RotationVectorWAcc> optRv) {
