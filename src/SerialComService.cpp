@@ -2,12 +2,14 @@
 #include <boost/filesystem.hpp>
 
 #include "utils.hpp"
+#include <iostream>
+
 #include "SerialComService.hpp"
 #include "SerialPort/SerialPortBase.hpp"
 
 SerialComService::SerialComService(std::string path,
                                    unsigned int baudRate,
-                                   std::unique_ptr<SerialPortBase> serialPort) :
+                                   std::shared_ptr<SerialPortBase> serialPort) :
                                    m_running(false),
                                    m_path(path),
                                    m_baudRate(baudRate),
