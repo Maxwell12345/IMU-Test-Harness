@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "SerialComService.hpp"
-#include "SerialPort/BoostSerialPort.hpp"
+#include "BoostSerialPort.hpp"
 #include "MockClasses/MockSerialPort.hpp"
 
 TEST(SerialComServiceTest, SerialComService_Constructor_Throws_RuntimeError) {

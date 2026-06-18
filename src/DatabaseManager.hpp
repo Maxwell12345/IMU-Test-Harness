@@ -14,7 +14,7 @@
 
 #include "GpsUpdate.hpp"
 #include "EkfOutputRecord.hpp"
-#include "SerialDataModel.hpp"
+#include "imu_data.hpp"
 #include "DatabaseManagerStats.hpp"
 #include "IMURotationVectorRecord.hpp"
 #include "IMULinearAccelerationRecord.hpp"

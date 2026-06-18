@@ -5,7 +5,7 @@
 #include <iostream>
 
 #include "SerialComService.hpp"
-#include "SerialPort/SerialPortBase.hpp"
+#include "SerialPortBase.hpp"
 
 SerialComService::SerialComService(std::string path,
                                    unsigned int baudRate,
@@ -43,7 +43,8 @@ void SerialComService::Stop() {
 
     if (m_runThread.joinable()) {
         m_runThread.join();
-        IMUUtils::LOG_INFO("Joined Serial Reading thread");
+        // LOG_INFO HERE
+        std::cout << "[INFO]" << "Joined Serial Com thread" << std::endl;
     }
 }
 

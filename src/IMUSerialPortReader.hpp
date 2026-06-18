@@ -4,7 +4,7 @@
 #include <gtest/gtest_prod.h> 
 #include <optional>
 #include "SerialComService.hpp"
-#include "SerialPort/SerialPortBase.hpp"
+#include "SerialPortBase.hpp"
 #include "imu_data.hpp"
 #include "crc/crc.h"
 
