@@ -26,44 +26,6 @@ void _IMUSerialPort::SetBaudRate(unsigned int rate) {
     this->m_serial.set_option(boost::asio::serial_port_base::baud_rate(rate));
 }
 
-bool _IMUSerialPort::IsStartEncoder(const unsigned char &byte) {
-    return byte == 0xFF;
-}
-
-_IMU_MESSAGE_TYPES_ _IMUSerialPort::GetMessageType(const unsigned char &byte) {
-    switch (byte)
-        {
-        case 0x00:
-            return _IMU_MESSAGE_TYPES_::ACCELERATION;
-            
-        case 0x01:
-            return _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
-        
-        default:
-            throw std::runtime_error("Unsupported type");
-        }
-}
-
-
-unsigned int _IMUSerialPort::GetMessageLength(const unsigned char &byte) {
-    unsigned int len = byte;
-
-    return len;
-}
-
-
-bool _IMUSerialPort::ValidateMessage(const unsigned char* messageChecksum, const unsigned char* message, unsigned int messageLen) {
-    unsigned long realChecksum = CalculateCRC16CCITTFalseChecksum(message, messageLen);
-
-    unsigned int receivedChecksum = (messageChecksum[0] << 8) | messageChecksum[1];
-
-    if (realChecksum != receivedChecksum) {
-        return false;
-    }
-
-    return true;
-}
-
 void _IMUSerialPort::Callback() {
     unsigned char byte = 0;
 
@@ -126,27 +88,32 @@ void _IMUSerialPort::Close() {
     }
 }
 
-unsigned long _IMUSerialPort::CalculateCRC16CCITTFalseChecksum(unsigned char* payload, unsigned long len) {
+unsigned long _IMUSerialPort::CalculateCRC16CCITTFalseChecksum(const unsigned char* payload, unsigned long len) {
     cm_ini(&this->m_cm);
-    cm_blk(&this->m_cm, payload, len);
+    cm_blk(&this->m_cm, const_cast<unsigned char*>(payload), len);
     return cm_crc(&this->m_cm);
 }
 
 IMUSerialPortReader::IMUSerialPortReader(std::string path, unsigned int baudRate)
-    : m_serialPort(_IMUSerialPort()), m_serialComService(path, baudRate, m_serialPort)
+    : m_serialPort(std::make_shared<_IMUSerialPort>(path, baudRate)),
+      m_serialComService(path, baudRate, m_serialPort),
+      m_hasCallback(false)
 {
-    
 }
 
 void IMUSerialPortReader::InstallVectorCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> callback) {
-    this->m_serialPort.SetCompletedPayloadCallback(callback);
+    this->m_serialPort->SetCompletedPayloadCallback(callback);
+    this->m_hasCallback = true;
 }
 
 void IMUSerialPortReader::Start() {
-    
+    if (!this->m_hasCallback) {
+        throw std::runtime_error("IMU callback not installed");
+    }
+
+    this->m_serialComService.Start();
 }
 
-
 void IMUSerialPortReader::Stop() {
-
+    this->m_serialComService.Stop();
 }

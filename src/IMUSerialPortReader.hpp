@@ -16,7 +16,7 @@
 enum _IMU_MESSAGE_TYPES_ {
     ACCELERATION = 0,
     ROTATION_VECTOR = 1
-}
+};
 
 class _IMUSerialPort : public SerialPortBase {
 public:
@@ -93,7 +93,7 @@ private:
      * 
      * @remark This has zero safety and is prone to segment faults. It is on you to ensure that the len matches the pointer memory allocation.
      */
-    unsigned long CalculateCRC16CCITTFalseChecksum(unsigned char* payload, unsigned long len);
+    unsigned long CalculateCRC16CCITTFalseChecksum(const unsigned char* payload, unsigned long len);
 
     /**
      * @brief Checks for the start encoder of our custom protocol (0xFF).
@@ -107,7 +107,9 @@ private:
      * 
      * @remark
      */
-    inline bool IsStartEncoder(const unsigned char &byte);
+    inline bool IsStartEncoder(const unsigned char &byte) {
+        return byte == 0xFF;
+    }
 
     /**
      * @brief Extracts and maps message type after start encoder found.
@@ -120,7 +122,19 @@ private:
      * 
      * @remark
      */
-    inline _IMU_MESSAGE_TYPES_ GetMessageType(const unsigned char &byte);
+    inline _IMU_MESSAGE_TYPES_ GetMessageType(const unsigned char &byte) {
+        switch (byte)
+            {
+            case 0x00:
+                return _IMU_MESSAGE_TYPES_::ACCELERATION;
+                
+            case 0x01:
+                return _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
+            
+            default:
+                throw std::runtime_error("Unsupported type");
+            }
+    }
 
     /**
      * @brief Extracts message length byte and returns as an unsigned.
@@ -133,7 +147,11 @@ private:
      * 
      * @remark
      */
-    inline unsigned int GetMessageLength(const unsigned char &byte);
+    inline unsigned int GetMessageLength(const unsigned char &byte) {
+        unsigned int len = byte;
+
+        return len;
+    }
 
     /**
      * @brief Validates the message payload against the checksum in the packet.
@@ -149,7 +167,17 @@ private:
      * 
      * @remark
      */
-    inline bool ValidateMessage(const unsigned char* messageChecksum, const unsigned char* message, unsigned int messageLen);
+    inline bool ValidateMessage(const unsigned char* messageChecksum, const unsigned char* message, unsigned int messageLen) {
+        unsigned long realChecksum = CalculateCRC16CCITTFalseChecksum(message, messageLen);
+
+        unsigned int receivedChecksum = (messageChecksum[0] << 8) | messageChecksum[1];
+
+        if (realChecksum != receivedChecksum) {
+            return false;
+        }
+
+        return true;
+    }
 
     /**
      * @brief Reads exactly len bytes from the serial port into the provided buffer.
@@ -165,7 +193,7 @@ private:
      * @remark This has zero memory safety. It is on you to ensure that data points to at least
      *         len bytes of valid writable memory.
      */
-    void ReadExact(char* data, std::size_t len);
+    void ReadExact(unsigned char* data, std::size_t len);
 
 private:
     boost::asio::io_context m_io;
@@ -176,6 +204,14 @@ private:
     cm_t m_cm;
 
     FRIEND_TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateIsStartEncoder);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateGetMessageType);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateGetMessageLength);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateValidateMessage);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateSetBaudRate);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateOpen);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateClose);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateConstructor);
 };
 
 class IMUSerialPortReader {
@@ -221,7 +257,7 @@ private:
     std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
     std::atomic<bool> m_hasCallback;
 
-    std::unique_ptr<SerialPortBase> m_serialPort;
+    std::shared_ptr<_IMUSerialPort> m_serialPort;
 };
 
 #endif // IMU_SERIAL_PORT_READER_HPP
