@@ -15,8 +15,6 @@ find_package(SQLiteCpp REQUIRED)
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
-find_library(I2C_LIB i2c REQUIRED)
-
 add_library(IMUPROC_LIB
 		${PROJ_SRC}
 )
@@ -28,7 +26,6 @@ add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         IMUPROC_LIB
-        ${I2C_LIB}
         SQLiteCpp)
 target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
@@ -41,7 +38,6 @@ file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 target_link_libraries(${PROJECT_NAME}_tests
     PRIVATE
          IMUPROC_LIB
-         ${I2C_LIB}
          GTest::gtest
          GTest::gtest_main
          GTest::gmock
