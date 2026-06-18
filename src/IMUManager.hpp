@@ -124,14 +124,20 @@ private:
   int GetCurrentYear() const;
 
   /**
+   * @brief Calculates dt from last EKF invocation
    *
+   * @remarks Assume m_imuRotationVector and m_imuLinearAcceleration are newly updated and unused
+   *    and m_lastEKFMachineTime exists:
+   *    dt = firstNewlyArrivedImuMeausurementTimestamp - m_lastEKFMachineTime
    *
+   * @returns dt in seconds
    */
   double PrepareEkfTiming();
 
   /**
+   * @brief Resets both m_imuRotationVectorReady and m_imuLinearAccelerationReady to false
    *
-   *
+   * @return
    */
   void ResetImuReadyFlags();
 
@@ -162,10 +168,6 @@ private:
 
   /**
    * @brief Storing IMU Value to its respective static member variable
-   *
-   * @remarks IMU sensor ids maps to the following static member variables:
-   *      SH2_LINEAR_ACCELERATION -> s_ImuAccelerometer
-   *      SH2_MAGNETIC_FIELD_CALIBRATED -> s_ImuMagnetometer
    *
    * @param sensorValue reference to the decoded sensor value
    *

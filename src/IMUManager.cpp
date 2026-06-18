@@ -132,6 +132,8 @@ double IMUManager::PrepareEkfTiming() {
   uint64_t accHwTime = m_imuLinearAcceleration.timestamp;
   uint64_t rotHwTime = m_imuRotationVector.timestamp;
   uint64_t lastEKFhwTime = m_lastEKFMachineTime;
+
+  // TODO: This logic needs to be backtested and changed if required.
   uint64_t oldestHwTime = std::min(accHwTime, rotHwTime);
 
   double dtSeconds = static_cast<double>(oldestHwTime - lastEKFhwTime) / 1e6;

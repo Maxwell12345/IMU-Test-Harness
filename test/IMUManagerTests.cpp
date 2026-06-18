@@ -72,7 +72,7 @@ TEST(IMUManagerTest, GetStatsImuReject) {
 
 TEST(IMUManagerTest, GetStatsImuAccept) {
   IMUManager imuManager(db);
-  imuManager.InstallEkf(ekfNoGps, ekfWithGps);
+  // imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   std::optional<LinearAcceleration> optLa = {
     LinearAcceleration{1,
