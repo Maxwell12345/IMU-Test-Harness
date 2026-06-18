@@ -1,11 +1,7 @@
 #ifndef MOCK_SERIAL_PORT_HPP
 #define MOCK_SERIAL_PORT_HPP
 
-<<<<<<< HEAD
-#include "SerialPort/SerialPortBase.hpp"
-=======
 #include "SerialPortBase.hpp"
->>>>>>> main
 
 class MockSerialPort : public SerialPortBase {
 public:

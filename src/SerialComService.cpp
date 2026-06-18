@@ -1,5 +1,6 @@
 #include <thread>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 
 #include "utils.hpp"
 #include <iostream>
