@@ -31,15 +31,18 @@ idf.py build
 ~~~
 
 ### Flashing the ESP32
+### Flashing the ESP32
 1. First locate the port that the ESP is connected to on your host. In Ubuntu you can run a command like `sudo dmesg | grep tty` to see tty devices. You should be looking for an entry whose description
-contains something like "UART" or "cp210x" and reading the tty input. Another method is to run `echo "/dev/serial/by-id/$(ls /dev/serial/by-id)"` to print the full port path to your screen.
+   contains something like "UART" or "cp210x" and reading the tty input. Another method is to run `echo "/dev/serial/by-id/$(ls /dev/serial/by-id)"` to print the full port path to your screen.
 2. Ensure you have built the project using the steps above, and are in a terminal containing all necessary environment variables.
-- You can check if your terminal has all the environment variables needed by running `printenv | grep -i ESP`. If you see entries such as `ESP_IDF_VERSION` and `ESP_CLANG_LIBS_PATH` and 
-`ESP_PATH` then you do NOT need to run export.sh again.
-3. In terminal currently located in the directory containing your project root CMakeLists.txt file and run the following command `idf.py -p <full_path_to_port_from_step_1_here> flash` to simply flash the 
-code to the ESP device without being able to see it run. If you want to see it execute in a tty-like terminal, run the following command instead `idf.py -p <full_path_to_port_from_step_1_here> flash monitor` or 
-you can simply run `idf.py -p <full_path_to_port_from_step_1_here> monitor` after flashing to the device. 
-4. You should now be seeing output from your code on the screen.
+- You can check if your terminal has all the environment variables needed by running `printenv | grep -i ESP`. If you see entries such as `ESP_IDF_VERSION` and `ESP_CLANG_LIBS_PATH` and
+  `ESP_PATH` then you do NOT need to run export.sh again.
+3. In terminal currently located in the directory containing your project root CMakeLists.txt file and run the following command `idf.py -p <full_path_to_port_from_step_1_here> flash` to simply flash the
+   code to the ESP device without being able to see it run. If you want to see it execute in a tty-like terminal, run the following command instead `idf.py -p <full_path_to_port_from_step_1_here> flash monitor` or
+   you can simply run `idf.py -p <full_path_to_port_from_step_1_here> monitor` after flashing to the device.
+4. If you have issues when flashing to the device and get error messages that say you can't read the specified device, you need to add yourself to the `dialout` group using this command
+   `sudo usermod -aG dialout $USER`, then log out and log back in. Once logged back in, try to repeat all the flashing steps and it should work.
+5. You should now be seeing output from your code on the screen.
 
 # Automation
 ## Deploy
