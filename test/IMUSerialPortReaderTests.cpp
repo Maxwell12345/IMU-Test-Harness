@@ -2,7 +2,7 @@
 
 #include "IMUSerialPortReader.hpp"
 
-TEST(IMUSerialPortReaderTest, ValidateCalculateCRC16CCITTFalseChecksum) {
+TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum) {
     IMUSerialPortReader reader("/dev/ttyUSB0", 115200u);
 
     unsigned char empty[1] = {0x00};

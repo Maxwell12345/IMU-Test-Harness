@@ -33,14 +33,9 @@ public:
      * @exception boost::system::system_error if the serial port is not available
      *            or configuration fails.
      */
-    _IMUSerialPort(const std::string& path, unsigned int baudRate) : m_serial(m_io) {
-        this->Open(path);
-        this->SetBaudRate(baudRate);
-    }
+    _IMUSerialPort(const std::string& path, unsigned int baudRate);
 
-    ~_IMUSerialPort() override {
-        this->Close();
-    }
+    ~_IMUSerialPort() override;
 
     /**
      * @brief Opens the serial port.
@@ -51,9 +46,7 @@ public:
      *
      * @exception boost::system::system_error if the serial port cannot be opened.
      */
-    void Open(const std::string& port) override {
-        this->m_serial.open(port);
-    }
+    void Open(const std::string& port) override;
 
     /**
      * @brief Sets the baud rate for the serial port.
@@ -64,9 +57,7 @@ public:
      *
      * @exception boost::system::system_error if the baud rate cannot be set.
      */
-    void SetBaudRate(unsigned int rate) override {
-        this->m_serial.set_option(boost::asio::serial_port_base::baud_rate(rate));
-    }
+    void SetBaudRate(unsigned int rate) override;
 
     /**
      * @brief Reads bytes from the serial port.
@@ -75,72 +66,7 @@ public:
      *
      * @exception boost::system::system_error if the serial port read fails.
      */
-    void Callback() override {
-        std::array<char, 1> buffer{};
-
-        boost::system::error_code ec;
-        std::size_t n = this->m_serial.read_some(boost::asio::buffer(buffer), ec);
-
-        if (ec) {
-            throw boost::system::system_error(ec);
-        }
-
-        if (buffer == 0xFF) {
-            n = this->m_serial.read_some(boost::asio::buffer(buffer), ec);
-
-            if (ec) {
-                throw boost::system::system_error(ec);
-            }
-
-            _IMU_MESSAGE_TYPES_ type;
-
-            switch (buffer)
-            {
-            case 0x00:
-                type = _IMU_MESSAGE_TYPES_::ACCELERATION;
-                break;
-                
-            case 0x01:
-                type = _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
-                break;
-            
-            default:
-                throw std::runtime_error("Unsupported type");
-                break;
-            }
-
-            n = this->m_serial.read_some(boost::asio::buffer(buffer), ec);
-            if (ec) {
-                throw boost::system::system_error(ec);
-            }
-
-            unsigned int len = (unsigned int) buffer;
-
-            std::array<char, len> msg{};
-            n = this->m_serial.read_some(boost::asio::buffer(msg), ec);
-            if (ec) {
-                throw boost::system::system_error(ec);
-            }
-
-            std::array<char, 2> checksum{};
-            n = this->m_serial.read_some(boost::asio::buffer(checksum), ec);
-            if (ec) {
-                throw boost::system::system_error(ec);
-            }
-
-            unsigned long realChecksum = CalculateCRC16CCITTFalseChecksum(reinterpret_cast<unsigned char*>(msg.data()), len);
-
-            if (realChecksum != reinterpret_cast<unsigned char*>(checksum.data())) {
-
-            }
-
-
-        }
-
-        std::cout.write(.data(), n);
-        std::cout.flush();
-    }
-
+    void Callback() override;
     /**
      * @brief Passes in completed IMU measurement char* into parent.
      * 
@@ -148,47 +74,108 @@ public:
      *
      * @exception boost::system::system_error if the serial port read fails.
      */
-    void SetCompletedPayloadCallback(std::function<void(char*)> callback) {
-        this->m_callback = callback;
-    }
+    void SetCompletedPayloadCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> callback);
 
     /**
      * @brief Closes the serial port.
      * 
      * @return
      */
-    void Close() override {
-        if (this->m_serial.is_open()) {
-            boost::system::error_code ec;
-            this->m_serial.close(ec);
-        }
-    }
+    void Close() override;
 
 private:
 
     /**
      * @brief Calculates the checksum for a byte array with CRC-16/CCITT-False w/ Polynomial=16 standard.
      * 
-     * @param payload is the byte array you want the checksum out of.
-     * @param len is the length of the memory allocated to the payload.
+     * @param [in] payload is the byte array you want the checksum out of.
+     * @param [in] len is the length of the memory allocated to the payload.
      * 
      * @remark This has zero safety and is prone to segment faults. It is on you to ensure that the len matches the pointer memory allocation.
      */
-    unsigned long CalculateCRC16CCITTFalseChecksum(unsigned char* payload, unsigned long len) {
-        cm_ini(&this->m_cm);
-        cm_blk(&this->m_cm, payload, len);
-        return cm_crc(&this->m_cm);
-    }
+    unsigned long CalculateCRC16CCITTFalseChecksum(unsigned char* payload, unsigned long len);
+
+    /**
+     * @brief Checks for the start encoder of our custom protocol (0xFF).
+     * 
+     * @param [in] byte is the current byte being read on the serial port.
+     * 
+     * @return true if byte is start encoder.
+     * @return false if byte is not start encoder.
+     * 
+     * @exception std::exception / segment fault (FATAL) when handling byte reading.
+     * 
+     * @remark
+     */
+    inline bool IsStartEncoder(const unsigned char &byte);
+
+    /**
+     * @brief Extracts and maps message type after start encoder found.
+     * 
+     * @param [in] byte is the current byte being read on the serial port.
+     * 
+     * @return _IMU_MESSAGE_TYPES_ ENUM for message type.
+     * 
+     * @exception std::exception / segment fault (FATAL) when handling byte reading OR message type not available.
+     * 
+     * @remark
+     */
+    inline _IMU_MESSAGE_TYPES_ GetMessageType(const unsigned char &byte);
+
+    /**
+     * @brief Extracts message length byte and returns as an unsigned.
+     * 
+     * @param [in] byte is the current byte being read on the serial port.
+     * 
+     * @return message length in bytes.
+     * 
+     * @exception std::exception / segment fault (FATAL) when handling byte reading.
+     * 
+     * @remark
+     */
+    inline unsigned int GetMessageLength(const unsigned char &byte);
+
+    /**
+     * @brief Validates the message payload against the checksum in the packet.
+     * 
+     * @param [in] messageChecksum is the checksum 2 byte pointer (final 2 bytes in packet).
+     * @param [in] message is the raw byte payload.
+     * @param [in] messageLen is the len in bytes of the message payload.
+     * 
+     * @return true if message CRC-16/CCITT-False checksum matches the packet checksum.
+     * @return false if the message CRC-16/CCITT-False checksum does not match the packet checksum.
+     * 
+     * @exception std::exception / segment fault (FATAL) when handling byte reading.
+     * 
+     * @remark
+     */
+    inline bool ValidateMessage(const unsigned char* messageChecksum, const unsigned char* message, unsigned int messageLen);
+
+    /**
+     * @brief Reads exactly len bytes from the serial port into the provided buffer.
+     * 
+     * @param [out] data is the destination byte pointer where serial data will be written.
+     * @param [in] len is the exact number of bytes to read from the serial port.
+     * 
+     * @return
+     * 
+     * @exception boost::system::system_error if the serial port read fails, the port is closed,
+     *            or the requested number of bytes cannot be read.
+     * 
+     * @remark This has zero memory safety. It is on you to ensure that data points to at least
+     *         len bytes of valid writable memory.
+     */
+    void ReadExact(char* data, std::size_t len);
 
 private:
     boost::asio::io_context m_io;
     boost::asio::serial_port m_serial;
 
-    std::function<void(char*)> m_callback;
+    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
 
     cm_t m_cm;
 
-    FRIEND_TEST(IMUSerialPortReaderTest, ValidateCalculateCRC16CCITTFalseChecksum);
+    FRIEND_TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
 };
 
 class IMUSerialPortReader {
