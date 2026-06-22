@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include "GpsUpdate.hpp"
+#include "gps/GpsManager.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
 #include "IMUSerialPortReader.hpp"
@@ -137,17 +138,20 @@ private:
   void _GPSCallback(const GpsUpdate &gpsUpdate);
 
 private:
-  std::atomic<bool> m_isKFConfigured;
   std::thread m_serviceThread;
 
   std::shared_ptr<DatabaseManager> m_dbManager;
-  IMUSerialPortReader m_imuSerialPortReader;
 
-  std::mutex m_kFUpdateMutex;
-  IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   Vector6d m_latestX;
   Matrix6d m_latestP;
+  std::mutex m_kFUpdateMutex;
+  IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
+
   IMUManager m_imuManager;
+  std::atomic<bool> m_isKFConfigured;
+  IMUSerialPortReader m_imuSerialPortReader;
+
+  GpsManager m_gpsManager;
 
   FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);

@@ -22,7 +22,7 @@
 class GpsManager {
 public:
     GpsManager();
-
+    
     void InstallCallback(std::function<void(const GpsUpdate&)> callback);
     void Start();
     void Stop();

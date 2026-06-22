@@ -7,12 +7,12 @@
  *
  ******************************************************************************/
 
- #include "GpsManager.hpp"
+#include "GpsManager.hpp"
 
-#define NMEA_PORT "/dev/ttyACM0"
+#define NMEA_PORT "\\\\.\\COM11"
 
 GpsManager::GpsManager()
-    : m_nmeaReader(NMEA_PORT, 9600) {}
+    : m_nmeaReader(NMEA_PORT, 115200) {}
 
 void GpsManager::InstallCallback(std::function<void(const GpsUpdate&)> callback) {
     std::lock_guard<std::mutex> lock(m_callbackMutex);
@@ -23,22 +23,20 @@ void GpsManager::InstallCallback(std::function<void(const GpsUpdate&)> callback)
 void GpsManager::Start() {
     if (m_running.exchange(true)) return;
 
-    if (!m_nmeaReader.open()) {
-        m_running = false;
-        return;
-    }
+    m_nmeaReader.Start();
 
     m_thread = std::thread([this]() {
         NmeaMessage msg;
 
         while (m_running) {
-            if (!m_nmeaReader.readMessage(msg)) continue;
-            if (!msg.validChecksum) continue;
+            if (m_nmeaReader.GetNmeaMessageReady() == false) continue;
+
+            msg = m_nmeaReader.GetNmeaMessage();
+            if (msg.validChecksum == false) continue;
 
             GpsUpdate update = BuildGpsUpdate(msg);
 
             std::function<void(const GpsUpdate&)> callback;
-
             {
                 std::lock_guard<std::mutex> lock(m_callbackMutex);
                 if (!m_isCallbackInstalled) continue;
@@ -53,7 +51,7 @@ void GpsManager::Start() {
 void GpsManager::Stop() {
     if (!m_running.exchange(false)) return;
 
-    m_nmeaReader.close();
+    m_nmeaReader.Stop();
 
     if (m_thread.joinable()) {
         m_thread.join();

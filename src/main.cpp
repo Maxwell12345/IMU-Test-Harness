@@ -10,6 +10,7 @@
 #include "SerialComService.hpp"
 #include "IMUSerialPortReader.hpp"
 #include "BoostSerialPort.hpp"
+#include "gps/GpsManager.hpp"
 
 std::atomic<bool> keepRunning{true};
 
@@ -22,29 +23,19 @@ int main(int argc,char** argv) {
     try {
         std::signal(SIGINT, signalHandler);
 
-        // Example call back for NMEA
-        std::function f = [](boost::asio::serial_port& serial){
-            boost::asio::streambuf buf;
-            boost::asio::read_until(serial, buf, "\n");
-            std::istream is(&buf);
-            std::string line;
-            std::getline(is, line);
-            // TODO: LOG_DEBUG HERE
-            std::cout << "[DEBUG]" << line << std::endl;
+        auto f = [](const GpsUpdate& g){
+            printf("[DEBUG] Lat %0.5f Lon %0.5f\n", g.latitude, g.longitude);
         };
-
-        std::string path = "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7CMb151406-if00-port0";
-        SerialComService comService(path,
-                                    115200,
-                                    std::make_unique<BoostSerialPort>(f));
-        comService.Start();
+        GpsManager gpsManager;
+        gpsManager.InstallCallback(f);
+        gpsManager.Start();
 
         std::cout << "\nPress ctrl + c to stop application\n\n";
         while(keepRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        comService.Stop();
+        gpsManager.Stop();
 
         return EXIT_SUCCESS;
     } catch(const std::invalid_argument &e) {

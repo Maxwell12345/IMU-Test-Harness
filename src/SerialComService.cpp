@@ -58,6 +58,9 @@ void SerialComService::ConfigureSerialPort() {
 }
 
 bool SerialComService::VerifyPath(const std::string& path) {
-    const boost::regex pattern(R"(^/dev/\S+$)");
+    const boost::regex pattern(
+        R"(^(?:/dev/\S+|(?:\\\\\.\\)?COM[1-9][0-9]*)$)",
+        boost::regex::icase
+    );
     return boost::regex_match(path, pattern);
 }

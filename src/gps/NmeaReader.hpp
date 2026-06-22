@@ -1,38 +1,94 @@
 #pragma once
 
-#include <string>
+#include <boost/asio.hpp>
 
-struct NmeaMessage {
-    std::string type;
-    std::string raw;
-    bool validChecksum = false;
-    bool validFix = false;
-    double lat = 0.0;
-    double lon = 0.0;
-    double speedKnots = 0.0;
-    double courseDeg = 0.0;
-    int fixQuality = 0;
-    int numSatellites = 0;
-    double hdop = 0.0;
-    double altitudeM = 0.0;
-};
+#include "NmeaMessage.hpp"
+#include "BoostSerialPort.hpp"
+#include "SerialComService.hpp"
 
 class NmeaReader {
 public:
-    explicit NmeaReader(const std::string& port, int baud);
+
+    /**
+     * @param [in] path com port path
+     * @param [in] baud baud rate
+     */
+    explicit NmeaReader(const std::string& path, int baud);
     ~NmeaReader();
 
-    bool open();
-    void close();
-    bool readMessage(NmeaMessage& out);
+    /**
+     * @brief Accessor to m_nmeaMessage
+     * 
+     * @return snapshot of m_nmeaMessages
+     */
+    NmeaMessage GetNmeaMessage() const;
+
+    /**
+     * @brief accessor of m_nmeaMessageReady. Can be used to check if new nmea came in from com port
+     * 
+     * @return true if new nmea is received, else false
+     */
+    bool GetNmeaMessageReady() const;
+
+    /**
+     * @brief starts com serial service and decode incoming nmea
+     * 
+     * @return
+     */
+    void Start();
+
+    /**
+     * @brief stops com serial service
+     * 
+     * @return
+     */
+    void Stop();
 
 private:
-    std::string m_port;
-    int m_baud;
-    int m_fd = -1;
+    /**
+     * @brief reads from serial com port and parses for nmea Message.
+     * 
+     * @remark If valid nmea is recieved, function will set m_nmeaMessage = new data
+     *      and m_nmeaMessageReady = true
+     * 
+     * @param [in] serial boost serial port
+     * 
+     * @return
+     */
+    void Callback(boost::asio::serial_port& serial);
 
-    bool readLine(std::string& line);
-    NmeaMessage parse(const std::string& line);
-    bool validChecksum(const std::string& line);
-    double parseDeg(const std::string& raw, const std::string& hemi);
+    /**
+     * @brief parses nmea sentence and return a NmeaMessage struct representation of the nmea sentence
+     * 
+     * @param [in] line nmea sentence
+     * 
+     * @return NmeaMessage object with parsed data
+     */
+    NmeaMessage Parse(const std::string& line);
+
+    /**
+     * @brief verifies checksum
+     * 
+     * @return true if checksum is correct from data, else false
+     */
+    bool ValidChecksum(const std::string& line);
+
+    /**
+     * @brief extracts nmea data to degree.
+     * 
+     * @remarks negative return value indicate South or West
+     * 
+     * @param [in] raw raw representation of lat / lon in deg, min
+     * @param [in] hemi one of N, S, E, or W direction
+     * 
+     * @return lat/ lon in degrees
+     */
+    double ParseDeg(const std::string& raw, const std::string& hemi);
+
+    mutable std::atomic<bool> m_nmeaMessageReady;       // Ready state if m_nmeaMessage is valid and unaccessed
+    mutable std::mutex m_nmeaMessageMutex;              // mutex for m_nmeaMessage
+    NmeaMessage m_nmeaMessage;                          // parsed nmea sentence
+
+    std::unique_ptr<SerialComService> m_serialComService;
+    
 };

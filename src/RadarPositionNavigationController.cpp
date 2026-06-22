@@ -23,10 +23,15 @@ RadarPositionNavigationController::RadarPositionNavigationController(std::shared
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
 
-  auto callbackLambda = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa){
+  auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
+                                                              std::optional<Raw_Accelerometer> optLa){
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader.InstallVectorCallback(callbackLambda);
+  this->m_imuSerialPortReader.InstallVectorCallback(imuSerialCallback);
+
+  auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
+    imuManager.UpdateLatestGps(g);
+  };
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }

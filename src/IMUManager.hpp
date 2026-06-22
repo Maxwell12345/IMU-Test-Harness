@@ -8,7 +8,6 @@
 #include <optional>
 
 #include <Eigen/Dense>
-#include <boost/shared_ptr.hpp>
 #include <gtest/gtest_prod.h>
 
 #include "DatabaseManager.hpp"
@@ -225,7 +224,7 @@ private:
   IMUManagerStats m_stats; // Internal IMUManagerStats data state, holds accepted and rejected incoming IMU and Gps data
 
   MagneticDeclination m_magneticDeclination;            // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
-  std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
+  std::shared_ptr<DatabaseManager> m_databaseManager;   // shared ptr to DatabaseManager used to store incoming data persistently
 
   std::function<void(double, Vector6d &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
   std::function<void(double, Vector6d &, Vector6d &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data

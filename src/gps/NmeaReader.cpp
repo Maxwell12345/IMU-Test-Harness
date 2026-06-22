@@ -1,11 +1,27 @@
 #include "NmeaReader.hpp"
 
 #include <fcntl.h>
-#include <unistd.h>
-#include <termios.h>
 #include <sstream>
 #include <vector>
 #include <cstdlib>
+#include <memory>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <termios.h>
+#endif
+
+NmeaReader::NmeaReader(const std::string& path, int baud): m_nmeaMessageReady(false) {
+    auto f = [nmeaReader = this](boost::asio::serial_port& serial){
+        nmeaReader->Callback(serial);
+    };
+
+    m_serialComService = std::make_unique<SerialComService>(path,
+                                                            baud,
+                                                            std::make_unique<BoostSerialPort>(f));
+}
 
 static std::vector<std::string> split(const std::string& s, char d) {
     std::vector<std::string> out;
@@ -22,78 +38,46 @@ static int hexval(char c) {
     return -1;
 }
 
-NmeaReader::NmeaReader(const std::string& port, int baud)
-    : m_port(port), m_baud(baud) {}
-
 NmeaReader::~NmeaReader() {
-    close();
+    m_serialComService->Stop();
 }
 
-bool NmeaReader::open() {
-    m_fd = ::open(m_port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
-    if (m_fd < 0) return false;
-
-    termios tty{};
-    if (tcgetattr(m_fd, &tty) != 0) return false;
-
-    speed_t speed = B9600;
-    if (m_baud == 4800) speed = B4800;
-    else if (m_baud == 19200) speed = B19200;
-    else if (m_baud == 38400) speed = B38400;
-    else if (m_baud == 57600) speed = B57600;
-    else if (m_baud == 115200) speed = B115200;
-
-    cfsetospeed(&tty, speed);
-    cfsetispeed(&tty, speed);
-
-    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-    tty.c_iflag &= ~IGNBRK;
-    tty.c_lflag = 0;
-    tty.c_oflag = 0;
-    tty.c_cc[VMIN] = 0;
-    tty.c_cc[VTIME] = 10;
-    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
-    tty.c_cflag |= CLOCAL | CREAD;
-    tty.c_cflag &= ~(PARENB | PARODD);
-    tty.c_cflag &= ~CSTOPB;
-    tty.c_cflag &= ~CRTSCTS;
-
-    return tcsetattr(m_fd, TCSANOW, &tty) == 0;
+void NmeaReader::Start() {
+    m_serialComService->Start();
 }
 
-void NmeaReader::close() {
-    if (m_fd >= 0) {
-        ::close(m_fd);
-        m_fd = -1;
-    }
+void NmeaReader::Stop() {
+    m_serialComService->Stop();
 }
 
-bool NmeaReader::readLine(std::string& line) {
-    line.clear();
-
-    char c;
-    while (true) {
-        int n = ::read(m_fd, &c, 1);
-        if (n <= 0) return false;
-        if (c == '\n') return !line.empty();
-        if (c != '\r') line.push_back(c);
-    }
+bool NmeaReader::GetNmeaMessageReady() const {
+    return m_nmeaMessageReady;
 }
 
-bool NmeaReader::readMessage(NmeaMessage& out) {
+NmeaMessage NmeaReader::GetNmeaMessage() const {
+    std::lock_guard msgGuard(m_nmeaMessageMutex);
+    m_nmeaMessageReady = false;
+    return m_nmeaMessage;
+}
+
+void NmeaReader::Callback(boost::asio::serial_port& serial) {
+    boost::asio::streambuf buf;
+    boost::asio::read_until(serial, buf, "\n");
+    std::istream is(&buf);
     std::string line;
+    std::getline(is, line);
 
-    while (readLine(line)) {
-        if (!line.empty() && line[0] == '$') {
-            out = parse(line);
-            return true;
+    printf("[DEBUG] %s\n", line.c_str());
+
+    if (!line.empty() && line[0] == '$') {
+        m_nmeaMessage = Parse(line);
+        if(m_nmeaMessage.validChecksum == true) {
+            m_nmeaMessageReady = true;
         }
     }
-
-    return false;
 }
 
-bool NmeaReader::validChecksum(const std::string& line) {
+bool NmeaReader::ValidChecksum(const std::string& line) {
     if (line.size() < 4 || line[0] != '$') return false;
 
     size_t star = line.find('*');
@@ -111,7 +95,7 @@ bool NmeaReader::validChecksum(const std::string& line) {
     return given == chk;
 }
 
-double NmeaReader::parseDeg(const std::string& raw, const std::string& hemi) {
+double NmeaReader::ParseDeg(const std::string& raw, const std::string& hemi) {
     if (raw.empty()) return 0.0;
 
     double v = std::atof(raw.c_str());
@@ -123,10 +107,10 @@ double NmeaReader::parseDeg(const std::string& raw, const std::string& hemi) {
     return out;
 }
 
-NmeaMessage NmeaReader::parse(const std::string& line) {
+NmeaMessage NmeaReader::Parse(const std::string& line) {
     NmeaMessage msg;
     msg.raw = line;
-    msg.validChecksum = validChecksum(line);
+    msg.validChecksum = ValidChecksum(line);
 
     if (!msg.validChecksum) return msg;
 
@@ -140,15 +124,15 @@ NmeaMessage NmeaReader::parse(const std::string& line) {
 
     if ((msg.type == "GPRMC" || msg.type == "GNRMC") && f.size() >= 10) {
         msg.validFix = f[2] == "A";
-        msg.lat = parseDeg(f[3], f[4]);
-        msg.lon = parseDeg(f[5], f[6]);
+        msg.lat = ParseDeg(f[3], f[4]);
+        msg.lon = ParseDeg(f[5], f[6]);
         msg.speedKnots = f[7].empty() ? 0.0 : std::atof(f[7].c_str());
         msg.courseDeg = f[8].empty() ? 0.0 : std::atof(f[8].c_str());
     }
 
     if ((msg.type == "GPGGA" || msg.type == "GNGGA") && f.size() >= 10) {
-        msg.lat = parseDeg(f[2], f[3]);
-        msg.lon = parseDeg(f[4], f[5]);
+        msg.lat = ParseDeg(f[2], f[3]);
+        msg.lon = ParseDeg(f[4], f[5]);
         msg.fixQuality = f[6].empty() ? 0 : std::atoi(f[6].c_str());
         msg.validFix = msg.fixQuality > 0;
         msg.numSatellites = f[7].empty() ? 0 : std::atoi(f[7].c_str());
