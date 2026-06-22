@@ -6,3 +6,8 @@ services:
     volumes:
       - ./:/home/inu-display
     command: ["sleep", "infinity"]
+kalmanvalues:
+  m_gpsChiSqLowerBound: 0.20
+  m_gpsChiSqUpperBound: 0.95
+  m_imuChiSqLowerBound: 0.20
+  m_imuChiSqUpperBound: 0.95

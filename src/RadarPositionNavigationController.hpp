@@ -155,7 +155,7 @@ private:
    *
    * @remarks
    */
-  void ParseYamlToKalmanFilter();
+  void ParseYamlForKalmanFilterValues();
 
 private:
   std::atomic<bool> m_isKFConfigured;
@@ -186,6 +186,7 @@ private:
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsReturnsWithoutConfiguredKF);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyProducesNonFiniteStateBecauseKFUsesSingularR);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR);
+  FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting);
 };
 
 #endif // RADAR_POSITION_NAVIGATION_CONTROLLER_HPP

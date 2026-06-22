@@ -6,10 +6,6 @@
 
 #include "RadarPositionNavigationController.hpp"
 
-#define GPS_CHI_SQ_LOWER_BOUND 0.20
-#define GPS_CHI_SQ_UPPER_BOUND 0.95
-#define IMU_CHI_SQ_LOWER_BOUND 0.20
-#define IMU_CHI_SQ_UPPER_BOUND 0.95
 #define GPS_N 20
 #define GPS_L 5
 #define IMU_N 100
@@ -39,8 +35,10 @@ std::function<void(const GpsUpdate &)> RadarPositionNavigationController::GetGPS
 
 void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, double lon0) {
   if (!this->m_isKFConfigured) {
-    this->ParseYamlToKalmanFilter();
-    this->ConfigureKalmanFilter(lat0, lon0, GPS_CHI_SQ_LOWER_BOUND, GPS_CHI_SQ_UPPER_BOUND, IMU_CHI_SQ_LOWER_BOUND, IMU_CHI_SQ_UPPER_BOUND);
+    this->ParseYamlForKalmanFilterValues();
+    this->ConfigureKalmanFilter(
+        lat0, lon0, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
+    );
 
     this->m_isKFConfigured = true;
   }
@@ -149,8 +147,10 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
         this->m_isKFConfigured.store(false);
         return;
       }
-
-      this->ConfigureKalmanFilter(lat, lon, GPS_CHI_SQ_LOWER_BOUND, GPS_CHI_SQ_UPPER_BOUND, IMU_CHI_SQ_LOWER_BOUND, IMU_CHI_SQ_UPPER_BOUND);
+      // note: original was lat0, lon0
+      this->ConfigureKalmanFilter(
+          lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
+      );
     }
   }
 }
@@ -181,8 +181,10 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
         this->m_isKFConfigured.store(false);
         return;
       }
-
-      this->ConfigureKalmanFilter(lat, lon, GPS_CHI_SQ_LOWER_BOUND, GPS_CHI_SQ_UPPER_BOUND, IMU_CHI_SQ_LOWER_BOUND, IMU_CHI_SQ_UPPER_BOUND);
+      // note: original was lat0, lon0
+      this->ConfigureKalmanFilter(
+          lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
+      );
     }
   }
 }
@@ -201,4 +203,13 @@ void RadarPositionNavigationController::TotalDestruction() {
 
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
+}
+
+void RadarPositionNavigationController::ParseYamlForKalmanFilterValues() {
+  YAML::Node root = YAML::LoadFile("compose.yml");
+
+  this->m_gpsChiSqLowerBound = root["kalmanvalues"]["m_gpsChiSqLowerBound"].as<int>();
+  this->m_gpsChiSqUpperBound = root["kalmanvalues"]["m_gpsChiSqUpperBound"].as<int>();
+  this->m_imuChiSqLowerBound = root["kalmanvalues"]["m_imuChiSqLowerBound"].as<int>();
+  this->m_imuChiSqUpperBound = root["kalmanvalues"]["m_imuChiSqUpperBound"].as<int>();
 }
