@@ -59,11 +59,12 @@ typedef struct {
     UBaseType_t task_priority;
 } sh2service_config_t;
 
-esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx);
+void sh2service_default_config2(sh2service_config_t *config);
 
-esp_err_t sh2service_stop(void);
+esp_err_t sh2service_start2(const sh2service_config_t *config, sh2service_callback_t callback, void *ctx);
 
-bool sh2service_is_running(void);
+esp_err_t sh2service_stop2(void);
 
+bool sh2service_is_running2(void);
 
-#endif // SH2SERVICE_H
+#endif

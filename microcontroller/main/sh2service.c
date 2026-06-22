@@ -20,6 +20,7 @@ static i2c_master_dev_handle_t s_dev_handle;
 static sh2_Hal_t s_hal;
 
 static sh2service_config_t s_config;
+
 static sh2service_callback_t s_callback;
 static void *s_callback_ctx;
 
@@ -81,6 +82,14 @@ static int hal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len)
     return len;
 }
 
+static void event_callback(void *cookie, sh2_AsyncEvent_t *event)
+{
+    if (event->eventId == SH2_RESET) {
+        s_reset_seen = 1;
+        s_sensors_enabled = 0;
+    }
+}
+
 static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 {
     sh2_SensorValue_t value;
@@ -124,16 +133,36 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     }
 }
 
-static void event_callback(void *cookie, sh2_AsyncEvent_t *event)
-{
-    if (event->eventId == SH2_RESET) {
-        s_reset_seen = 1;
-        s_sensors_enabled = 0;
-    }
-}
 
-static esp_err_t init_int_pin(void)
-{
+esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx) {
+    if (s_task_handle != NULL || s_running) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Set SH2 configs.
+    s_config.i2c_port = I2C_NUM_0; // Use ESP32 I2C controller number 0.
+    s_config.i2c_addr = 0x4A;
+
+    // These are the ESP32 GPIO pins connected to the BNO085.
+    s_config.scl_pin = GPIO_NUM_22;
+    s_config.sda_pin = GPIO_NUM_21;
+    s_config.int_pin = GPIO_NUM_27;
+
+    s_config.i2c_speed_hz = 100000; // This sets the I2C bus speed to 100 kHz.
+    s_config.report_interval_us = 5000; // This asks the BNO085 to produce sensor reports every 5000 microseconds.
+
+    s_config.reset_wait_ms = 3000; // Wait 3000 milliseconds, or 3 seconds, after reset/startup-related setup.
+    s_config.startup_delay_ms = 1000; // Wait 1000 milliseconds, or 1 second, during startup before continuing.
+
+    s_config.task_stack_size = 4096; // This gives the FreeRTOS service task a stack size of 4096 bytes. (Size of packet we read from the IMU)
+
+    s_callback = callback;
+    s_callback_ctx = ctx;
+
+    s_stop_requested = 0;
+    s_reset_seen = 0;
+    s_sensors_enabled = 0;
+
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << s_config.int_pin,
         .mode = GPIO_MODE_INPUT,
@@ -142,11 +171,12 @@ static esp_err_t init_int_pin(void)
         .intr_type = GPIO_INTR_DISABLE,
     };
 
-    return gpio_config(&cfg);
-}
+    esp_err_t err = gpio_config(&cfg);
 
-static esp_err_t init_i2c(void)
-{
+    if (err != ESP_OK) {
+        return err;
+    }
+
     i2c_master_bus_config_t bus_cfg = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .i2c_port = s_config.i2c_port,
@@ -156,7 +186,7 @@ static esp_err_t init_i2c(void)
         .flags.enable_internal_pullup = true,
     };
 
-    esp_err_t err = i2c_new_master_bus(&bus_cfg, &s_bus_handle);
+    err = i2c_new_master_bus(&bus_cfg, &s_bus_handle);
     if (err != ESP_OK) {
         return err;
     }
@@ -174,78 +204,6 @@ static esp_err_t init_i2c(void)
         return err;
     }
 
-    return ESP_OK;
-}
-
-static void cleanup_i2c(void)
-{
-    if (s_dev_handle != NULL) {
-        i2c_master_bus_rm_device(s_dev_handle);
-        s_dev_handle = NULL;
-    }
-
-    if (s_bus_handle != NULL) {
-        i2c_del_master_bus(s_bus_handle);
-        s_bus_handle = NULL;
-    }
-}
-
-static void service_for_ms(uint32_t ms)
-{
-    uint32_t steps = ms / 10;
-
-    for (uint32_t i = 0; i < steps && !s_stop_requested; i++) {
-        sh2_service();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-
-static int wait_for_reset(uint32_t ms)
-{
-    uint32_t steps = ms / 10;
-
-    for (uint32_t i = 0; i < steps && !s_reset_seen && !s_stop_requested; i++) {
-        sh2_service();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-
-    return s_reset_seen;
-}
-
-static int enable_sensor(sh2_SensorId_t id, uint32_t interval_us)
-{
-    sh2_SensorConfig_t cfg;
-    memset(&cfg, 0, sizeof(cfg));
-
-    cfg.reportInterval_us = interval_us;
-
-    return sh2_setSensorConfig(id, &cfg);
-}
-
-static int configure_sensors(void)
-{
-    int rc;
-
-    rc = enable_sensor(SH2_LINEAR_ACCELERATION, s_config.report_interval_us);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "linear acceleration enable failed rc=%d", rc);
-        return rc;
-    }
-
-    service_for_ms(100);
-
-    rc = enable_sensor(SH2_ROTATION_VECTOR, s_config.report_interval_us);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "rotation vector enable failed rc=%d", rc);
-        return rc;
-    }
-
-    s_sensors_enabled = 1;
-    return 0;
-}
-
-static esp_err_t open_sh2(void)
-{
     s_hal.open = hal_open;
     s_hal.close = hal_close;
     s_hal.read = hal_read;
@@ -275,125 +233,59 @@ static esp_err_t open_sh2(void)
         return ESP_FAIL;
     }
 
-    if (!wait_for_reset(s_config.reset_wait_ms)) {
+    uint32_t steps = s_config.reset_wait_ms / 10;
+
+    for (uint32_t i = 0; i < steps && !s_reset_seen && !s_stop_requested; i++) {
+        sh2_service();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (!s_reset_seen) {
         ESP_LOGE(TAG, "no SH2 reset seen");
         sh2_close();
         return ESP_ERR_TIMEOUT;
     }
 
-    service_for_ms(s_config.startup_delay_ms);
+    for (uint32_t i = 0; i < steps && !s_stop_requested; i++) {
+        sh2_service();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 
-    rc = configure_sensors();
+    sh2_SensorConfig_t acc_cfg_disp;
+    memset(&acc_cfg_disp, 0, sizeof(acc_cfg_disp));
+
+    acc_cfg_disp.reportInterval_us = s_config.report_interval_us;
+
+    rc = sh2_setSensorConfig(SH2_LINEAR_ACCELERATION, &acc_cfg_disp);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "linear acceleration enable failed rc=%d", rc);
+        return rc;
+    }
+
+    for (uint32_t i = 0; i < 10 && !s_stop_requested; i++) {
+        sh2_service();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    sh2_SensorConfig_t rot_cfg_disp;
+    memset(&rot_cfg_disp, 0, sizeof(rot_cfg_disp));
+
+    rot_cfg_disp.reportInterval_us = s_config.report_interval_us;
+
+    rc = sh2_setSensorConfig(SH2_ROTATION_VECTOR, &rot_cfg_disp);
     if (rc != 0) {
         sh2_close();
         return ESP_FAIL;
     }
 
-    return ESP_OK;
-}
-
-static void sh2service_task(void *arg)
-{
-    s_running = 1;
-
-    while (!s_stop_requested) {
-        sh2_service();
-
-        if (s_reset_seen && !s_sensors_enabled) {
-            s_reset_seen = 0;
-            service_for_ms(s_config.startup_delay_ms);
-            configure_sensors();
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-
-    sh2_close();
-    cleanup_i2c();
-
-    s_running = 0;
-    s_task_handle = NULL;
-
-    vTaskDelete(NULL);
-}
-
-void sh2service_default_config(sh2service_config_t *config)
-{
-    memset(config, 0, sizeof(*config));
-
-    config->i2c_port = I2C_NUM_0;
-    config->i2c_addr = 0x4A;
-
-    config->scl_pin = GPIO_NUM_22;
-    config->sda_pin = GPIO_NUM_21;
-    config->int_pin = GPIO_NUM_27;
-
-    config->i2c_speed_hz = 100000;
-    config->report_interval_us = 5000;
-
-    config->reset_wait_ms = 3000;
-    config->startup_delay_ms = 1000;
-
-    config->task_stack_size = 4096;
-    config->task_priority = 5;
-}
-
-esp_err_t sh2service_start(const sh2service_config_t *config, sh2service_callback_t callback, void *ctx)
-{
-    if (s_task_handle != NULL || s_running) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    if (config == NULL) {
-        sh2service_default_config(&s_config);
-    } else {
-        memcpy(&s_config, config, sizeof(s_config));
-    }
-
-    s_callback = callback;
-    s_callback_ctx = ctx;
-
-    s_stop_requested = 0;
-    s_reset_seen = 0;
-    s_sensors_enabled = 0;
-
-    esp_err_t err = init_int_pin();
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    err = init_i2c();
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    err = open_sh2();
-    if (err != ESP_OK) {
-        cleanup_i2c();
-        return err;
-    }
-
-    BaseType_t ok = xTaskCreate(
-        sh2service_task,
-        "sh2service",
-        s_config.task_stack_size,
-        NULL,
-        s_config.task_priority,
-        &s_task_handle
-    );
-
-    if (ok != pdPASS) {
-        sh2_close();
-        cleanup_i2c();
-        s_task_handle = NULL;
-        return ESP_ERR_NO_MEM;
-    }
+    s_sensors_enabled = 1;
+    rc = 0;
 
     return ESP_OK;
+
 }
 
-esp_err_t sh2service_stop(void)
-{
+esp_err_t sh2service_stop(void) {
     if (s_task_handle == NULL && !s_running) {
         return ESP_OK;
     }
@@ -411,7 +303,6 @@ esp_err_t sh2service_stop(void)
     return ESP_OK;
 }
 
-bool sh2service_is_running(void)
-{
+bool sh2service_is_running(void) {
     return s_running != 0;
 }

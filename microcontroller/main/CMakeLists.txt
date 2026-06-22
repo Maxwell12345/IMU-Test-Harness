@@ -4,6 +4,7 @@ idf_component_register(
     SRCS
         "main.c"
         "sh2service.c"
+        "sh2service2.c"
         "${SH2_DIR}/sh2.c"
         "${SH2_DIR}/sh2_util.c"
         "${SH2_DIR}/shtp.c"
