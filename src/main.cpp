@@ -47,8 +47,14 @@ int main(int argc,char** argv) {
         comService.Stop();
 
         return EXIT_SUCCESS;
-    } catch (std::runtime_error &e) {
+    } catch(const std::invalid_argument &e) {
         //TODO: LOG_ERROR HERE
         std::cout << "[ERROR]" << e.what() << std::endl;
+    } catch (const std::runtime_error &e) {
+        //TODO: LOG_ERROR HERE
+        std::cout << "[ERROR]" << e.what() << std::endl;
+        return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }

@@ -1,5 +1,6 @@
 #include <thread>
 #include <boost/filesystem.hpp>
+#include <boost/regex.hpp>
 
 #include "utils.hpp"
 #include <iostream>
@@ -14,6 +15,9 @@ SerialComService::SerialComService(std::string path,
                                    m_path(path),
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
+    if(VerifyPath(path) == false) {
+        throw std::invalid_argument("The serial port is invalid. Path should be \"/dev/...\" with no space");
+    }
     ConfigureSerialPort();
 }
 
@@ -51,4 +55,9 @@ void SerialComService::Stop() {
 void SerialComService::ConfigureSerialPort() {
     m_serial->Open(m_path);
     m_serial->SetBaudRate(m_baudRate);
+}
+
+bool SerialComService::VerifyPath(const std::string& path) {
+    const boost::regex pattern(R"(^/dev/\S+$)");
+    return boost::regex_match(path, pattern);
 }
