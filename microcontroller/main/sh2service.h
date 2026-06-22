@@ -65,5 +65,4 @@ esp_err_t sh2service_stop(void);
 
 bool sh2service_is_running(void);
 
-
-#endif // SH2SERVICE_H
+#endif

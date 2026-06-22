@@ -5,7 +5,7 @@
 
 #include "esp_log.h"
 
-#include "sh2service2.h"
+#include "sh2service.h"
 
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
@@ -30,28 +30,6 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
     }
 }
 
-// void app_main(void)
-// {
-//     setvbuf(stdout, NULL, _IONBF, 0);
-//     esp_log_level_set("*", ESP_LOG_NONE);
-
-//     printf("\n\n\n");
-//     printf("BOOT,APP_MAIN\n");
-
-//     esp_err_t err = sh2service_start(imu_callback, NULL);
-//     if (err != ESP_OK) {
-//         printf("ERR,SH2SERVICE_START,%d\n", err);
-//         return;
-//     }
-
-//     printf("BEGIN_IMU_CSV\n");
-//     printf("TYPE,TIME_US,A,B,C,D,E\n");
-
-//     while (1) {
-//         vTaskDelay(pdMS_TO_TICKS(1000));
-//     }
-// }
-
 void app_main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -60,10 +38,7 @@ void app_main(void)
     printf("\n\n\n");
     printf("BOOT,APP_MAIN\n");
 
-    sh2service_config_t config;
-    sh2service_default_config2(&config);
-
-    esp_err_t err = sh2service_start2(&config, imu_callback, NULL);
+    esp_err_t err = sh2service_start(imu_callback, NULL);
     if (err != ESP_OK) {
         printf("ERR,SH2SERVICE_START,%d\n", err);
         return;
