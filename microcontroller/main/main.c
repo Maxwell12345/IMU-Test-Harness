@@ -7,6 +7,13 @@
 
 #include "sh2service.h"
 
+#include "sh2.h"
+#include "sh2_SensorValue.h"
+#include "sh2_util.h"
+#include "shtp.h"
+#include "esp_log_level.h"
+#include <serial.h>
+
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
     if (event->type == SH2SERVICE_LINEAR_ACCELERATION) {
@@ -32,6 +39,7 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(host_serial_init());
     setvbuf(stdout, NULL, _IONBF, 0);
     esp_log_level_set("*", ESP_LOG_NONE);
 
@@ -50,4 +58,12 @@ void app_main(void)
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+
+    acceleration_t acceleration = {
+        1.0f,
+        2.0f,
+        3.0f,
+        0x445566778899AABB
+    };
+    ESP_ERROR_CHECK(send_acceleration_t(&acceleration));
 }
