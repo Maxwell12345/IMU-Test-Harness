@@ -9,7 +9,10 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED filesystem system)
+find_package(Boost CONFIG REQUIRED filesystem)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    find_package(Boost CONFIG REQUIRED system)
+endif()
 find_package(SQLiteCpp REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
@@ -29,9 +32,11 @@ add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         Boost::filesystem
-        Boost::system
         IMUPROC_LIB
         SQLiteCpp)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_link_libraries(${PROJECT_NAME} PUBLIC Boost::system)
+endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
