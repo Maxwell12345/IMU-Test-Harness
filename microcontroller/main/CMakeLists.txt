@@ -3,6 +3,9 @@ set(SH2_DIR "${CMAKE_SOURCE_DIR}/third_party/sh2")
 idf_component_register(
     SRCS
         "main.c"
+        "serial.c"
+        "utils.c"
+        "crc.c"
         "${SH2_DIR}/sh2.c"
         "${SH2_DIR}/sh2_util.c"
         "${SH2_DIR}/shtp.c"
@@ -10,6 +13,8 @@ idf_component_register(
     INCLUDE_DIRS
         "."
         "${SH2_DIR}"
+    PRIV_REQUIRES
+        "esp_driver_uart"
 )
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_20)
