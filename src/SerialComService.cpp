@@ -10,7 +10,7 @@
 
 SerialComService::SerialComService(std::string path,
                                    unsigned int baudRate,
-                                   std::shared_ptr<SerialPortBase> serialPort) :
+                                   std::unique_ptr<SerialPortBase> serialPort) :
                                    m_running(false),
                                    m_path(path),
                                    m_baudRate(baudRate),
@@ -56,6 +56,10 @@ void SerialComService::Stop() {
         // LOG_INFO HERE
         std::cout << "[INFO]" << "Joined Serial Com thread" << std::endl;
     }
+}
+
+void SerialComService::InstallCallback(std::function<void(SerialPortBase&)> callback) {
+    m_serial->InstallCallback(callback);
 }
 
 void SerialComService::ConfigureSerialPort() {

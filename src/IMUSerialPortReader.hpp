@@ -5,6 +5,7 @@
 #include <optional>
 #include "SerialComService.hpp"
 #include "SerialPortBase.hpp"
+#include "BoostSerialPort.hpp"
 #include "imu_data.hpp"
 #include "crc/crc.h"
 
@@ -19,47 +20,44 @@ enum _IMU_MESSAGE_TYPES_ {
     ROTATION_VECTOR = 1
 };
 
-class _IMUSerialPort : public SerialPortBase {
+class IMUSerialPortReader {
 public:
     /**
      * @brief Constructor
      *
-     * @param [in] path is the file descriptor to the serial com port
-     *                  such as /dev/ttyUSB0, /dev/ttyACM0, /dev/serial/by-id/..., COM3,
-     *                  or \\\\.\\COM10.
+     * @param [in] path is the file descriptor to the serial com port (ie /dev/serial/by-id/..., etc)
+     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 
      * 
-     * @param [in] baudRate how fast data transfer takes place in bits per second,
-     *                      typically 9600 or 115200.
-     *
-     * @exception boost::system::system_error if the serial port is not available
-     *            or configuration fails.
+     * @exception std::exception if serial port is not available or errors out.
      */
-    _IMUSerialPort(const std::string& path, unsigned int baudRate);
-
-    ~_IMUSerialPort() override;
-
+    IMUSerialPortReader(std::string path, unsigned int baudRate, std::unique_ptr<SerialPortBase> port);
+    
     /**
-     * @brief Opens the serial port.
-     *
-     * @param [in] port is the file descriptor or COM port name.
+     * @brief Callback to pass IMU data.
+     * 
+     * @param [in] callback is the callback lambda you want data passed into.
      * 
      * @return
-     *
-     * @exception boost::system::system_error if the serial port cannot be opened.
+     * 
+     * @remark Beware of timing. There will be a delay between when the measurement was produced and real machine time. Use the timestamp in the payloads.
      */
-    void Open(const std::string& port) override;
+    void InstallCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)>);
 
     /**
-     * @brief Sets the baud rate for the serial port.
-     *
-     * @param [in] rate is the baud rate in bits per second.
+     * @brief Starts the serial port listener thread, decodes IMU serial data, and passes entries to callback.
      * 
      * @return
-     *
-     * @exception boost::system::system_error if the baud rate cannot be set.
      */
-    void SetBaudRate(unsigned int rate) override;
+    void Start();
 
+    /**
+     * @brief Stops the serial port listening service.
+     * 
+     * @return
+     */
+    void Stop();
+
+private:
     /**
      * @brief Reads bytes from the serial port.
      * 
@@ -67,24 +65,7 @@ public:
      *
      * @exception boost::system::system_error if the serial port read fails.
      */
-    void Callback() override;
-    /**
-     * @brief Passes in completed IMU measurement char* into parent.
-     * 
-     * @return
-     *
-     * @exception boost::system::system_error if the serial port read fails.
-     */
-    void SetCompletedPayloadCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> callback);
-
-    /**
-     * @brief Closes the serial port.
-     * 
-     * @return
-     */
-    void Close() override;
-
-private:
+    void Callback(SerialPortBase& port);
 
     /**
      * @brief Calculates the checksum for a byte array with CRC-16/CCITT-False w/ Polynomial=16 standard.
@@ -180,85 +161,19 @@ private:
         return true;
     }
 
-    /**
-     * @brief Reads exactly len bytes from the serial port into the provided buffer.
-     * 
-     * @param [out] data is the destination byte pointer where serial data will be written.
-     * @param [in] len is the exact number of bytes to read from the serial port.
-     * 
-     * @return
-     * 
-     * @exception boost::system::system_error if the serial port read fails, the port is closed,
-     *            or the requested number of bytes cannot be read.
-     * 
-     * @remark This has zero memory safety. It is on you to ensure that data points to at least
-     *         len bytes of valid writable memory.
-     */
-    void ReadExact(unsigned char* data, std::size_t len);
-
-private:
-    boost::asio::io_context m_io;
-    boost::asio::serial_port m_serial;
-
-    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
-
     cm_t m_cm;
+    std::unique_ptr<SerialComService> m_serialComService;
+    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
 
     FRIEND_TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
     FRIEND_TEST(_IMUSerialPortTest, ValidateIsStartEncoder);
     FRIEND_TEST(_IMUSerialPortTest, ValidateGetMessageType);
     FRIEND_TEST(_IMUSerialPortTest, ValidateGetMessageLength);
     FRIEND_TEST(_IMUSerialPortTest, ValidateValidateMessage);
-    FRIEND_TEST(_IMUSerialPortTest, ValidateSetBaudRate);
     FRIEND_TEST(_IMUSerialPortTest, ValidateOpen);
     FRIEND_TEST(_IMUSerialPortTest, ValidateClose);
     FRIEND_TEST(_IMUSerialPortTest, ValidateConstructor);
-};
-
-class IMUSerialPortReader {
-public:
-    /**
-     * @brief Constructor
-     *
-     * @param [in] path is the file descriptor to the serial com port (ie /dev/serial/by-id/..., etc)
-     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 
-     * 
-     * @exception std::exception if serial port is not available or errors out.
-     */
-    IMUSerialPortReader(std::string path, unsigned int baudRate);
-    
-    /**
-     * @brief Callback to pass IMU data.
-     * 
-     * @param [in] callback is the callback lambda you want data passed into.
-     * 
-     * @return
-     * 
-     * @remark Beware of timing. There will be a delay between when the measurement was produced and real machine time. Use the timestamp in the payloads.
-     */
-    void InstallVectorCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)>);
-
-    /**
-     * @brief Starts the serial port listener thread, decodes IMU serial data, and passes entries to callback.
-     * 
-     * @return
-     */
-    void Start();
-
-    /**
-     * @brief Stops the serial port listening service.
-     * 
-     * @return
-     */
-    void Stop();
-
-private:
-    SerialComService m_serialComService;
-
-    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
-    std::atomic<bool> m_hasCallback;
-
-    std::shared_ptr<_IMUSerialPort> m_serialPort;
+    FRIEND_TEST(_IMUSerialPortTest, CallbackThrowsOnBadMessageType);
 };
 
 #endif // IMU_SERIAL_PORT_READER_HPP

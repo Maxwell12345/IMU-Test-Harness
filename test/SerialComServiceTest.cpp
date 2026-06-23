@@ -4,12 +4,14 @@
 #include <gtest/gtest.h>
 
 #include "SerialComService.hpp"
-#include "BoostSerialPort.hpp"
-#include "MockClasses/MockSerialPort.hpp"
+#include "SerialPortBase.hpp"
+
+class MockSerialPort : public SerialPortBase {
+};
 
 TEST(SerialComServiceTest, SerialComServiceConstructorThrowsRuntimeError) {
-    std::function f = [](boost::asio::serial_port& serial){};
-    EXPECT_THROW(SerialComService("invalid path", 9600, std::make_unique<BoostSerialPort>(f)), std::invalid_argument);
+    std::function f = [](SerialPortBase& serial){};
+    EXPECT_THROW(SerialComService("invalid path", 9600, std::make_unique<MockSerialPort>()), std::invalid_argument);
 }
 
 TEST(SerialComServiceTest, SerialComServiceConstructorReturns) {

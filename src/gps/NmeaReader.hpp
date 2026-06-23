@@ -56,7 +56,7 @@ private:
      * 
      * @return
      */
-    void Callback(boost::asio::serial_port& serial);
+    void Callback(SerialPortBase& serial);
 
     /**
      * @brief parses nmea sentence and return a NmeaMessage struct representation of the nmea sentence

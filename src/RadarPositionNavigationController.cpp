@@ -19,7 +19,9 @@
 #define IMU_COM_PORT "/dev/ttyUSB0"
 
 RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
-                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT, 9600){
+                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT,
+                                                                                                                                        9600,
+                                                                                                                                        std::make_unique<BoostSerialPort>()){
   this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
@@ -29,7 +31,7 @@ RadarPositionNavigationController::RadarPositionNavigationController(std::shared
                                                               std::optional<Raw_Accelerometer> optLa){
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader.InstallVectorCallback(imuSerialCallback);
+  this->m_imuSerialPortReader.InstallCallback(imuSerialCallback);
 
   auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
     imuManager.UpdateLatestGps(g);

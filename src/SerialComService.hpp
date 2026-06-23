@@ -4,7 +4,6 @@
 #include <string>
 #include <atomic>
 #include <functional>
-#include <thread>
 #include <utility>
 
 #include <boost/asio.hpp>
@@ -23,7 +22,7 @@ public:
      */
     SerialComService(std::string path,
                      unsigned int baudRate,
-                     std::shared_ptr<SerialPortBase> serialPort);
+                     std::unique_ptr<SerialPortBase> serialPort);
 
     ~SerialComService();
 
@@ -42,6 +41,18 @@ public:
      * @return
      */
     void Stop();
+
+    /**
+     * @brief installs a callback to the port
+     * 
+     * @remark the callback will pass in a parameter typed boost::asio::serial_port. This is the real asio port
+     *      that can be used to read data from
+     *
+     * @param [in] callback installs a function that handles the read operation and processing of the data
+     * 
+     * @return
+     */
+    void InstallCallback(std::function<void(SerialPortBase&)> callback);
 
 private:
 
@@ -67,7 +78,7 @@ private:
     std::atomic<bool> m_running;                    // Processing thread status flag
 
     boost::asio::io_context m_io;               // Asio context
-    std::shared_ptr<SerialPortBase> m_serial;   // Pointer to a DI serial object. This serial contains the callback.
+    std::unique_ptr<SerialPortBase> m_serial;   // Pointer to a DI serial object. This serial contains the callback.
 
     std::string m_path;         // Serial port file descriptor
     unsigned int m_baudRate;    // Serial port baud rate

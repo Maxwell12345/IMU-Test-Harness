@@ -29,6 +29,7 @@ void GpsManager::Start() {
         NmeaMessage msg;
 
         while (m_running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             if (m_nmeaReader.GetNmeaMessageReady() == false) continue;
 
             msg = m_nmeaReader.GetNmeaMessage();

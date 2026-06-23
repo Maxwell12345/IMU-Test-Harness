@@ -1,10 +1,13 @@
 #include "NmeaReader.hpp"
+#include "SerialPortBase.hpp"
 
 #include <fcntl.h>
 #include <sstream>
 #include <vector>
 #include <cstdlib>
 #include <memory>
+
+#include <iostream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -14,13 +17,14 @@
 #endif
 
 NmeaReader::NmeaReader(const std::string& path, int baud): m_nmeaMessageReady(false) {
-    auto f = [nmeaReader = this](boost::asio::serial_port& serial){
-        nmeaReader->Callback(serial);
+    auto f = [nmeaReader = this](SerialPortBase& port){
+        nmeaReader->Callback(port);
     };
 
     m_serialComService = std::make_unique<SerialComService>(path,
                                                             baud,
-                                                            std::make_unique<BoostSerialPort>(f));
+                                                            std::make_unique<BoostSerialPort>());
+    m_serialComService->InstallCallback(f);
 }
 
 static std::vector<std::string> split(const std::string& s, char d) {
@@ -60,12 +64,9 @@ NmeaMessage NmeaReader::GetNmeaMessage() const {
     return m_nmeaMessage;
 }
 
-void NmeaReader::Callback(boost::asio::serial_port& serial) {
-    boost::asio::streambuf buf;
-    boost::asio::read_until(serial, buf, "\n");
-    std::istream is(&buf);
+void NmeaReader::Callback(SerialPortBase& serial) {
     std::string line;
-    std::getline(is, line);
+    serial.ReadUntil(line, "\n");
 
     printf("[DEBUG] %s\n", line.c_str());
 

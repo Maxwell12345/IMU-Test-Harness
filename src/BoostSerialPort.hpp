@@ -13,14 +13,25 @@
  */
 class BoostSerialPort : public SerialPortBase {
 public:
+    BoostSerialPort();
+
     /**
-     * @brief constructor
+     * @brief installs a callback to the port
+     * 
+     * @remark the callback will pass in a parameter typed boost::asio::serial_port. This is the real asio port
+     *      that can be used to read data from
      *
      * @param [in] callback installs a function that handles the read operation and processing of the data
+     * 
+     * @return
      */
-    BoostSerialPort(std::function<void(boost::asio::serial_port& m_serial)> callback);
+    void InstallCallback(std::function<void(SerialPortBase&)> callback) override;
 
     void Open(const std::string& port) override;
+
+    void ReadExact(unsigned char* data, std::size_t len) override;
+
+    void ReadUntil(std::string& dst, const std::string& delim) override;
 
     void SetBaudRate(unsigned int rate) override;
 
@@ -35,8 +46,8 @@ public:
 
 private:
     boost::asio::io_context m_io;
-    boost::asio::serial_port m_serial;
-    std::function<void(boost::asio::serial_port& m_serial)> m_callback;
+    boost::asio::serial_port m_serial;  
+    std::function<void(SerialPortBase&)> m_callback;
 };
 
 #endif
