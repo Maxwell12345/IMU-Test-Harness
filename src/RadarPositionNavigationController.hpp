@@ -7,18 +7,21 @@
 #include <gtest/gtest_prod.h>
 #include <iostream>
 #include <mutex>
+#include <optional>
 
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
 #include "IMUSerialPortReader.hpp"
+#include "SerialPortBase.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager);
+  RadarPositionNavigationController();
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager, std::string cofpath);
 
   ~RadarPositionNavigationController();
 
@@ -101,15 +104,15 @@ private:
    * @exception std::runtime_error requires positive non zero df values and percentiles.
    * @exception std::exception KF initialization error.
    */
-  void ConfigureKalmanFilter(
-      double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile, double imuLowerPercentile, double imuUpperPercentile
-  );
+  void ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile,
+                             double imuLowerPercentile, double imuUpperPercentile);
 
   /**
    * @brief Execute KF with IMU measurement only.
    *
    * @param [in] dt the time delta from the last step to the current time (measurement time).
-   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon, alat]^T
+   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,
+   * alat]^T
    *
    * @return
    *
@@ -124,8 +127,10 @@ private:
    * @brief Execute KF with IMU and GPS measurement.
    *
    * @param [in] dt the time delta from the last step to the current time (measurement time).
-   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon, alat]^T
-   * @param [in] gpsVec the IMU measurement vector. This is a column vector of 6 items [lon, lat, null, null, null, null]^T
+   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,
+   * alat]^T
+   * @param [in] gpsVec the IMU measurement vector. This is a column vector of 6 items [lon, lat, null, null, null,
+   * null]^T
    *
    * @return
    *
@@ -155,20 +160,22 @@ private:
    *
    * @remarks
    */
-  void ParseYamlForKalmanFilterValues();
+  void ParseYamlForKalmanFilterValues(std::string filepath);
 
 private:
   std::atomic<bool> m_isKFConfigured;
   std::thread m_serviceThread;
 
-  std::shared_ptr<DatabaseManager> m_dbManager;
-  IMUSerialPortReader m_imuSerialPortReader;
-
   std::mutex m_kFUpdateMutex;
+
+  std::shared_ptr<DatabaseManager> m_dbManager;
+  std::optional<IMUManager> m_imuManager;
+  std::optional<IMUSerialPortReader> m_imuSerialPortReader;
+
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   Vector6d m_latestX;
   Matrix6d m_latestP;
-  IMUManager m_imuManager;
+
   double m_gpsChiSqLowerBound;
   double m_gpsChiSqUpperBound;
   double m_imuChiSqLowerBound;
@@ -181,11 +188,13 @@ private:
   FRIEND_TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState);
   FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStateAndCovariance);
   FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsInvalidPercentiles);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsLowerPercentileGreaterThanUpperPercentile);
+  FRIEND_TEST(RadarPositionNavigationControllerTest,
+              ConfigureKalmanFilterRejectsLowerPercentileGreaterThanUpperPercentile);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyReturnsWithoutConfiguredKF);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsReturnsWithoutConfiguredKF);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyProducesNonFiniteStateBecauseKFUsesSingularR);
   FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR);
+  FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch);
   FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting);
 };
 

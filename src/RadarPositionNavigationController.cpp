@@ -1,10 +1,10 @@
+#include "RadarPositionNavigationController.hpp"
 #include <boost/math/distributions/chi_squared.hpp>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <yaml-cpp/yaml.h>
-
-#include "RadarPositionNavigationController.hpp"
 
 #define GPS_N 20
 #define GPS_L 5
@@ -13,18 +13,20 @@
 #define Q_N 100
 #define Q_L 10
 
-RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager)
-    : m_imuManager(dbManager, "./WMM.COF"), m_imuSerialPortReader("/dev/ttyUSB0", 9600) {
-  this->m_dbManager = std::move(dbManager);
+RadarPositionNavigationController::RadarPositionNavigationController() {};
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
+                                                                     std::string cofPath = "/test/WMM.COF")
+    : m_dbManager(std::move(dbManager)), m_imuManager(std::in_place, m_dbManager, cofPath),
+      m_imuSerialPortReader(std::in_place, "/dev/ttyUSB0", 9600) {
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
 
-  auto callbackLambda = [&imuManager =
-                             this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa) {
+  auto callbackLambda = [&imuManager = *this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
+                                                            std::optional<Raw_Accelerometer> optLa) {
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader.InstallVectorCallback(callbackLambda);
+  this->m_imuSerialPortReader->InstallVectorCallback(callbackLambda);
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }
@@ -35,18 +37,16 @@ std::function<void(const GpsUpdate &)> RadarPositionNavigationController::GetGPS
 
 void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, double lon0) {
   if (!this->m_isKFConfigured) {
-    this->ParseYamlForKalmanFilterValues();
-    this->ConfigureKalmanFilter(
-        lat0, lon0, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
-    );
+    this->ParseYamlForKalmanFilterValues("./compose.yml");
+    this->ConfigureKalmanFilter(lat0, lon0, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
 
     this->m_isKFConfigured = true;
   }
 
-  m_imuManager.InstallEkf(
+  m_imuManager->InstallEkf(
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
-      [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); }
-  );
+      [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
@@ -55,9 +55,9 @@ void RadarPositionNavigationController::StopRadarPNT() {
   }
 }
 
-void RadarPositionNavigationController::ConfigureKalmanFilter(
-    double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile, double imuLowerPercentile, double imuUpperPercentile
-) {
+void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile,
+                                                              double gpsUpperPercentile, double imuLowerPercentile,
+                                                              double imuUpperPercentile) {
   Vector6d x0;
   x0 << lon0, lat0, 1e-15, 1e-15, 1e-16, 1e-16;
 
@@ -93,8 +93,8 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(
   auto checkPercentileBounds = [](double percentile) { return percentile <= 0.0 || percentile >= 1.0; };
 
   // Calculate Chi SQ stats for df 2 and 4 at percentiles
-  if (checkPercentileBounds(gpsLowerPercentile) || checkPercentileBounds(gpsUpperPercentile) || checkPercentileBounds(imuLowerPercentile) ||
-      checkPercentileBounds(imuUpperPercentile)) {
+  if (checkPercentileBounds(gpsLowerPercentile) || checkPercentileBounds(gpsUpperPercentile) ||
+      checkPercentileBounds(imuLowerPercentile) || checkPercentileBounds(imuUpperPercentile)) {
     throw std::runtime_error("One or more Fuzzy fusion Chi SQ percentiles are <= 0 and/or >= 1");
   }
 
@@ -113,9 +113,8 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(
   double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile);
 
   this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(
-      x0, P0, R0_GPS, R0_IMU, Q0, chiSquaredBetaLowerBound_GPS, chiSquaredBetaLowerBound_IMU, chiSquaredBetaUpperBound_GPS,
-      chiSquaredBetaUpperBound_IMU, GPS_N, GPS_L, IMU_N, IMU_L, Q_N, Q_L
-  );
+      x0, P0, R0_GPS, R0_IMU, Q0, chiSquaredBetaLowerBound_GPS, chiSquaredBetaLowerBound_IMU,
+      chiSquaredBetaUpperBound_GPS, chiSquaredBetaUpperBound_IMU, GPS_N, GPS_L, IMU_N, IMU_L, Q_N, Q_L);
 }
 
 // TODO: Remove this for prod.
@@ -148,9 +147,8 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
         return;
       }
       // note: original was lat0, lon0
-      this->ConfigureKalmanFilter(
-          lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
-      );
+      this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+                                  this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
     }
   }
 }
@@ -182,14 +180,15 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
         return;
       }
       // note: original was lat0, lon0
-      this->ConfigureKalmanFilter(
-          lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound, this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound
-      );
+      this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+                                  this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
     }
   }
 }
 
-void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) { m_imuManager.UpdateLatestGps(gpsUpdate); }
+void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) {
+  m_imuManager->UpdateLatestGps(gpsUpdate);
+}
 
 void RadarPositionNavigationController::TotalDestruction() {
   this->StopRadarPNT();
@@ -205,11 +204,14 @@ void RadarPositionNavigationController::TotalDestruction() {
   this->m_latestP = Matrix6d::Zero();
 }
 
-void RadarPositionNavigationController::ParseYamlForKalmanFilterValues() {
-  YAML::Node root = YAML::LoadFile("compose.yml");
+void RadarPositionNavigationController::ParseYamlForKalmanFilterValues(std::string filepath) {
+  YAML::Node root = YAML::LoadFile(filepath);
+  if (!root) {
+    throw std::runtime_error("Yaml file results in null");
+  }
 
-  this->m_gpsChiSqLowerBound = root["kalmanvalues"]["m_gpsChiSqLowerBound"].as<int>();
-  this->m_gpsChiSqUpperBound = root["kalmanvalues"]["m_gpsChiSqUpperBound"].as<int>();
-  this->m_imuChiSqLowerBound = root["kalmanvalues"]["m_imuChiSqLowerBound"].as<int>();
-  this->m_imuChiSqUpperBound = root["kalmanvalues"]["m_imuChiSqUpperBound"].as<int>();
+  this->m_gpsChiSqLowerBound = root["kalmanvalues"]["gpsChiSqLowerBound"].as<double>();
+  this->m_gpsChiSqUpperBound = root["kalmanvalues"]["gpsChiSqUpperBound"].as<double>();
+  this->m_imuChiSqLowerBound = root["kalmanvalues"]["imuChiSqLowerBound"].as<double>();
+  this->m_imuChiSqUpperBound = root["kalmanvalues"]["imuChiSqUpperBound"].as<double>();
 }

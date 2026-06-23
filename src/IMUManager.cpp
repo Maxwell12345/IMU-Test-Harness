@@ -21,9 +21,8 @@ IMUManager::IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::st
   m_imuLinearAcceleration = {0, 0, 0};
 }
 
-void IMUManager::InstallEkf(
-    std::function<void(double, Vector6d &)> ekfCallbackImuOnly, std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps
-) {
+void IMUManager::InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
+                            std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps) {
 
   if (!ekfCallbackImuOnly) {
     throw std::invalid_argument("ekfCallbackImuOnly is nullptr");
@@ -79,7 +78,9 @@ void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std
   }
 }
 
-bool IMUManager::ReadyForEkf() const { return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady; }
+bool IMUManager::ReadyForEkf() const {
+  return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady;
+}
 
 void IMUManager::DispatchToEkf() {
   Raw_RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
@@ -98,7 +99,8 @@ void IMUManager::DispatchToEkf() {
   }
 
   int year = GetCurrentYear();
-  Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot, linearAccelerationSnapshot, gpsUpdateSnapshot.value(), year);
+  Vector6d zImu =
+      BuildImuMeasurementVector(rotationVectorSnapshot, linearAccelerationSnapshot, gpsUpdateSnapshot.value(), year);
 
   double dtSeconds = PrepareEkfTiming();
 
@@ -138,25 +140,24 @@ void IMUManager::ResetImuReadyFlags() {
   m_imuLinearAccelerationReady = false;
 }
 
-bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv, const std::optional<Raw_Accelerometer> &optLa) {
+bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv,
+                                  const std::optional<Raw_Accelerometer> &optLa) {
   if (optLa.has_value()) {
-    return !(
-        IsInvalidRange(optLa.value().x) || IsInvalidRange(optLa.value().y) || IsInvalidRange(optLa.value().z) ||
-        IsInvalidRange(optLa.value().timestamp)
-    );
+    return !(IsInvalidRange(optLa.value().x) || IsInvalidRange(optLa.value().y) || IsInvalidRange(optLa.value().z) ||
+             IsInvalidRange(optLa.value().timestamp));
   }
 
   if (optRv.has_value()) {
-    return !(
-        IsInvalidRange(optRv.value().i) || IsInvalidRange(optRv.value().j) || IsInvalidRange(optRv.value().k) ||
-        IsInvalidRange(optRv.value().real) || IsInvalidRange(optRv.value().accuracy) || IsInvalidRange(optRv.value().timestamp)
-    );
+    return !(IsInvalidRange(optRv.value().i) || IsInvalidRange(optRv.value().j) || IsInvalidRange(optRv.value().k) ||
+             IsInvalidRange(optRv.value().real) || IsInvalidRange(optRv.value().accuracy) ||
+             IsInvalidRange(optRv.value().timestamp));
   }
 
   return false;
 };
 
-void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optRv, const std::optional<Raw_Accelerometer> &optLa) {
+void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optRv,
+                               const std::optional<Raw_Accelerometer> &optLa) {
   if (optLa.has_value()) {
     m_imuLinearAccelerationReady = true;
     m_imuLinearAcceleration = optLa.value();
@@ -175,16 +176,16 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
   return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(
-    const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la, const GpsUpdate &gps, int currentYear
-) {
+Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la,
+                                               const GpsUpdate &gps, int currentYear) {
   double latitude = gps.latitude;
   double longitude = gps.longitude;
   const double RADAR_HEIGHT_M = 10;
 
   double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real, rv.i, rv.j, rv.k);
 
-  double magneticDeclination = m_magneticDeclination.CalculateDeclination(longitude, latitude, RADAR_HEIGHT_M, currentYear);
+  double magneticDeclination =
+      m_magneticDeclination.CalculateDeclination(longitude, latitude, RADAR_HEIGHT_M, currentYear);
 
   double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading, magneticDeclination);
 

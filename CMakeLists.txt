@@ -49,6 +49,7 @@ target_link_libraries(${PROJECT_NAME}_tests
          atomic
          SQLiteCpp
          sqlite3
+         yaml-cpp
 )
 target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 
@@ -58,9 +59,3 @@ target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
 
 include(GoogleTest)
 gtest_discover_tests(${PROJECT_NAME}_tests)
-
-add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
-    COMMAND ${PROJECT_NAME}_tests
-    WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
-    COMMENT "Running ${PROJECT_NAME}_tests"
-)
