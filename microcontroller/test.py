@@ -64,10 +64,6 @@ label {
         motion scale
         <input id="motionScale" type="range" min="1" max="30" value="10">
     </label>
-    <label>
-        accel deadband
-        <input id="deadband" type="range" min="0" max="100" value="8">
-    </label>
 </div>
 <script>
 const canvas = document.getElementById("c");
@@ -77,7 +73,6 @@ const zeroButton = document.getElementById("zero");
 const resetButton = document.getElementById("reset");
 const motionEnabled = document.getElementById("motionEnabled");
 const motionScaleSlider = document.getElementById("motionScale");
-const deadbandSlider = document.getElementById("deadband");
 
 let latest = {
     R: [[1,0,0],[0,1,0],[0,0,1]],
@@ -88,7 +83,9 @@ let latest = {
     la_count: 0,
     line: "",
     la_host_time: 0,
-    rv_host_time: 0
+    rv_host_time: 0,
+    la_imu_time_us: 0,
+    la_samples: []
 };
 
 let zeroMatrix = [[1,0,0],[0,1,0],[0,0,1]];
@@ -99,7 +96,7 @@ let motion = {
     vel: [0, 0, 0],
     path: [],
     lastLaCount: 0,
-    lastLaHostTime: null
+    lastLaImuTimeUs: null
 };
 
 const base = [
@@ -171,12 +168,16 @@ function norm(a) {
     return Math.hypot(a[0], a[1], a[2]);
 }
 
+function isExactlyZeroAccel(a) {
+    return a[0] === 0 && a[1] === 0 && a[2] === 0;
+}
+
 function resetMotion() {
     motion.pos = [0, 0, 0];
     motion.vel = [0, 0, 0];
     motion.path = [];
     motion.lastLaCount = latest.la_count;
-    motion.lastLaHostTime = latest.la_host_time || null;
+    motion.lastLaImuTimeUs = latest.la_imu_time_us || null;
 }
 
 function getDisplayR() {
@@ -253,81 +254,70 @@ function line(a, b, color, width) {
     ctx.stroke();
 }
 
+function integrateLaSample(nowUs, la) {
+    if (!nowUs) {
+        return;
+    }
+
+    if (motion.lastLaImuTimeUs === null) {
+        motion.lastLaImuTimeUs = nowUs;
+        return;
+    }
+
+    if (nowUs <= motion.lastLaImuTimeUs) {
+        return;
+    }
+
+    const dt = (nowUs - motion.lastLaImuTimeUs) / 1000000.0;
+
+    if (isExactlyZeroAccel(la)) {
+        // No filtering/damping: exact zero acceleration means hold current position.
+        motion.vel = [0, 0, 0];
+        motion.path.push([...motion.pos]);
+    } else {
+        const R = getDisplayR();
+        const a = matVec(R, la);
+
+        // No deadband, no velocity damping, no position damping, no clamp.
+        motion.vel[0] += a[0] * dt;
+        motion.vel[1] += a[1] * dt;
+        motion.vel[2] += a[2] * dt;
+
+        motion.pos[0] += motion.vel[0] * dt;
+        motion.pos[1] += motion.vel[1] * dt;
+        motion.pos[2] += motion.vel[2] * dt;
+
+        motion.path.push([...motion.pos]);
+    }
+
+    motion.lastLaImuTimeUs = nowUs;
+}
+
 function integrateMotion() {
     if (!motionEnabled.checked) {
         motion.lastLaCount = latest.la_count;
-        motion.lastLaHostTime = latest.la_host_time || motion.lastLaHostTime;
+        motion.lastLaImuTimeUs = latest.la_imu_time_us || motion.lastLaImuTimeUs;
+        latest.la_samples = [];
         return;
     }
 
-    if (latest.la === null) {
-        return;
-    }
+    const samples = Array.isArray(latest.la_samples) ? latest.la_samples : [];
 
-    if (latest.la_count === motion.lastLaCount) {
-        return;
-    }
+    if (samples.length > 0) {
+        for (const s of samples) {
+            integrateLaSample(s[0], [s[1], s[2], s[3]]);
+        }
 
-    const now = latest.la_host_time;
-
-    if (!now) {
+        latest.la_samples = [];
         motion.lastLaCount = latest.la_count;
-        return;
-    }
-
-    if (motion.lastLaHostTime === null) {
-        motion.lastLaHostTime = now;
+    } else if (latest.la !== null && latest.la_count !== motion.lastLaCount) {
+        integrateLaSample(latest.la_imu_time_us, latest.la);
         motion.lastLaCount = latest.la_count;
-        return;
     }
 
-    let dt = now - motion.lastLaHostTime;
-
-    if (dt <= 0 || dt > 0.25) {
-        dt = 0.02;
-    }
-
-    const R = getDisplayR();
-    let a = matVec(R, latest.la);
-    const deadband = Number(deadbandSlider.value) / 100.0;
-
-    if (norm(a) < deadband) {
-        a = [0, 0, 0];
-    }
-
-    motion.vel[0] += a[0] * dt;
-    motion.vel[1] += a[1] * dt;
-    motion.vel[2] += a[2] * dt;
-
-    const vDamp = Math.exp(-2.4 * dt);
-    motion.vel[0] *= vDamp;
-    motion.vel[1] *= vDamp;
-    motion.vel[2] *= vDamp;
-
-    motion.pos[0] += motion.vel[0] * dt;
-    motion.pos[1] += motion.vel[1] * dt;
-    motion.pos[2] += motion.vel[2] * dt;
-
-    const pDamp = Math.exp(-0.35 * dt);
-    motion.pos[0] *= pDamp;
-    motion.pos[1] *= pDamp;
-    motion.pos[2] *= pDamp;
-
-    const pNorm = norm(motion.pos);
-
-    if (pNorm > 1.5) {
-        motion.pos = scaleVec(motion.pos, 1.5 / pNorm);
-        motion.vel = scaleVec(motion.vel, 0.25);
-    }
-
-    motion.path.push([...motion.pos]);
-
-    if (motion.path.length > 500) {
+    while (motion.path.length > 500) {
         motion.path.shift();
     }
-
-    motion.lastLaHostTime = now;
-    motion.lastLaCount = latest.la_count;
 }
 
 function drawPath(scale) {
@@ -426,7 +416,7 @@ async function poll() {
     } catch (e) {
     }
 
-    setTimeout(poll, 25);
+    setTimeout(poll, 5);
 }
 
 zeroButton.onclick = () => {
@@ -594,9 +584,16 @@ def serial_worker(args, state, lock, stop_event):
                             state["rv_host_time"] = row["host_time"]
 
                         if row["type"] == "LA":
+                            sample = [row["imu_time_us"], row["x"], row["y"], row["z"]]
                             state["la"] = [row["x"], row["y"], row["z"]]
+                            state["imu_time_us"] = row["imu_time_us"]
+                            state["la_imu_time_us"] = row["imu_time_us"]
                             state["la_count"] += 1
                             state["la_host_time"] = row["host_time"]
+                            state["la_samples"].append(sample)
+
+                            if len(state["la_samples"]) > 2000:
+                                del state["la_samples"][:-2000]
 
             except SerialException as e:
                 print(f"serial_error,{e}")
@@ -647,6 +644,8 @@ def make_handler(state, lock):
             if self.path == "/state":
                 with lock:
                     snapshot = dict(state)
+                    snapshot["la_samples"] = list(state.get("la_samples", []))
+                    state["la_samples"] = []
 
                 data = json.dumps(snapshot).encode("utf-8")
                 self.send_response(200)
@@ -698,6 +697,8 @@ def main():
         "line": "",
         "la_host_time": 0.0,
         "rv_host_time": 0.0,
+        "la_imu_time_us": 0,
+        "la_samples": [],
     }
 
     thread = threading.Thread(

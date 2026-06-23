@@ -68,9 +68,6 @@ void app_main(void)
         return;
     }
 
-    printf("BEGIN_IMU_CSV\n");
-    printf("TYPE,TIME_US,A,B,C,D,E\n");
-
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

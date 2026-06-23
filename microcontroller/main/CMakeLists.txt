@@ -16,6 +16,10 @@ idf_component_register(
         "${SH2_DIR}"
     PRIV_REQUIRES
         "esp_driver_uart"
+        "esp_driver_gpio"
+        "esp_driver_i2c"
+        "esp_timer"
+        "esp_pm"
 )
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_20)

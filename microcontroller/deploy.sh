@@ -2,7 +2,7 @@
 set -e
 
 PORT="${1:-/dev/ttyUSB0}"
-BAUD="${2:-115200}"
+BAUD="${2:-921600}"
 MODE="${3:-headless}"
 
 cd "$(dirname "$0")"
