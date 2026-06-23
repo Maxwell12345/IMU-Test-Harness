@@ -11,7 +11,7 @@ void BoostSerialPort::Open(const std::string& port) {
     m_serial.open(port, ec);
 
     if (ec) {
-        throw std::runtime_error("Failed to open: " + ec.message() + port);
+        throw std::runtime_error("Failed to open: " + ec.message() + " " + port);
     }
 }
 

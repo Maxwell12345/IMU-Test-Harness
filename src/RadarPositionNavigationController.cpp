@@ -16,8 +16,10 @@
 #define Q_N 100
 #define Q_L 10
 
+#define IMU_COM_PORT "/dev/ttyUSB0"
+
 RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
-                                                                                                                  m_imuSerialPortReader("/dev/ttyUSB0", 9600){
+                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT, 9600){
   this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();

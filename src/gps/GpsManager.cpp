@@ -9,10 +9,10 @@
 
 #include "GpsManager.hpp"
 
-#define NMEA_PORT "\\\\.\\COM11"
+#define NMEA_COM_PORT "\\\\.\\COM11"
 
 GpsManager::GpsManager()
-    : m_nmeaReader(NMEA_PORT, 115200) {}
+    : m_nmeaReader(NMEA_COM_PORT, 115200) {}
 
 void GpsManager::InstallCallback(std::function<void(const GpsUpdate&)> callback) {
     std::lock_guard<std::mutex> lock(m_callbackMutex);

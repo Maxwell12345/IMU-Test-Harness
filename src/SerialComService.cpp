@@ -16,7 +16,13 @@ SerialComService::SerialComService(std::string path,
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
     if(VerifyPath(path) == false) {
-        throw std::invalid_argument("The serial port is invalid. Path should be \"/dev/...\" with no space");
+        std::string str;
+        #ifdef _WIN32
+            str = "\\\\.\\COM...";
+        #else
+            str = "/dev/...";
+        #endif
+        throw std::invalid_argument("The serial port is invalid. Path should be " + str + " with no space");
     }
     ConfigureSerialPort();
 }
