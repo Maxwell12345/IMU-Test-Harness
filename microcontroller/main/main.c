@@ -17,22 +17,38 @@
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
     if (event->type == SH2SERVICE_LINEAR_ACCELERATION) {
-        printf("LA,%llu,%f,%f,%f\n",
-               (unsigned long long)event->timestamp_us,
-               event->data.linear_acceleration.x,
-               event->data.linear_acceleration.y,
-               event->data.linear_acceleration.z);
+        acceleration_t accel = {
+            event->data.linear_acceleration.x,
+            event->data.linear_acceleration.y,
+            event->data.linear_acceleration.z,
+            (unsigned long long)event->timestamp_us
+        };
+        send_acceleration_t(&accel);
+        // printf("LA,%llu,%f,%f,%f\n",
+        //        (unsigned long long)event->timestamp_us,
+        //        event->data.linear_acceleration.x,
+        //        event->data.linear_acceleration.y,
+        //        event->data.linear_acceleration.z);
         return;
     }
 
     if (event->type == SH2SERVICE_ROTATION_VECTOR) {
-        printf("RV,%llu,%f,%f,%f,%f,%f\n",
-               (unsigned long long)event->timestamp_us,
-               event->data.rotation_vector.i,
-               event->data.rotation_vector.j,
-               event->data.rotation_vector.k,
-               event->data.rotation_vector.real,
-               event->data.rotation_vector.accuracy);
+        rotation_t rotation = {
+            event->data.rotation_vector.i,
+            event->data.rotation_vector.j,
+            event->data.rotation_vector.k,
+            event->data.rotation_vector.real,
+            event->data.rotation_vector.accuracy,
+            (unsigned long long)event->timestamp_us
+        };
+        send_rotation_t(&rotation);
+        // printf("RV,%llu,%f,%f,%f,%f,%f\n",
+        //        (unsigned long long)event->timestamp_us,
+        //        event->data.rotation_vector.i,
+        //        event->data.rotation_vector.j,
+        //        event->data.rotation_vector.k,
+        //        event->data.rotation_vector.real,
+        //        event->data.rotation_vector.accuracy);
         return;
     }
 }
