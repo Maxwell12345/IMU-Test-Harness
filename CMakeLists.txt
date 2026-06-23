@@ -9,7 +9,7 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED COMPONENTS asio filesystem regex)
 find_package(SQLiteCpp REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
@@ -20,13 +20,15 @@ add_library(IMUPROC_LIB
 )
 
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
+target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen Boost::asio Boost::filesystem Boost::regex atomic)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         IMUPROC_LIB
-        SQLiteCpp)
+        SQLiteCpp
+        Boost
+    )
 target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
@@ -45,6 +47,7 @@ target_link_libraries(${PROJECT_NAME}_tests
          atomic
          SQLiteCpp
          sqlite3
+         boost
 )
 target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 

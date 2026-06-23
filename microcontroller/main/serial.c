@@ -8,9 +8,6 @@
  ******************************************************************************/
 #include "serial.h"
 
-
-
-
 static uint16_t calculate_crc16_ccitt_false(const unsigned char *data, size_t length)
 {
     cm_t cm;
@@ -83,24 +80,98 @@ esp_err_t host_serial_write_all(const void *data, size_t length)
     return uart_wait_tx_done(HOST_UART, pdMS_TO_TICKS(1000));
 }
 
+esp_err_t send_fieldwise_acceleration_t(const acceleration_t *acceleration) {
+    if (acceleration == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[ACCELERATION_MSG_BYTES] = {0};
+    size_t length = 0;
+
+    buffer[length++] = 0xFF;
+    buffer[length++] = ACCELERATION_T_ID;
+    buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
+
+    memcpy(buffer+length, &acceleration->x, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &acceleration->y, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &acceleration->z, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &acceleration->timestamp, sizeof(uint64_t));
+    length += sizeof(uint64_t);
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    return host_serial_write_all(buffer, length);
+}
+
+esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation) {
+    if (rotation == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[ROTATION_MSG_BYTES] = {0};
+    size_t length = 0;
+
+    buffer[length++] = 0xFF;
+    buffer[length++] = ROTATION_T_ID;
+    buffer[length++] = ROTATION_PAYLOAD_BYTES;
+
+    memcpy(buffer+length, &rotation->i, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &rotation->j, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &rotation->k, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &rotation->real, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &rotation->accuracy, sizeof(float));
+    length += sizeof(float);
+    memcpy(buffer+length, &rotation->timestamp, sizeof(uint64_t));
+    length += sizeof(uint64_t);
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    return host_serial_write_all(buffer, length);
+}
+
 esp_err_t send_acceleration_t(const acceleration_t *acceleration) {
     if (acceleration == NULL) return ESP_ERR_INVALID_ARG;
     unsigned char buffer[ACCELERATION_MSG_BYTES] = {0};
+    size_t length = 0;
 
-    buffer[MAGIC_BYTE_IDX] = 0xFF;
-    buffer[MSG_TYPE_IDX] = ACCELERATION_T_ID;
-    buffer[PAYLOAD_LEN_IDX] = ACCELERATION_PAYLOAD_BYTES;
+    buffer[length++] = 0xFF;
+    buffer[length++] = ACCELERATION_T_ID;
+    buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
 
-    memcpy(buffer+PAYLOAD_START_IDX, &acceleration->x, sizeof(float));
-    memcpy(buffer+PAYLOAD_START_IDX+sizeof(float), &acceleration->y, sizeof(float));
-    memcpy(buffer+PAYLOAD_START_IDX+(2*sizeof(float)), &acceleration->z, sizeof(float));
-    memcpy(buffer+PAYLOAD_START_IDX+(3*sizeof(float)), &acceleration->timestamp, sizeof(uint64_t));
+    memcpy(buffer+length, &acceleration, sizeof(acceleration_t));
+    length += sizeof(acceleration_t);
 
-    uint16_t crc = calculate_crc16_ccitt_false(buffer, ACCELERATION_CRC_IDX);
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
 
-    buffer[ACCELERATION_CRC_IDX] = (uint8_t)((crc >> 8) & 0xFFu);
-    buffer[ACCELERATION_CRC_IDX+1] = (uint8_t)(crc & 0xFFu);
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
 
-    return host_serial_write_all(buffer, ACCELERATION_MSG_BYTES);
+    return host_serial_write_all(buffer, length);
 }
 
+esp_err_t send_rotation_t(const rotation_t *rotation) {
+    if (rotation == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[ROTATION_MSG_BYTES] = {0};
+    size_t length = 0;
+
+    buffer[length++] = 0xFF;
+    buffer[length++] = ROTATION_T_ID;
+    buffer[length++] = ROTATION_PAYLOAD_BYTES;
+
+    memcpy(buffer+length, &rotation, sizeof(rotation_t));
+    length += sizeof(rotation_t);
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    return host_serial_write_all(buffer, length);
+}

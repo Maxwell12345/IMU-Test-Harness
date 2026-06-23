@@ -44,6 +44,7 @@
 #define PAYLOAD_LEN_IDX 2
 #define PAYLOAD_START_IDX 3
 #define ACCELERATION_CRC_IDX (PAYLOAD_START_IDX+ACCELERATION_PAYLOAD_BYTES)
+#define ROTATION_CRC_IDX (PAYLOAD_START_IDX+ROTATION_PAYLOAD_BYTES)
 
 typedef struct acceleration_t {
     float x;
@@ -52,10 +53,25 @@ typedef struct acceleration_t {
     uint64_t timestamp;
 } acceleration_t;
 
+typedef struct rotation_t {
+    float i;
+    float j;
+    float k;
+    float real;
+    float accuracy;
+    uint64_t timestamp;
+} rotation_t;
+
 esp_err_t host_serial_init(void);
 
 esp_err_t host_serial_write_all(const void *data, size_t length);
 
+esp_err_t send_fieldwise_acceleration_t(const acceleration_t *acceleration);
+
+esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation);
+
 esp_err_t send_acceleration_t(const acceleration_t *acceleration);
+
+esp_err_t send_rotation_t(const rotation_t *rotation);
 
 #endif //IMU_TEST_HARNESS_SERIAL_H

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
-find_package(GTest REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
@@ -16,6 +16,7 @@ set(SRC
 
 set(TEST_SRC
     "${PROJECT_ROOT}/test/utilstests.cpp"
+    "${PROJECT_ROOT}/test/serial_writer_tests.cpp"
 )
 
 add_executable(host_tests
