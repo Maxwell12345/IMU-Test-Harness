@@ -1,3 +1,5 @@
+#include <thread>
+
 #include "IMUSerialPortReader.hpp"
 
 IMUSerialPortReader::IMUSerialPortReader(std::string path, unsigned int baudRate, std::unique_ptr<SerialPortBase> port)

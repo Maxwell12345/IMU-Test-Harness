@@ -1,4 +1,3 @@
-#include <thread>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 
