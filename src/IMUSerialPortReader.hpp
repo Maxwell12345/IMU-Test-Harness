@@ -8,6 +8,7 @@
 #include "imu_data.hpp"
 #include "crc/crc.h"
 
+#include <utility>
 #include <boost/asio.hpp>
 #include <iostream>
 #include <string>

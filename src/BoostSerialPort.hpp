@@ -1,6 +1,7 @@
 #ifndef BOOST_SERIAL_PORT_HPP
 #define BOOST_SERIAL_PORT_HPP
 
+#include <utility>
 #include <functional>
 #include <boost/asio.hpp>
 

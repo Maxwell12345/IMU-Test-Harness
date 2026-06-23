@@ -9,7 +9,7 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED filesystem)
+find_package(Boost CONFIG REQUIRED filesystem regex atomic)
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     find_package(Boost CONFIG REQUIRED system)
 endif()
@@ -23,7 +23,12 @@ add_library(IMUPROC_LIB
 )
 
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/include)
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen SQLiteCpp)
+target_link_libraries(IMUPROC_LIB
+    PUBLIC
+        Eigen3::Eigen
+        SQLiteCpp
+        Boost::regex
+        Boost::filesystem)
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_libraries(IMUPROC_LIB PUBLIC atomic)
 endif()
@@ -31,9 +36,7 @@ endif()
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
-        Boost::filesystem
-        IMUPROC_LIB
-        SQLiteCpp)
+        IMUPROC_LIB)
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_link_libraries(${PROJECT_NAME} PUBLIC Boost::system)
 endif()
