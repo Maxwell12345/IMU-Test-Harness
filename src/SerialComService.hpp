@@ -12,6 +12,12 @@
 
 class SerialPortBase;
 
+
+/**
+ * @brief a serial com reader service. Each instance of this class is owned solely 
+ *      by the object that provides callback functionality For example: GpsService
+ *      with gps nmea parser owns a SerialComService to read raw payload.
+ */
 class SerialComService {
 public:
 
@@ -19,7 +25,8 @@ public:
      * @brief Constructor
      *
      * @param [in] path is the file descriptor to the serial com port (ie /dev/serial/by-id/..., etc)
-     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 
+     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 115200
+     * @param [in] serialPort is a pointer to a BoostSerialPort instance in prod, or can be Mocked in tests
      */
     SerialComService(std::string path,
                      unsigned int baudRate,
