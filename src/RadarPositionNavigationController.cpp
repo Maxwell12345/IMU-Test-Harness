@@ -117,72 +117,87 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
       chiSquaredBetaUpperBound_GPS, chiSquaredBetaUpperBound_IMU, GPS_N, GPS_L, IMU_N, IMU_L, Q_N, Q_L);
 }
 
-// TODO: Remove this for prod.
-#include "REMOVE_LATER_KF_LOGGER.hpp"
-
 void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &imuVec) {
+  bool needsReconfig = false;
+  double reconfigLat = 0.0;
+  double reconfigLon = 0.0;
   std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
+  {
+    if (!this->m_isKFConfigured.load()) {
+      return;
+    }
 
-  if (!this->m_isKFConfigured.load()) {
-    return;
+    try {
+      std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
+
+      this->m_latestX = output.first;
+      this->m_latestP = output.second;
+    } catch (const std::exception &e) {
+      // TODO: Log this
+      std::cout << "[ERROR] " << e.what() << std::endl;
+      if (this->m_isKFConfigured) {
+        double lat = this->m_latestX(1, 0);
+        double lon = this->m_latestX(0, 0);
+
+        if (!std::isfinite(lat) || !std::isfinite(lon)) {
+          this->m_isKFConfigured.store(false);
+          return;
+        }
+        // note: original was lat0, lon0
+        needsReconfig = true;
+        reconfigLat = lat;
+        reconfigLon = lon;
+        // this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+        //                             this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+      }
+    }
   }
 
-  try {
-    std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
-
-    // TODO: Remove csv logging
-    LogKFCSV(output.first, output.second, imuVec);
-
-    this->m_latestX = output.first;
-    this->m_latestP = output.second;
-  } catch (const std::exception &e) {
-    // TODO: Log this
-    std::cout << "[ERROR] " << e.what() << std::endl;
-    if (this->m_isKFConfigured) {
-      double lat = this->m_latestX(1, 0);
-      double lon = this->m_latestX(0, 0);
-
-      if (!std::isfinite(lat) || !std::isfinite(lon)) {
-        this->m_isKFConfigured.store(false);
-        return;
-      }
-      // note: original was lat0, lon0
-      this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-                                  this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
-    }
+  if (needsReconfig) {
+    this->ConfigureKalmanFilter(reconfigLat, reconfigLon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
   }
 }
 
 void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &imuVec, Vector6d &gpsVec) {
-  std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
+  bool needsReconfig = false;
+  double reconfigLat = 0.0;
+  double reconfigLon = 0.0;
+  {
+    std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
-  if (!this->m_isKFConfigured.load()) {
-    return;
-  }
-
-  try {
-    std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
-
-    // TODO: Remove csv logging
-    LogKFCSV(output.first, output.second, imuVec, &gpsVec);
-
-    this->m_latestX = output.first;
-    this->m_latestP = output.second;
-  } catch (const std::exception &e) {
-    // TODO: Log this
-    std::cout << "[ERROR] " << e.what() << std::endl;
-    if (this->m_isKFConfigured) {
-      double lat = this->m_latestX(1, 0);
-      double lon = this->m_latestX(0, 0);
-
-      if (!std::isfinite(lat) || !std::isfinite(lon)) {
-        this->m_isKFConfigured.store(false);
-        return;
-      }
-      // note: original was lat0, lon0
-      this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-                                  this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+    if (!this->m_isKFConfigured.load()) {
+      return;
     }
+
+    try {
+      std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
+
+      this->m_latestX = output.first;
+      this->m_latestP = output.second;
+    } catch (const std::exception &e) {
+      // TODO: Log this
+      std::cout << "[ERROR] " << e.what() << std::endl;
+      if (this->m_isKFConfigured) {
+        double lat = this->m_latestX(1, 0);
+        double lon = this->m_latestX(0, 0);
+
+        if (!std::isfinite(lat) || !std::isfinite(lon)) {
+          this->m_isKFConfigured.store(false);
+          return;
+        }
+        // note: original was lat0, lon0
+        needsReconfig = true;
+        reconfigLat = lat;
+        reconfigLon = lon;
+        // this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+        //                             this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+      }
+    }
+  }
+  if (needsReconfig) {
+    this->ConfigureKalmanFilter(reconfigLat, reconfigLon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
+                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
   }
 }
 
