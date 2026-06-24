@@ -36,6 +36,8 @@ std::function<void(const GpsUpdate &)> RadarPositionNavigationController::GetGPS
 }
 
 void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, double lon0) {
+  this->StopRadarPNT();
+
   if (!this->m_isKFConfigured) {
     this->ParseYamlForKalmanFilterValues("./compose.yml");
     this->ConfigureKalmanFilter(lat0, lon0, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
@@ -47,12 +49,21 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
   m_imuManager->InstallEkf(
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
       [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
+
+  this->StartIMUReader();
+}
+
+void RadarPositionNavigationController::StartIMUReader() {
+  if (this->m_imuSerialPortReader.has_value()) {
+    this->m_imuSerialPortReader->Start();
+  }
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
-  if (this->m_serviceThread.joinable()) {
-    this->m_serviceThread.join();
+  if (this->m_imuSerialPortReader.has_value()) {
+    this->m_imuSerialPortReader->Stop();
   }
+  this->m_isKFConfigured.store(false);
 }
 
 void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile,
@@ -147,8 +158,6 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
         needsReconfig = true;
         reconfigLat = lat;
         reconfigLon = lon;
-        // this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-        //                             this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
       }
     }
   }
@@ -190,8 +199,6 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
         needsReconfig = true;
         reconfigLat = lat;
         reconfigLon = lon;
-        // this->ConfigureKalmanFilter(lat, lon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-        //                             this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
       }
     }
   }
@@ -210,10 +217,8 @@ void RadarPositionNavigationController::TotalDestruction() {
 
   std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
-  if (this->m_isKFConfigured.load()) {
-    this->m_kf.Clean();
-    this->m_isKFConfigured = false;
-  }
+  this->m_kf.Clean();
+  this->m_isKFConfigured = false;
 
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();

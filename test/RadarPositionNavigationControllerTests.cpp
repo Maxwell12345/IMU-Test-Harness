@@ -172,39 +172,39 @@ TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps) {
 //   forceOpenFailure = 0;
 // }
 
-// TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSh2Once) {
-//   sh2OpenCalls = 0;
-//   sh2CloseCalls = 0;
-//   sh2SetSensorCallbackCalls = 0;
-//   sh2SetSensorConfigCalls = 0;
-//   sh2ServiceCalls = 0;
-//   bno085HalCreateCalls = 0;
-//   forceOpenFailure = 0;
+TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSh2Serial) {
+  sh2OpenCalls = 0;
+  sh2CloseCalls = 0;
+  sh2SetSensorCallbackCalls = 0;
+  sh2SetSensorConfigCalls = 0;
+  sh2ServiceCalls = 0;
+  bno085HalCreateCalls = 0;
+  forceOpenFailure = 0;
 
-//   RadarPositionNavigationController t;
+  RadarPositionNavigationController t;
 
-//   t.StartIMUReader();
+  t.StartIMUReader();
 
-//   std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-//   ASSERT_TRUE(t.m_sh2ServiceIsRunning.load());
-//   ASSERT_TRUE(t.m_sh2IsOpen.load());
-//   ASSERT_TRUE(t.m_serviceThread.joinable());
+  ASSERT_TRUE(t.m_sh2ServiceIsRunning.load());
+  ASSERT_TRUE(t.m_sh2IsOpen.load());
+  ASSERT_TRUE(t.m_serviceThread.joinable());
 
-//   t.StopRadarPNT();
+  t.StopRadarPNT();
 
-//   ASSERT_FALSE(t.m_sh2ServiceIsRunning.load());
-//   ASSERT_FALSE(t.m_sh2IsOpen.load());
-//   ASSERT_FALSE(t.m_serviceThread.joinable());
-//   ASSERT_EQ(sh2CloseCalls.load(), 1);
+  ASSERT_FALSE(t.m_sh2ServiceIsRunning.load());
+  ASSERT_FALSE(t.m_sh2IsOpen.load());
+  ASSERT_FALSE(t.m_serviceThread.joinable());
+  ASSERT_EQ(sh2CloseCalls.load(), 1);
 
-//   t.StopRadarPNT();
+  t.StopRadarPNT();
 
-//   ASSERT_FALSE(t.m_sh2ServiceIsRunning.load());
-//   ASSERT_FALSE(t.m_sh2IsOpen.load());
-//   ASSERT_FALSE(t.m_serviceThread.joinable());
-//   ASSERT_EQ(sh2CloseCalls.load(), 1);
-// }
+  ASSERT_FALSE(t.m_sh2ServiceIsRunning.load());
+  ASSERT_FALSE(t.m_sh2IsOpen.load());
+  ASSERT_FALSE(t.m_serviceThread.joinable());
+  ASSERT_EQ(sh2CloseCalls.load(), 1);
+}
 
 // TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState) {
 //   sh2OpenCalls = 0;

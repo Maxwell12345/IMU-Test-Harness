@@ -27,6 +27,9 @@ void SerialComService::Start() {
     return;
   }
 
+  m_serial->Close();
+  ConfigureSerialPort();
+
   m_running = true;
 
   m_runThread = std::jthread([this](std::stop_token st) {

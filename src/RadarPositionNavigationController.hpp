@@ -77,13 +77,9 @@ public:
 
 private:
   /**
-   * @brief Starts the sh2 listener service.
-   *
-   * @return
-   *
-   * @remarks This service runs an indefinite while loop dependent on m_sh2ServiceIsRunning.
-   *
-   * @exception
+   * @brief Starts the IMU serial reader service if one was constructed.
+   *    Called by StartAndConfigureRadarPNT() to begin feeding data
+   *    from the serial port into IMUManager + the Kalman filter.
    */
   void StartIMUReader();
 
@@ -164,7 +160,6 @@ private:
 
 private:
   std::atomic<bool> m_isKFConfigured;
-  std::thread m_serviceThread;
 
   std::mutex m_kFUpdateMutex;
 
@@ -184,7 +179,7 @@ private:
   FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTDoesNotStartReaderWhenOpenFails);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSh2Once);
+  FRIEND_TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSerial);
   FRIEND_TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState);
   FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStateAndCovariance);
   FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsInvalidPercentiles);
