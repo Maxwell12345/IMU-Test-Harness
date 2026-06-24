@@ -13,7 +13,6 @@
 #include <windows.h>
 #else
 #include <unistd.h>
-#include <termios.h>
 #endif
 
 NmeaReader::NmeaReader(const std::string& path, int baud): m_nmeaMessageReady(false) {

@@ -26,7 +26,8 @@ public:
      * @brief Constructor
      *
      * @param [in] path is the file descriptor to the serial com port (ie /dev/serial/by-id/..., etc)
-     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 
+     * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 115200
+     * @param [in] port boost serial port
      * 
      * @exception std::exception if serial port is not available or errors out.
      */

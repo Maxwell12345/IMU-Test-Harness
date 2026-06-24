@@ -29,8 +29,24 @@ public:
 
     void Open(const std::string& port) override;
 
-    void ReadExact(unsigned char* data, std::size_t len) override;
+    /**
+     * @brief read COM port exactly len bytes and store read data in dst
+     * 
+     * @param [out] dst read data stored destination
+     * @param [in] read length in bytes
+     * 
+     * @return
+     */
+    void ReadExact(unsigned char* dst, std::size_t len) override;
 
+    /**
+     * @brief read COM port until pointer encounters a delimiter and store to dst as std::string
+     * 
+     * @param [out] dst read data stored destination
+     * @param [in] delim delimiter string. Stops reading when delim is encountered
+     * 
+     * @return
+     */
     void ReadUntil(std::string& dst, const std::string& delim) override;
 
     void SetBaudRate(unsigned int rate) override;

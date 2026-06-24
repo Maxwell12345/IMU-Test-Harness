@@ -15,10 +15,10 @@ void BoostSerialPort::Open(const std::string& port) {
     }
 }
 
-void BoostSerialPort::ReadExact(unsigned char* data, std::size_t len) {
+void BoostSerialPort::ReadExact(unsigned char* dst, std::size_t len) {
     boost::system::error_code ec;
 
-    boost::asio::read(m_serial, boost::asio::buffer(data, len), boost::asio::transfer_exactly(len), ec);
+    boost::asio::read(m_serial, boost::asio::buffer(dst, len), boost::asio::transfer_exactly(len), ec);
 
     if (ec) {
         throw boost::system::system_error(ec);
