@@ -18,8 +18,8 @@ public:
     /**
      * @brief installs a callback to the port
      * 
-     * @remark the callback will pass in a parameter typed boost::asio::serial_port. This is the real asio port
-     *      that can be used to read data from
+     * @remark the callback will pass in a parameter typed SerialPortBase. This is a mockable wrapper com port
+     *      that can be used to read data from.
      *
      * @param [in] callback installs a function that handles the read operation and processing of the data
      * 
@@ -27,6 +27,16 @@ public:
      */
     void InstallCallback(std::function<void(SerialPortBase&)> callback) override;
 
+    /**
+     * @brief opens a com port
+     * 
+     * @param [in] port is the string formatted port. Linux would be /dev/[...]
+     *      Windows would be \\\\.\\COM[...]
+     * 
+     * @throws std::runtime_error when Boost serial api fails to open port
+     * 
+     * @return
+     */
     void Open(const std::string& port) override;
 
     /**
@@ -45,6 +55,8 @@ public:
      * @param [out] dst read data stored destination
      * @param [in] delim delimiter string. Stops reading when delim is encountered
      * 
+     * @throws boost::system::system_error when boost::asio::read fails
+     * 
      * @return
      */
     void ReadUntil(std::string& dst, const std::string& delim) override;
@@ -52,7 +64,7 @@ public:
     void SetBaudRate(unsigned int rate) override;
 
     /**
-     * @brief invoke the installed callback m_callback
+     * @brief invoke the installed callback m_callback and passing in *this
      *
      * @return
      */

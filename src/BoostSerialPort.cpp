@@ -21,7 +21,7 @@ void BoostSerialPort::ReadExact(unsigned char* dst, std::size_t len) {
     boost::asio::read(m_serial, boost::asio::buffer(dst, len), boost::asio::transfer_exactly(len), ec);
 
     if (ec) {
-        throw boost::system::system_error(ec);
+        throw std::runtime_error("Failed to read: " + ec.message());
     }
 }
 

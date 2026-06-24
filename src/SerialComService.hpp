@@ -27,6 +27,8 @@ public:
      * @param [in] path is the file descriptor to the serial com port (ie /dev/serial/by-id/..., etc)
      * @param [in] baudRate how fast data transfer takes place (bits per second) typically 9600 or 115200
      * @param [in] serialPort is a pointer to a BoostSerialPort instance in prod, or can be Mocked in tests
+     * 
+     * @throws std::invalid_argument if path does not exist
      */
     SerialComService(std::string path,
                      unsigned int baudRate,

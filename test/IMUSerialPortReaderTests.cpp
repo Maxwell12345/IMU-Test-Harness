@@ -181,7 +181,6 @@ TEST(_IMUSerialPortTest, CallbackReadsAccelerationPacket) {
 
     reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
-            printf("x: %.5f, y: %.5f, z: %.5f\n", expected.x, expected.y, expected.z);
             called = true;
             receivedRot = rot;
             receivedAccel = accel;
