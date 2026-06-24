@@ -9,42 +9,23 @@
 #include "utils.hpp"
 #include "SerialComService.hpp"
 #include "IMUSerialPortReader.hpp"
-#include "BoostSerialPort.hpp"
 
-std::atomic<bool> keepRunning{true};
-
-void signalHandler(int signum) {
-    std::cout << "\n[Interrupt] Cleanup started..." << std::endl;
-    keepRunning = false;
+void callback(std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> acc) {
+    if (rot.has_value()) {
+        std::cout << rot.value().timestamp << " " << rot.value().i << " " << rot.value().j << " " << rot.value().k << " " << rot.value().accuracy << std::endl;
+    }
+    else if (acc.has_value()) {
+        std::cout << acc.value().timestamp << " " << acc.value().x << " " << acc.value().y << " " << acc.value().z << std::endl;
+    }
 }
 
 int main(int argc,char** argv) {
     try {
-        std::signal(SIGINT, signalHandler);
+        IMUSerialPortReader reader = IMUSerialPortReader("/dev/ttyUSB0", 115200);
 
-        // Example call back for NMEA
-        std::function f = [](boost::asio::serial_port& serial){
-            boost::asio::streambuf buf;
-            boost::asio::read_until(serial, buf, "\n");
-            std::istream is(&buf);
-            std::string line;
-            std::getline(is, line);
-            // TODO: LOG_DEBUG HERE
-            std::cout << "[DEBUG]" << line << std::endl;
-        };
+        reader.InstallVectorCallback(&callback);
 
-        std::string path = "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7CMb151406-if00-port0";
-        SerialComService comService(path,
-                                    115200,
-                                    std::make_unique<BoostSerialPort>(f));
-        comService.Start();
-
-        std::cout << "\nPress ctrl + c to stop application\n\n";
-        while(keepRunning) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-
-        comService.Stop();
+        reader.Start();
 
         return EXIT_SUCCESS;
     } catch(const std::invalid_argument &e) {

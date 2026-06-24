@@ -5,7 +5,6 @@ idf_component_register(
         "main.c"
         "sh2service.c"
         "serial.c"
-        "utils.c"
         "crc.c"
         "${SH2_DIR}/sh2.c"
         "${SH2_DIR}/sh2_util.c"

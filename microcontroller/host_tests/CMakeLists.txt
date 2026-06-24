@@ -11,11 +11,9 @@ find_package(GTest CONFIG REQUIRED)
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 set(SRC
-    "${PROJECT_ROOT}/main/utils.c"
 )
 
 set(TEST_SRC
-    "${PROJECT_ROOT}/test/utilstests.cpp"
     "${PROJECT_ROOT}/test/serial_writer_tests.cpp"
 )
 
