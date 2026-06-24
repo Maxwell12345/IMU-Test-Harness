@@ -109,9 +109,13 @@ def emit_complete_frames(buffer, output_file):
 
         frame = bytes(buffer[:frame_length])
         del buffer[:frame_length]
-
-        write_hex_line(frame, output_file)
+        print(f"{frame[:3].hex()} ", end="")
+        for i in range(3, frame_length-2-3, 4):
+            # write_hex_line(frame[i:i+4], output_file)
+            print(f"{frame[i:i+4].hex()} ", end='')
+        print("",flush=True)
         report_crc(frame)
+
 
 
 def main():

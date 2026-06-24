@@ -138,7 +138,7 @@ esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation) {
 
 esp_err_t send_acceleration_t(const acceleration_t *acceleration) {
     if (acceleration == NULL) return ESP_ERR_INVALID_ARG;
-    unsigned char buffer[ACCELERATION_MSG_BYTES] = {0};
+    unsigned char buffer[50] = {0};
     size_t length = 0;
 
     buffer[length++] = 0xFF;
@@ -158,7 +158,7 @@ esp_err_t send_acceleration_t(const acceleration_t *acceleration) {
 
 esp_err_t send_rotation_t(const rotation_t *rotation) {
     if (rotation == NULL) return ESP_ERR_INVALID_ARG;
-    unsigned char buffer[ROTATION_MSG_BYTES] = {0};
+    unsigned char buffer[50] = {0};
     size_t length = 0;
 
     buffer[length++] = 0xFF;

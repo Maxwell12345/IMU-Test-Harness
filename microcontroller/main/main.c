@@ -51,7 +51,7 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         //        event->data.rotation_vector.accuracy);
         return;
     }
-}
+// }
 
 void app_main(void)
 {
