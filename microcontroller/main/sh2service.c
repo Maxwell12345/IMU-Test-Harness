@@ -33,7 +33,7 @@ static sh2service_config_t s_config = {
     GPIO_NUM_22,
     GPIO_NUM_21,
     GPIO_NUM_27,
-    400000,
+    100000,
     5000,
     8000,
     2000,
@@ -238,6 +238,13 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 
     int rc = sh2_decodeSensorEvent(&value, event);
     if (rc != 0) {
+        return;
+    }
+
+    uint8_t acc = value.status & 0x03;
+
+    if (acc == 0 || acc == 1) {
+        printf("Bad status: %d.\n", value.status);
         return;
     }
 
