@@ -17,6 +17,10 @@
 
 using namespace IMUUtils;
 
+#ifndef M_PI
+#define M_PI std::numbers::pi
+#endif
+
 TEST(IMUUtils, Convert_Degrees_To_Radians) {
 
   struct Case {
