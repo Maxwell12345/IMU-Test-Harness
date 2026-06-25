@@ -47,7 +47,7 @@ TEST(YamlConfigTest, MissingRequiredFieldThrows) {
 TEST(YamlConfigTest, ValidConfigParsesCorrectly) {
     YAML::Node node = YAML::Load(R"(
         nmea_config:
-          serial_port_path: /dev/ttyUSB0
+          serial_port_path: \\.\COM1
           serial_port_baud_rate: 115200
           multicast_ip: 224.0.0.100
           multicast_port: 6001
@@ -56,7 +56,7 @@ TEST(YamlConfigTest, ValidConfigParsesCorrectly) {
     YamlConfig config;
     EXPECT_NO_THROW(config.FromNode(node));
 
-    EXPECT_EQ("/dev/ttyUSB0", config.nmeaConfig.serialPortPath);
+    EXPECT_EQ(R"(\\.\COM1)", config.nmeaConfig.serialPortPath);
     EXPECT_EQ(115200u, config.nmeaConfig.serialPortBaudRate);
     EXPECT_EQ("224.0.0.100", config.nmeaConfig.multicastIp);
     EXPECT_EQ(6001u, config.nmeaConfig.multicastPort);

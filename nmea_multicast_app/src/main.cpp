@@ -20,6 +20,7 @@ int main() {
     try {
         YamlConfigService yamlConfigService("config.yaml");
         auto config = yamlConfigService.GetConfig();
+        std::cout << "[INFO] Yaml config\n" << config.ToString() << std::endl;
 
         std::signal(SIGINT, signalHandler);
 

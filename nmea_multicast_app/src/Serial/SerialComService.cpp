@@ -16,7 +16,7 @@ SerialComService::SerialComService(std::string path,
     if(VerifyPath(path) == false) {
         std::string str;
         #ifdef _WIN32
-            str = "\\\\.\\COM...";
+            str = R"(\\.\COM...)";
         #else
             str = "/dev/...";
         #endif

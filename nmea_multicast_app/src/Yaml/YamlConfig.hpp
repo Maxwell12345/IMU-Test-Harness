@@ -29,7 +29,20 @@ struct _NmeaConfig {
         serialPortBaudRate = node["serial_port_baud_rate"].as<unsigned int>();
         multicastIp = node["multicast_ip"].as<std::string>();
         multicastPort = node["multicast_port"].as<unsigned int>();
-    } 
+    }
+
+    std::string ToString() {
+        char buff[256];
+        std::string format = "\tserialPortPath: %s\n"
+                             "\tserialPortBaudRate: %d\n"
+                             "\tmulticastIp: %s\n"
+                             "\tmulticastPort: %d\n";
+        sprintf(buff, format.c_str(), serialPortPath.c_str(),
+                                      serialPortBaudRate,
+                                      multicastIp.c_str(),
+                                      multicastPort);
+        return std::string(buff);
+    }
 };
 
 struct YamlConfig {
@@ -41,7 +54,11 @@ struct YamlConfig {
         }
 
         nmeaConfig.FromNode(node["nmea_config"]);
-    } 
+    }
+
+    std::string ToString() {
+        return "nmeaConfig:\n" + nmeaConfig.ToString();
+    }
 };
 
 #endif

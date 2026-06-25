@@ -44,6 +44,10 @@ TEST(SerialComServiceTest, VerifyPathReturnsTrue) {
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/ttyUSB0"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM11)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM10)"));
 }
 
 TEST(SerialComServiceTest, VerifyPathReturnsFalse) {
@@ -52,4 +56,8 @@ TEST(SerialComServiceTest, VerifyPathReturnsFalse) {
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/sdf fsdf"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ /"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ "));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\COM11)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\.\\COM10)"));
 }
