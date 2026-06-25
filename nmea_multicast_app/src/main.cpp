@@ -22,10 +22,11 @@ int main() {
 
         std::signal(SIGINT, signalHandler);
 
-        std::unique_ptr<SerialComService> serialComService = std::make_unique<SerialComService>(config.nmeaConfig.serialPortPath,
+        auto serialComService = std::make_unique<SerialComService>(config.nmeaConfig.serialPortPath,
                                                                    config.nmeaConfig.serialPortBaudRate,
                                                                    std::make_unique<BoostSerialPort>());
-        std::unique_ptr<MulticastService> multicastService = std::make_unique<MulticastService>(config.nmeaConfig.multicastIp,
+
+        auto multicastService = std::make_unique<MulticastService>(config.nmeaConfig.multicastIp,
                                                                    config.nmeaConfig.multicastPort);
         NmeaService nmeaService(std::move(serialComService),
                                 std::move(multicastService));

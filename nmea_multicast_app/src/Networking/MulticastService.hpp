@@ -5,10 +5,18 @@
 #include <sstream>
 #include <string>
 
+#include <utility>
 #include <boost/asio.hpp>
 
 class MulticastService {
 public:
+
+    /**
+     * @brief constructor
+     * 
+     * @param [in] ip multicast group ip addr
+     * @param [in] port multicast group udp port
+     */
     MulticastService(const std::string& ip, const unsigned int& port);
 
     /**
@@ -26,7 +34,6 @@ private:
     boost::asio::io_context m_ioContext;
     boost::asio::ip::udp::endpoint m_endpoint;
     boost::asio::ip::udp::socket m_socket;
-
 };
 
 #endif

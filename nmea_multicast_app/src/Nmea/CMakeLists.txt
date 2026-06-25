@@ -13,9 +13,3 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     serial
     networking
 )
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_link_libraries(${TARGET_NAME} PRIVATE
-        atomic
-    )
-endif()

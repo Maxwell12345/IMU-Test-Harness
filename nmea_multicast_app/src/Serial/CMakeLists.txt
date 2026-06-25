@@ -16,9 +16,5 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system)
-endif()
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_link_libraries(${TARGET_NAME} PUBLIC atomic)
+    target_link_libraries(${TARGET_NAME}PRIVATE Boost::system)
 endif()

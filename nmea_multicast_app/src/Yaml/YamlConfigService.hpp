@@ -9,6 +9,11 @@ class YamlConfigService {
 public:
     YamlConfigService(std::string path);
 
+    /**
+     * @brief returns config in the form of a YamlConfig object
+     * 
+     * @return config
+     */
     YamlConfig GetConfig() const;
 private:
     YamlConfig m_yamlConfig;    

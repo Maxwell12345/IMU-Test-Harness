@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgmock-dev \
     libi2c-dev \
     libsqlitecpp-dev \
+    libyaml-cpp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 CMD ["cmake", "--version"]

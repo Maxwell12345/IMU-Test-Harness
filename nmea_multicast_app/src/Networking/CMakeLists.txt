@@ -10,5 +10,5 @@ add_library(${TARGET_NAME} STATIC
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    target_link_libraries(${PROJECT_NAME} PRIVATE Boost::system)
+    target_link_libraries(${TARGET_NAME}PRIVATE Boost::system)
 endif()

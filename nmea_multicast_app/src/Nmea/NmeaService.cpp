@@ -43,6 +43,5 @@ void NmeaService::Stop() {
 void NmeaService::Callback(SerialPortBase& port) {
     std::lock_guard nmeaGuard(m_nmeaMutex);
     port.ReadUntil(m_nmea, "\n");
-    // std::cout << "[DEBUG] " << m_nmea << std::endl;
-    std::cout << m_multicastService->Send(m_nmea) << " bytes sent\n";
+    std::cout << "[DEBUG] " << m_multicastService->Send(m_nmea) << " bytes sent\n";
 }
