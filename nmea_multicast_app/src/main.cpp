@@ -1,5 +1,6 @@
 #include <memory>
 #include <atomic>
+#include <csignal>
 #include <iostream>
 
 #include "NmeaService.hpp"

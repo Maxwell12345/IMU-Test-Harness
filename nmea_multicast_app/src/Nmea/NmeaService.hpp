@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <mutex>
 
 class SerialPortBase;
 class SerialComService;

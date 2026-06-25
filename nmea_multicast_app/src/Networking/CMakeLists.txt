@@ -10,5 +10,6 @@ add_library(${TARGET_NAME} STATIC
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    target_link_libraries(${TARGET_NAME}PRIVATE Boost::system)
+    target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/include)
+    target_link_libraries(${TARGET_NAME} PRIVATE Boost::system)
 endif()

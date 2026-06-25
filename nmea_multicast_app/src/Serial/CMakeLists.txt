@@ -16,5 +16,6 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    target_link_libraries(${TARGET_NAME}PRIVATE Boost::system)
+    target_link_libraries(${TARGET_NAME} PRIVATE Boost::system)
+    target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/include)
 endif()
