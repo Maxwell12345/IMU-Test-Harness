@@ -1,7 +1,9 @@
 {
-    "dependencies": [
-        "eigen3",
-        "gtest",
-        "boost"
-    ]
+  "dependencies": [
+    "boost",
+    "eigen3",
+    "gtest",
+    "sqlitecpp",
+    "sqlite3"
+  ]
 }

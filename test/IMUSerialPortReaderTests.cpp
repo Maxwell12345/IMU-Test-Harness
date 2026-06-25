@@ -2,45 +2,43 @@
 
 #include "IMUSerialPortReader.hpp"
 
-#include <pty.h>
-#include <termios.h>
-#include <unistd.h>
-
 #include <cstring>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <memory>
 
-struct TestPty {
-    int masterFd = -1;
-    int slaveFd = -1;
-    std::string slavePath;
+namespace {
+#ifdef _WIN32
+    std::string path = R"(\\.\COM10)";
+#else
+    std::string path = R"(/dev/ttyUSB0)";
+#endif
+}
 
-    TestPty() {
-        char name[128]{};
-
-        if (openpty(&masterFd, &slaveFd, name, nullptr, nullptr) != 0) {
-            throw std::runtime_error("openpty failed");
+class MockSerialPort : public SerialPortBase {
+public:
+    void ReadExact(unsigned char* data, std::size_t len) override {
+        if (len > m_data.size()) {
+            return;
         }
 
-        termios tio{};
-        tcgetattr(slaveFd, &tio);
-        cfmakeraw(&tio);
-        tcsetattr(slaveFd, TCSANOW, &tio);
+        std::memcpy(data, m_data.data(), len);
 
-        slavePath = name;
+        m_data.erase(m_data.begin(), m_data.begin() + len);
     }
 
-    ~TestPty() {
-        if (masterFd >= 0) {
-            close(masterFd);
-        }
-
-        if (slaveFd >= 0) {
-            close(slaveFd);
-        }
+    void InstallCallback(std::function<void(SerialPortBase& port)> callback) {
+        m_callback = callback;
     }
+
+    void Callback() {
+        m_callback(*this);
+    }
+
+    std::vector<unsigned char> m_data;
+    std::function<void(SerialPortBase&)> m_callback;
 };
 
 template <typename T>
@@ -76,166 +74,120 @@ static std::vector<unsigned char> BuildPacket(unsigned char type, const T& paylo
     return packet;
 }
 
-static void WriteAll(int fd, const std::vector<unsigned char>& bytes) {
-    std::size_t written = 0;
-
-    while (written < bytes.size()) {
-        ssize_t n = write(fd, bytes.data() + written, bytes.size() - written);
-
-        if (n <= 0) {
-            throw std::runtime_error("write failed");
-        }
-
-        written += static_cast<std::size_t>(n);
-    }
-}
-
 TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
+    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
 
     unsigned char empty[1] = {0x00};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(empty, 0), 0xFFFFUL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(empty, 0), 0xFFFFUL);
 
     unsigned char a[1] = {'A'};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(a, 1), 0xB915UL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(a, 1), 0xB915UL);
 
     unsigned char zero[1] = {0x00};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(zero, 1), 0xE1F0UL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(zero, 1), 0xE1F0UL);
 
     unsigned char abc[3] = {'a', 'b', 'c'};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(abc, 3), 0x514AUL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(abc, 3), 0x514AUL);
 
     unsigned char zeros[4] = {0x00, 0x00, 0x00, 0x00};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(zeros, 4), 0x84C0UL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(zeros, 4), 0x84C0UL);
 
     unsigned char ones[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(ones, 4), 0x1D0FUL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(ones, 4), 0x1D0FUL);
 
     unsigned char check[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(check, 9), 0x29B1UL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(check, 9), 0x29B1UL);
 
     unsigned char hello[11] = {'H', 'e', 'l', 'l', 'o', ',', ' ', 'I', 'M', 'U', '!'};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(hello, 11), 0x62BBUL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(hello, 11), 0x62BBUL);
 
     unsigned char sentence[47] = {'A', ' ', 'c', 'o', 'w', ' ', 'j', 'u', 'm', 'p', 'e', 'd', ' ', 'o', 'v', 'e', 'r', ' ', 't', 'h', 'e', ' ', 'm', 'o', 'o', 'n', ' ', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '!', '@', '#', '$', '%', '*', '(', ')', '_', '+'};
-    EXPECT_EQ(port.CalculateCRC16CCITTFalseChecksum(sentence, 47), 0xD92CUL);
+    EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(sentence, 47), 0xD92CUL);
 }
 
 TEST(_IMUSerialPortTest, ValidateIsStartEncoder) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
+    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
 
     unsigned char start = 0xFF;
     unsigned char zero = 0x00;
     unsigned char other = 0x7E;
 
-    EXPECT_TRUE(port.IsStartEncoder(start));
-    EXPECT_FALSE(port.IsStartEncoder(zero));
-    EXPECT_FALSE(port.IsStartEncoder(other));
+    EXPECT_TRUE(reader.IsStartEncoder(start));
+    EXPECT_FALSE(reader.IsStartEncoder(zero));
+    EXPECT_FALSE(reader.IsStartEncoder(other));
 }
 
 TEST(_IMUSerialPortTest, ValidateGetMessageType) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
+    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
 
     unsigned char accel = 0x00;
     unsigned char rot = 0x01;
     unsigned char bad = 0x02;
 
-    EXPECT_EQ(port.GetMessageType(accel), _IMU_MESSAGE_TYPES_::ACCELERATION);
-    EXPECT_EQ(port.GetMessageType(rot), _IMU_MESSAGE_TYPES_::ROTATION_VECTOR);
-    EXPECT_THROW(port.GetMessageType(bad), std::runtime_error);
+    EXPECT_EQ(reader.GetMessageType(accel), _IMU_MESSAGE_TYPES_::ACCELERATION);
+    EXPECT_EQ(reader.GetMessageType(rot), _IMU_MESSAGE_TYPES_::ROTATION_VECTOR);
+    EXPECT_THROW(reader.GetMessageType(bad), std::runtime_error);
 }
 
 TEST(_IMUSerialPortTest, ValidateGetMessageLength) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
+    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
 
     unsigned char zero = 0x00;
     unsigned char one = 0x01;
     unsigned char max = 0xFF;
 
-    EXPECT_EQ(port.GetMessageLength(zero), 0u);
-    EXPECT_EQ(port.GetMessageLength(one), 1u);
-    EXPECT_EQ(port.GetMessageLength(max), 255u);
+    EXPECT_EQ(reader.GetMessageLength(zero), 0u);
+    EXPECT_EQ(reader.GetMessageLength(one), 1u);
+    EXPECT_EQ(reader.GetMessageLength(max), 255u);
 }
 
 TEST(_IMUSerialPortTest, ValidateValidateMessage) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
+    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
 
     unsigned char payload[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
     unsigned char goodChecksum[2] = {0x29, 0xB1};
     unsigned char badChecksum[2] = {0x00, 0x00};
 
-    EXPECT_TRUE(port.ValidateMessage(goodChecksum, payload, 9));
-    EXPECT_FALSE(port.ValidateMessage(badChecksum, payload, 9));
-}
-
-TEST(_IMUSerialPortTest, ValidateSetBaudRate) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
-    EXPECT_NO_THROW(port.SetBaudRate(9600u));
-    EXPECT_NO_THROW(port.SetBaudRate(115200u));
-}
-
-TEST(_IMUSerialPortTest, ValidateOpen) {
-    TestPty pty;
-
-    EXPECT_NO_THROW({
-        _IMUSerialPort port(pty.slavePath, 115200u);
-    });
-}
-
-TEST(_IMUSerialPortTest, ValidateClose) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
-    EXPECT_NO_THROW(port.Close());
-    EXPECT_NO_THROW(port.Close());
-}
-
-TEST(_IMUSerialPortTest, ValidateConstructor) {
-    TestPty pty;
-
-    EXPECT_NO_THROW({
-        _IMUSerialPort port(pty.slavePath, 115200u);
-    });
+    EXPECT_TRUE(reader.ValidateMessage(goodChecksum, payload, 9));
+    EXPECT_FALSE(reader.ValidateMessage(badChecksum, payload, 9));
 }
 
 TEST(_IMUSerialPortTest, CallbackIgnoresNonStartByte) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
     bool called = false;
+    std::vector<unsigned char> bytes = {0x7E};
 
-    port.SetCompletedPayloadCallback(
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = bytes;
+
+    IMUSerialPortReader reader(path, 9600, std::move(port));
+    reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
             called = true;
         }
     );
 
-    std::vector<unsigned char> bytes = {0x7E};
-    WriteAll(pty.masterFd, bytes);
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
 
-    EXPECT_NO_THROW(port.Callback());
     EXPECT_FALSE(called);
 }
 
 TEST(_IMUSerialPortTest, CallbackReadsAccelerationPacket) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
     Raw_Accelerometer expected{};
     std::memset(&expected, 0x11, sizeof(expected));
+    auto packet = BuildPacket(0x00, expected);
+    
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+
+    IMUSerialPortReader reader(path, 9600, std::move(port));
 
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
 
-    port.SetCompletedPayloadCallback(
+    reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
             called = true;
             receivedRot = rot;
@@ -243,10 +195,10 @@ TEST(_IMUSerialPortTest, CallbackReadsAccelerationPacket) {
         }
     );
 
-    auto packet = BuildPacket(0x00, expected);
-    WriteAll(pty.masterFd, packet);
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
 
-    EXPECT_NO_THROW(port.Callback());
     EXPECT_TRUE(called);
     EXPECT_FALSE(receivedRot.has_value());
     ASSERT_TRUE(receivedAccel.has_value());
@@ -254,17 +206,19 @@ TEST(_IMUSerialPortTest, CallbackReadsAccelerationPacket) {
 }
 
 TEST(_IMUSerialPortTest, CallbackReadsRotationPacket) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
     Raw_RotationVectorWAcc expected{};
     std::memset(&expected, 0x22, sizeof(expected));
+    auto packet = BuildPacket(0x01, expected);
+    
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    IMUSerialPortReader reader(path, 9600, std::move(port));
 
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
 
-    port.SetCompletedPayloadCallback(
+    reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
             called = true;
             receivedRot = rot;
@@ -272,10 +226,10 @@ TEST(_IMUSerialPortTest, CallbackReadsRotationPacket) {
         }
     );
 
-    auto packet = BuildPacket(0x01, expected);
-    WriteAll(pty.masterFd, packet);
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
 
-    EXPECT_NO_THROW(port.Callback());
     EXPECT_TRUE(called);
     EXPECT_FALSE(receivedAccel.has_value());
     ASSERT_TRUE(receivedRot.has_value());
@@ -283,36 +237,39 @@ TEST(_IMUSerialPortTest, CallbackReadsRotationPacket) {
 }
 
 TEST(_IMUSerialPortTest, CallbackRejectsBadChecksum) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
     Raw_Accelerometer payload{};
     std::memset(&payload, 0x33, sizeof(payload));
+    auto packet = BuildPacket(0x00, payload);
+    packet[packet.size() - 1] ^= 0xFF;
+
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    IMUSerialPortReader reader(path, 9600, std::move(port));
 
     bool called = false;
 
-    port.SetCompletedPayloadCallback(
+    reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
             called = true;
         }
     );
 
-    auto packet = BuildPacket(0x00, payload);
-    packet[packet.size() - 1] ^= 0xFF;
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
 
-    WriteAll(pty.masterFd, packet);
-
-    EXPECT_NO_THROW(port.Callback());
     EXPECT_FALSE(called);
 }
 
 TEST(_IMUSerialPortTest, CallbackThrowsOnBadMessageType) {
-    TestPty pty;
-    _IMUSerialPort port(pty.slavePath, 115200u);
-
+    
     std::vector<unsigned char> packet = {0xFF, 0x02};
 
-    WriteAll(pty.masterFd, packet);
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    IMUSerialPortReader reader(path, 9600, std::move(port));
 
-    EXPECT_THROW(port.Callback(), std::runtime_error);
+    port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    EXPECT_THROW(reader.Callback(*port), std::runtime_error);
 }

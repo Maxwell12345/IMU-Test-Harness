@@ -16,17 +16,26 @@
 #define Q_N 100
 #define Q_L 10
 
+#define IMU_COM_PORT "/dev/ttyUSB0"
+
 RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
-                                                                                                                  m_imuSerialPortReader("/dev/ttyUSB0", 9600){
+                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT,
+                                                                                                                                        9600,
+                                                                                                                                        std::make_unique<BoostSerialPort>()){
   this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
 
-  auto callbackLambda = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa){
+  auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
+                                                              std::optional<Raw_Accelerometer> optLa){
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader.InstallVectorCallback(callbackLambda);
+  this->m_imuSerialPortReader.InstallCallback(imuSerialCallback);
+
+  auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
+    imuManager.UpdateLatestGps(g);
+  };
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }

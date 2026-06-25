@@ -9,7 +9,10 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED filesystem regex atomic)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    find_package(Boost CONFIG REQUIRED system)
+endif()
 find_package(SQLiteCpp REQUIRED)
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
@@ -19,20 +22,33 @@ add_library(IMUPROC_LIB
 		${PROJ_SRC}
 )
 
-target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
+target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/include)
+target_link_libraries(IMUPROC_LIB
+    PUBLIC
+        Eigen3::Eigen
+        SQLiteCpp
+        Boost::regex
+        Boost::filesystem)
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_libraries(IMUPROC_LIB PUBLIC atomic)
+endif()
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
-        IMUPROC_LIB
-        SQLiteCpp)
-target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+        IMUPROC_LIB)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_link_libraries(${PROJECT_NAME} PUBLIC Boost::system)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+endif()
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
- enable_testing()
- add_executable(${PROJECT_NAME}_tests
+enable_testing()
+add_executable(${PROJECT_NAME}_tests
      ${TEST_SRC}
 )
 target_link_libraries(${PROJECT_NAME}_tests
@@ -42,11 +58,14 @@ target_link_libraries(${PROJECT_NAME}_tests
          GTest::gtest_main
          GTest::gmock
          GTest::gmock_main
-         atomic
-         SQLiteCpp
-         sqlite3
 )
-target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_libraries(${PROJECT_NAME}_tests PUBLIC atomic)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
+endif()
 
 target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"

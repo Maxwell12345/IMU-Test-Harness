@@ -97,7 +97,7 @@ namespace IMUUtils
       degrees = (degrees < 0)? degrees + 360 : degrees;
     }
 
-    return degrees * M_PI / 180.0;
+    return degrees * std::numbers::pi / 180.0;
   };
 
   /**
@@ -291,7 +291,7 @@ namespace IMUUtils
         throw std::out_of_range("Invalid scalar. Must been between 0 and 1.");
       }
     
-    heading = heading * 180.0 / M_PI;
+    heading = heading * 180.0 / std::numbers::pi;
 
       while(heading > 360) {
         heading -= 360;

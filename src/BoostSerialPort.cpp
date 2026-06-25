@@ -1,9 +1,9 @@
 #include "BoostSerialPort.hpp"
 
-BoostSerialPort::BoostSerialPort(std::function<void(boost::asio::serial_port& m_serial)> callback) :
-                                                                   m_serial(m_io),
-                                                                   m_callback(callback) {
-    
+BoostSerialPort::BoostSerialPort() : m_serial(m_io){}
+
+void BoostSerialPort::InstallCallback(std::function<void(SerialPortBase& port)> callback) {
+    m_callback = callback;
 }
 
 void BoostSerialPort::Open(const std::string& port) {
@@ -11,8 +11,25 @@ void BoostSerialPort::Open(const std::string& port) {
     m_serial.open(port, ec);
 
     if (ec) {
-        throw std::runtime_error("Failed to open: " + ec.message());
+        throw std::runtime_error("Failed to open: " + ec.message() + " " + port);
     }
+}
+
+void BoostSerialPort::ReadExact(unsigned char* dst, std::size_t len) {
+    boost::system::error_code ec;
+
+    boost::asio::read(m_serial, boost::asio::buffer(dst, len), boost::asio::transfer_exactly(len), ec);
+
+    if (ec) {
+        throw std::runtime_error("Failed to read: " + ec.message());
+    }
+}
+
+void BoostSerialPort::ReadUntil(std::string& dst, const std::string& delim) {
+    boost::asio::streambuf buf;
+    boost::asio::read_until(m_serial, buf, "\n");
+    std::istream is(&buf);
+    std::getline(is, dst);
 }
 
 void BoostSerialPort::SetBaudRate(unsigned int rate) {
@@ -20,7 +37,7 @@ void BoostSerialPort::SetBaudRate(unsigned int rate) {
 }
 
 void BoostSerialPort::Callback() {
-    m_callback(m_serial);
+    m_callback(*this);
 }
 
 void BoostSerialPort::Close() { 

@@ -1,4 +1,3 @@
-#include <thread>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 
@@ -10,13 +9,19 @@
 
 SerialComService::SerialComService(std::string path,
                                    unsigned int baudRate,
-                                   std::shared_ptr<SerialPortBase> serialPort) :
+                                   std::unique_ptr<SerialPortBase> serialPort) :
                                    m_running(false),
                                    m_path(path),
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
     if(VerifyPath(path) == false) {
-        throw std::invalid_argument("The serial port is invalid. Path should be \"/dev/...\" with no space");
+        std::string str;
+        #ifdef _WIN32
+            str = "\\\\.\\COM...";
+        #else
+            str = "/dev/...";
+        #endif
+        throw std::invalid_argument("The serial port is invalid. Path should be " + str + " with no space");
     }
     ConfigureSerialPort();
 }
@@ -52,12 +57,24 @@ void SerialComService::Stop() {
     }
 }
 
+void SerialComService::InstallCallback(std::function<void(SerialPortBase&)> callback) {
+    m_serial->InstallCallback(callback);
+}
+
 void SerialComService::ConfigureSerialPort() {
     m_serial->Open(m_path);
     m_serial->SetBaudRate(m_baudRate);
 }
 
 bool SerialComService::VerifyPath(const std::string& path) {
-    const boost::regex pattern(R"(^/dev/\S+$)");
+    #ifdef _WIN32
+        std::string patternStr = R"(^((?:\\\\\.\\)?COM[1-9][0-9]*)$)";
+    #else
+        std::string patternStr = R"(^(?:/dev/\S+)$)";
+    #endif
+
+    const boost::regex pattern(patternStr,
+                               boost::regex::icase);
+
     return boost::regex_match(path, pattern);
 }
