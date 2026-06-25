@@ -39,17 +39,31 @@ TEST(SerialComServiceTest, ServiceLoopStatus) {
 }
 
 TEST(SerialComServiceTest, VerifyPathReturnsTrue) {
+#ifdef _WIN32
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM11)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\\\.\\COM10)"));
+#else
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/serial/by-id/port0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/serial/by-path/port0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/ttyUSB0"));
+#endif
 }
 
 TEST(SerialComServiceTest, VerifyPathReturnsFalse) {
+#ifdef _WIN32
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\COM11)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\.\\COM10)"));
+#else
     EXPECT_FALSE(SerialComService::VerifyPath("/d"));
     EXPECT_FALSE(SerialComService::VerifyPath("/do"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/sdf fsdf"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ /"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ "));
+#endif
 }

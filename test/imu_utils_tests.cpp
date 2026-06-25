@@ -17,10 +17,6 @@
 
 using namespace IMUUtils;
 
-#ifndef M_PI
-#define M_PI std::numbers::pi
-#endif
-
 TEST(IMUUtils, Convert_Degrees_To_Radians) {
 
   struct Case {
@@ -29,17 +25,17 @@ TEST(IMUUtils, Convert_Degrees_To_Radians) {
   };
 
   const std::vector<Case> cases = {// These tests are pass correct
-                                    {-45.0, M_PI * 7 / 4},
-                                    {0.0, M_PI * 0},
-                                    {45.0, M_PI / 4},
-                                    {90.0, M_PI / 2},
-                                    {135.0, M_PI * 3 / 4},
-                                    {180.0, M_PI},
-                                    {225.0, M_PI * 5 / 4},
-                                    {270.0, M_PI * 3 / 2},
-                                    {315.0, M_PI * 7 / 4},
+                                    {-45.0, std::numbers::pi * 7 / 4},
+                                    {0.0, std::numbers::pi * 0},
+                                    {45.0, std::numbers::pi / 4},
+                                    {90.0, std::numbers::pi / 2},
+                                    {135.0, std::numbers::pi * 3 / 4},
+                                    {180.0, std::numbers::pi},
+                                    {225.0, std::numbers::pi * 5 / 4},
+                                    {270.0, std::numbers::pi * 3 / 2},
+                                    {315.0, std::numbers::pi * 7 / 4},
                                     {360.0, 0.0},
-                                    {405.0, M_PI / 4}
+                                    {405.0, std::numbers::pi / 4}
   };
 
   for (const auto &c : cases) {
@@ -255,17 +251,17 @@ TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
 
   const std::vector<Case> cases = {
       // Near equator at +1 m/s2
-      {0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      {0.0, 1.0, 1.0 / (111111.11 * std::cos(0.0 * std::numbers::pi / 180.0))},
       // 45 deg latitude at +1 m/s2
-      {45.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      {45.0, 1.0, 1.0 / (111111.11 * std::cos(45.0 * std::numbers::pi / 180.0))},
       // 60 deg latitude at +1 m/s2
-      {60.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))},
+      {60.0, 1.0, 1.0 / (111111.11 * std::cos(60.0 * std::numbers::pi / 180.0))},
       // Near equator at -1 m/s2
-      {0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * M_PI / 180.0))},
+      {0.0, -1.0, -1.0 / (111111.11 * std::cos(0.0 * std::numbers::pi / 180.0))},
       // 45 deg latitude at -1 m/s2
-      {45.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * M_PI / 180.0))},
+      {45.0, -1.0, -1.0 / (111111.11 * std::cos(45.0 * std::numbers::pi / 180.0))},
       // 60 deg latitude at -1 m/s2
-      {60.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * M_PI / 180.0))}
+      {60.0, -1.0, -1.0 / (111111.11 * std::cos(60.0 * std::numbers::pi / 180.0))}
   };
 
   for (const auto &c : cases) {
