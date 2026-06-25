@@ -8,10 +8,13 @@
 
 class SerialPortBase;
 class SerialComService;
+class MulticastService;
 
 class NmeaService {
 public:
-    NmeaService(std::string path, unsigned int baudRate, std::unique_ptr<SerialPortBase> port);
+    NmeaService(std::unique_ptr<SerialComService> serialComService,
+                std::unique_ptr<MulticastService> multicastService);
+
     ~NmeaService();
 
     void Start();
@@ -27,6 +30,7 @@ private:
     std::string m_nmea;
 
     std::unique_ptr<SerialComService> m_serialComService;
+    std::unique_ptr<MulticastService> m_multicastService;
 };
 
 #endif

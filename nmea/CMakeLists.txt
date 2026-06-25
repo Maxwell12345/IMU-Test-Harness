@@ -10,6 +10,7 @@ find_package(GTest CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Serial)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Nmea)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src/Yaml)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src/Networking)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 
@@ -17,13 +18,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/src/Serial
     ${CMAKE_SOURCE_DIR}/src/Nmea
     ${CMAKE_SOURCE_DIR}/src/Yaml
+    ${CMAKE_SOURCE_DIR}/src/Networking
 )
 
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE
         serial
         nmea
-        yaml)
+        yaml
+        networking)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${PROJECT_NAME} PRIVATE -Wno-psabi)
