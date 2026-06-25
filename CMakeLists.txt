@@ -9,7 +9,10 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED filesystem regex atomic)
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    find_package(Boost CONFIG REQUIRED system)
+endif()
 find_package(SQLiteCpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -20,9 +23,17 @@ add_library(IMUPROC_LIB
 		${PROJ_SRC}
 )
 
-target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(IMUPROC_LIB PUBLIC ${YAML_CPP_INCLUDE_DIR})
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen atomic)
+target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/include)
+target_link_libraries(IMUPROC_LIB
+    PUBLIC
+        Eigen3::Eigen
+        SQLiteCpp
+        Boost::regex
+        Boost::filesystem)
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_libraries(IMUPROC_LIB PUBLIC atomic)
+endif()
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 target_link_libraries(${PROJECT_NAME} 
@@ -31,12 +42,19 @@ target_link_libraries(${PROJECT_NAME}
         SQLiteCpp
         yaml-cpp
 )
-target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_link_libraries(${PROJECT_NAME} PUBLIC Boost::system)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+endif()
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
- enable_testing()
- add_executable(${PROJECT_NAME}_tests
+enable_testing()
+add_executable(${PROJECT_NAME}_tests
      ${TEST_SRC}
 )
 target_link_libraries(${PROJECT_NAME}_tests
@@ -51,7 +69,13 @@ target_link_libraries(${PROJECT_NAME}_tests
          sqlite3
          yaml-cpp
 )
-target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_libraries(${PROJECT_NAME}_tests PUBLIC atomic)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
+endif()
 
 target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"

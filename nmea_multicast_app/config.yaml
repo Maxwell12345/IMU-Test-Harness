@@ -1,0 +1,5 @@
+nmea_config:
+  serial_port_path: \\.\COM11
+  serial_port_baud_rate: 115200
+  multicast_ip: 239.255.0.1
+  multicast_port: 6001

@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "GpsUpdate.hpp"
+#include "gps/GpsManager.hpp"
 #include "IMUGPSFusionKF.hpp"
 #include "IMUManager.hpp"
 #include "IMUSerialPortReader.hpp"
@@ -20,8 +21,7 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController();
-  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager, std::string cofpath);
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager);
 
   ~RadarPositionNavigationController();
 
@@ -159,22 +159,24 @@ private:
   void ParseYamlForKalmanFilterValues(std::string filepath);
 
 private:
-  std::atomic<bool> m_isKFConfigured;
-
-  std::mutex m_kFUpdateMutex;
+  std::thread m_serviceThread;
 
   std::shared_ptr<DatabaseManager> m_dbManager;
-  std::optional<IMUManager> m_imuManager;
-  std::optional<IMUSerialPortReader> m_imuSerialPortReader;
 
-  IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   Vector6d m_latestX;
   Matrix6d m_latestP;
-
+  std::mutex m_kFUpdateMutex;
+  IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   double m_gpsChiSqLowerBound;
   double m_gpsChiSqUpperBound;
   double m_imuChiSqLowerBound;
   double m_imuChiSqUpperBound;
+
+  IMUManager m_imuManager;
+  std::atomic<bool> m_isKFConfigured;
+  IMUSerialPortReader m_imuSerialPortReader;
+
+  GpsManager m_gpsManager;
 
   FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);

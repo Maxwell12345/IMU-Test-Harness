@@ -1,9 +1,7 @@
 {
   "dependencies": [
     "boost",
-    "eigen3",
     "gtest",
-    "sqlitecpp",
-    "sqlite3"
+    "yaml-cpp"
   ]
 }

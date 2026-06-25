@@ -4,8 +4,6 @@
 #include <string>
 #include <functional>
 
-#include <boost/asio.hpp>
-
 /**
  * @brief Serial Port Base class for DI. To be inherited by Boost wrapper and mock class
  */

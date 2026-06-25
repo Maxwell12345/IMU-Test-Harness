@@ -13,20 +13,26 @@
 #define Q_N 100
 #define Q_L 10
 
-RadarPositionNavigationController::RadarPositionNavigationController() {};
-RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
-                                                                     std::string cofPath = "/test/WMM.COF")
-    : m_dbManager(std::move(dbManager)), m_imuManager(std::in_place, m_dbManager, cofPath),
-      m_imuSerialPortReader(std::in_place, "/dev/ttyUSB0", 9600) {
+#define IMU_COM_PORT "/dev/ttyUSB0"
+
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
+                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT,
+                                                                                                                                        9600,
+                                                                                                                                        std::make_unique<BoostSerialPort>()){
+  this->m_dbManager = std::move(dbManager);
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
 
-  auto callbackLambda = [&imuManager = *this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
-                                                            std::optional<Raw_Accelerometer> optLa) {
+  auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
+                                                              std::optional<Raw_Accelerometer> optLa){
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader->InstallVectorCallback(callbackLambda);
+  this->m_imuSerialPortReader.InstallCallback(imuSerialCallback);
+
+  auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
+    imuManager.UpdateLatestGps(g);
+  };
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }
@@ -46,7 +52,7 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
     this->m_isKFConfigured = true;
   }
 
-  m_imuManager->InstallEkf(
+  m_imuManager.InstallEkf(
       [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
       [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
 
@@ -54,16 +60,12 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
 }
 
 void RadarPositionNavigationController::StartIMUReader() {
-  if (this->m_imuSerialPortReader.has_value()) {
-    this->m_imuSerialPortReader->Start();
-  }
+    this->m_imuSerialPortReader.Start();
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
-  if (this->m_imuSerialPortReader.has_value()) {
-    this->m_imuSerialPortReader->Stop();
-  }
-  this->m_isKFConfigured.store(false);
+    this->m_imuSerialPortReader.Stop();
+    this->m_isKFConfigured.store(false);
 }
 
 void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile,
@@ -209,7 +211,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
 }
 
 void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) {
-  m_imuManager->UpdateLatestGps(gpsUpdate);
+  m_imuManager.UpdateLatestGps(gpsUpdate);
 }
 
 void RadarPositionNavigationController::TotalDestruction() {

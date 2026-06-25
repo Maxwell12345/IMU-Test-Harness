@@ -21,7 +21,7 @@ namespace {
 } // namespace
 
 TEST(IMUManagerTest, GetStatsImuReject) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   std::optional<Raw_Accelerometer> optLa{Raw_Accelerometer{1, NAN, 5, 1000000}};
@@ -61,7 +61,7 @@ TEST(IMUManagerTest, GetStatsImuReject) {
 }
 
 TEST(IMUManagerTest, GetStatsImuAccept) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   // imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   std::optional<Raw_Accelerometer> optLa = {Raw_Accelerometer{1, 1, 5, 1000000}};
@@ -99,7 +99,7 @@ TEST(IMUManagerTest, GetStatsGpsReject) {
   const uint64_t GPS_TIMESTAMP_MS_INVALID =
       std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
 
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   IMUManagerStats stats = imuManager.GetStats();
@@ -158,7 +158,7 @@ TEST(IMUManagerTest, GetStatsGpsAccept) {
   const uint64_t GPS_TIMESTAMP_MS_INVALID =
       std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
 
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   IMUManagerStats stats = imuManager.GetStats();
@@ -186,12 +186,12 @@ TEST(IMUManagerTest, GetStatsGpsAccept) {
 }
 
 TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_EQ(imuManager.GetLatestGps(), std::nullopt);
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   GpsUpdate gpsUpdate;
@@ -213,7 +213,7 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   const std::chrono::seconds STALE_TIME_OUT_S(10);
@@ -272,14 +272,14 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
 }
 
 TEST(IMUManagerTest, IsInvalidRangeReturnsFalse) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_FALSE(imuManager.IsInvalidRange(0));
   EXPECT_FALSE(imuManager.IsInvalidRange(10));
   EXPECT_FALSE(imuManager.IsInvalidRange(-10));
 }
 
 TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_TRUE(imuManager.IsInvalidRange(NAN));
   EXPECT_TRUE(imuManager.IsInvalidRange(INFINITY));
   EXPECT_TRUE(imuManager.IsInvalidRange(std::numeric_limits<int>::max()));
@@ -289,7 +289,7 @@ TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   Raw_Accelerometer la = {1, 2, 3, 1000000};
 
   EXPECT_TRUE(imuManager.ValidateImuEvent(std::nullopt, la));
@@ -300,7 +300,7 @@ TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
 
   float maxLimitF = std::numeric_limits<float>::max();
   uint64_t maxLimitD = std::numeric_limits<uint64_t>::max();
@@ -330,7 +330,7 @@ TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
 }
 
 TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   Raw_Accelerometer la = imuManager.m_imuLinearAcceleration;
@@ -368,7 +368,7 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
 }
 
 TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   GpsUpdate gpsUpdate;
   gpsUpdate.latitude = 1;
   gpsUpdate.longitude = 1;
@@ -379,7 +379,7 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
 }
 
 TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
   double latitude = 80.0;
   double longitude = 0.0;
@@ -415,7 +415,7 @@ TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
 }
 
 TEST(IMUManagerTest, ReadyForEkfReturnsFalse) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   imuManager.m_ekfInstalled = false;
@@ -435,7 +435,7 @@ TEST(IMUManagerTest, ReadyForEkfReturnsFalse) {
 }
 
 TEST(IMUManagerTest, ReadyForEkfReturnsTrue) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   imuManager.m_ekfInstalled = true;
@@ -445,7 +445,7 @@ TEST(IMUManagerTest, ReadyForEkfReturnsTrue) {
 }
 
 TEST(IMUManagerTest, GetCurrentYearReturnsYear) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   auto ymdNow = std::chrono::system_clock::now();
@@ -454,7 +454,7 @@ TEST(IMUManagerTest, GetCurrentYearReturnsYear) {
 }
 
 TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
   imuManager.m_lastEKFMachineTime = 0;
 
@@ -469,7 +469,7 @@ TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
 }
 
 TEST(IMUManagerTest, ResetImuReadyFlagsExpectsFalse) {
-  IMUManager imuManager(db, "./test/WMM.COF");
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.m_imuRotationVectorReady = false;
   imuManager.m_imuLinearAccelerationReady = true;
 
