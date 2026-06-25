@@ -9,17 +9,24 @@
 class MockSerialPort : public SerialPortBase {
 };
 
+namespace {
+#ifdef _WIN32
+    std::string path = R"(COM1)";
+#else
+    std::string path = "/dev/ttyUSB0";
+#endif
+}
+
 TEST(SerialComServiceTest, SerialComServiceConstructorThrowsRuntimeError) {
     std::function f = [](SerialPortBase& serial){};
     EXPECT_THROW(SerialComService("invalid path", 9600, std::make_unique<MockSerialPort>()), std::invalid_argument);
 }
 
 TEST(SerialComServiceTest, SerialComServiceConstructorReturns) {
-    EXPECT_NO_THROW(SerialComService("/dev/ttyUSB0", 9600, std::make_unique<MockSerialPort>()));
+    EXPECT_NO_THROW(SerialComService(path, 9600, std::make_unique<MockSerialPort>()));
 }
 
 TEST(SerialComServiceTest, InitialValues) {
-    std::string path = "/dev/ttyUSB0";
     unsigned int baudRate = 9600;
     SerialComService SerialComService(path, baudRate, std::make_unique<MockSerialPort>());
     EXPECT_FALSE(SerialComService.m_running);
@@ -29,7 +36,6 @@ TEST(SerialComServiceTest, InitialValues) {
 }
 
 TEST(SerialComServiceTest, ServiceLoopStatus) {
-    std::string path = "/dev/ttyUSB0";
     unsigned int baudRate = 9600;
     SerialComService SerialComService(path, baudRate, std::make_unique<MockSerialPort>());
     SerialComService.Start();
@@ -39,25 +45,30 @@ TEST(SerialComServiceTest, ServiceLoopStatus) {
 }
 
 TEST(SerialComServiceTest, VerifyPathReturnsTrue) {
+#ifdef _WIN32
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(COM1)"));
+    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM11)"));
+#else
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/serial/by-id/port0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/serial/by-path/port0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/tty0"));
     EXPECT_TRUE(SerialComService::VerifyPath("/dev/ttyUSB0"));
-    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM1)"));
-    EXPECT_TRUE(SerialComService::VerifyPath(R"(COM1)"));
-    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM11)"));
-    EXPECT_TRUE(SerialComService::VerifyPath(R"(\\.\COM10)"));
+#endif
 }
 
 TEST(SerialComServiceTest, VerifyPathReturnsFalse) {
+#ifdef _WIN32
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\COM1)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\COM11)"));
+    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\.\\COM10)"));
+#else
     EXPECT_FALSE(SerialComService::VerifyPath("/d"));
     EXPECT_FALSE(SerialComService::VerifyPath("/do"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/sdf fsdf"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ /"));
     EXPECT_FALSE(SerialComService::VerifyPath("/dev/ "));
-    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\\COM1)"));
-    EXPECT_FALSE(SerialComService::VerifyPath(R"(\COM1)"));
-    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\COM11)"));
-    EXPECT_FALSE(SerialComService::VerifyPath(R"(\\.\\COM10)"));
+#endif
 }
