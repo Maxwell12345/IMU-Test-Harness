@@ -4,6 +4,7 @@
     "eigen3",
     "gtest",
     "sqlitecpp",
-    "sqlite3"
+    "sqlite3",
+    "yaml-cpp"
   ]
 }

@@ -23,16 +23,18 @@ add_library(IMUPROC_LIB
 		${PROJ_SRC}
 )
 
-target_include_directories(IMUPROC_LIB PUBLIC ${YAML_CPP_INCLUDE_DIR})
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/include)
 target_link_libraries(IMUPROC_LIB
     PUBLIC
         Eigen3::Eigen
         SQLiteCpp
         Boost::regex
-        Boost::filesystem)
+        Boost::filesystem
+        yaml-cpp)
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_link_libraries(IMUPROC_LIB PUBLIC atomic)
+    target_link_libraries(IMUPROC_LIB PUBLIC atomic yaml-cpp)
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_link_libraries(IMUPROC_LIB PUBLIC yaml-cpp::yaml-cpp)
 endif()
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
@@ -40,7 +42,6 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         IMUPROC_LIB
         SQLiteCpp
-        yaml-cpp
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
@@ -49,6 +50,7 @@ endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+    target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cpp)
 endif()
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
@@ -64,10 +66,6 @@ target_link_libraries(${PROJECT_NAME}_tests
          GTest::gtest_main
          GTest::gmock
          GTest::gmock_main
-         atomic
-         SQLiteCpp
-         sqlite3
-         yaml-cpp
 )
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_libraries(${PROJECT_NAME}_tests PUBLIC atomic)
