@@ -714,7 +714,7 @@ async function poll() {
     } catch (e) {
     }
 
-    setTimeout(poll, 5);
+    setTimeout(poll, 1);
 }
 
 zeroButton.onclick = () => {

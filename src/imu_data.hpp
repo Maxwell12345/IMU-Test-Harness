@@ -7,6 +7,7 @@
 /**
  * @brief Raw serial port rotation quaternion with acc. c-struct.
  */
+#pragma pack(push, 1)
 typedef struct Raw_RotationVectorWAcc {
     float i; 
     float j; 
@@ -15,16 +16,19 @@ typedef struct Raw_RotationVectorWAcc {
     float accuracy; 
     uint64_t timestamp;
 } Raw_RotationVectorWAcc_t;
+#pragma pack(pop)
 
 /**
  * @brief Raw serial port accelerometer vector c-struct.
  */
+#pragma pack(push, 1)
 typedef struct Raw_Accelerometer {
     float x;
     float y;
     float z;
     uint64_t timestamp;
 } Raw_Accelerometer_t;
+#pragma pack(pop)
 
 /**
  * @brief Raw 3-axis accelerometer measurement from the BNO085.

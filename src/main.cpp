@@ -19,23 +19,24 @@ void callback(std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accel
     }
 }
 
-int main(int argc,char** argv) {
+int main(int argc, char** argv) {
     try {
-        IMUSerialPortReader reader = IMUSerialPortReader("/dev/ttyUSB0", 115200);
+        IMUSerialPortReader reader("/dev/ttyUSB0", 115200);
 
-        reader.InstallVectorCallback(&callback);
+        reader.InstallVectorCallback(callback);
 
         reader.Start();
 
-        return EXIT_SUCCESS;
-    } catch(const std::invalid_argument &e) {
-        //TODO: LOG_ERROR HERE
-        std::cout << "[ERROR]" << e.what() << std::endl;
-    } catch (const std::runtime_error &e) {
-        //TODO: LOG_ERROR HERE
-        std::cout << "[ERROR]" << e.what() << std::endl;
+        std::signal(SIGINT, [](int) {
+            std::exit(EXIT_SUCCESS);
+        });
+
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+    } catch (const std::exception& e) {
+        std::cout << "[ERROR] " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-
-    return EXIT_SUCCESS;
 }

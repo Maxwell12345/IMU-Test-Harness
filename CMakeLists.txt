@@ -9,46 +9,57 @@ message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS asio filesystem regex)
+find_package(Boost CONFIG REQUIRED)
 find_package(SQLiteCpp REQUIRED)
+find_package(Threads REQUIRED)
 
-file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-file(GLOB_RECURSE PROJ_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
-
-add_library(IMUPROC_LIB
-		${PROJ_SRC}
+file(GLOB_RECURSE PROJ_SRC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
 )
 
+list(FILTER PROJ_SRC EXCLUDE REGEX ".*/main\\.cpp$")
+
+add_library(IMUPROC_LIB ${PROJ_SRC})
+
 target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(IMUPROC_LIB PUBLIC Eigen3::Eigen Boost::asio Boost::filesystem Boost::regex atomic)
+
+target_link_libraries(IMUPROC_LIB
+    PUBLIC
+        Eigen3::Eigen
+        Boost::boost
+        Threads::Threads
+)
+
+target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
-target_link_libraries(${PROJECT_NAME} 
+
+target_link_libraries(${PROJECT_NAME}
     PRIVATE
         IMUPROC_LIB
         SQLiteCpp
-        Boost
-    )
-target_compile_options(IMUPROC_LIB PRIVATE -Wno-psabi)
+        sqlite3
+)
 
 file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
- enable_testing()
- add_executable(${PROJECT_NAME}_tests
-     ${TEST_SRC}
-)
+enable_testing()
+
+add_executable(${PROJECT_NAME}_tests ${TEST_SRC})
+
 target_link_libraries(${PROJECT_NAME}_tests
     PRIVATE
-         IMUPROC_LIB
-         GTest::gtest
-         GTest::gtest_main
-         GTest::gmock
-         GTest::gmock_main
-         atomic
-         SQLiteCpp
-         sqlite3
-         boost
+        IMUPROC_LIB
+        GTest::gtest
+        GTest::gtest_main
+        GTest::gmock
+        GTest::gmock_main
+        atomic
+        SQLiteCpp
+        sqlite3
 )
+
 target_compile_options(${PROJECT_NAME}_tests PRIVATE -Wno-psabi)
 
 target_compile_definitions(${PROJECT_NAME}_tests PRIVATE

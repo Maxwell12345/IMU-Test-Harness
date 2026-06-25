@@ -8,6 +8,8 @@
  ******************************************************************************/
 #include "serial.h"
 
+#define MAGIC_ENCODER 0xA5
+
 static uint16_t calculate_crc16_ccitt_false(const unsigned char *data, size_t length)
 {
     cm_t cm;
@@ -85,7 +87,7 @@ esp_err_t send_fieldwise_acceleration_t(const acceleration_t *acceleration) {
     unsigned char buffer[ACCELERATION_MSG_BYTES] = {0};
     size_t length = 0;
 
-    buffer[length++] = 0xFF;
+    buffer[length++] = MAGIC_ENCODER;
     buffer[length++] = ACCELERATION_T_ID;
     buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
 
@@ -111,7 +113,7 @@ esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation) {
     unsigned char buffer[ROTATION_MSG_BYTES] = {0};
     size_t length = 0;
 
-    buffer[length++] = 0xFF;
+    buffer[length++] = MAGIC_ENCODER;
     buffer[length++] = ROTATION_T_ID;
     buffer[length++] = ROTATION_PAYLOAD_BYTES;
 
@@ -141,7 +143,7 @@ esp_err_t send_acceleration_t(const acceleration_t *acceleration) {
     unsigned char buffer[50] = {0};
     size_t length = 0;
 
-    buffer[length++] = 0xFF;
+    buffer[length++] = MAGIC_ENCODER;
     buffer[length++] = ACCELERATION_T_ID;
     buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
 
@@ -161,7 +163,7 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
     unsigned char buffer[50] = {0};
     size_t length = 0;
 
-    buffer[length++] = 0xFF;
+    buffer[length++] = MAGIC_ENCODER;
     buffer[length++] = ROTATION_T_ID;
     buffer[length++] = ROTATION_PAYLOAD_BYTES;
 

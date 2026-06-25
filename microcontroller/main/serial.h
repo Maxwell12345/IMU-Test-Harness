@@ -46,13 +46,16 @@
 #define ACCELERATION_CRC_IDX (PAYLOAD_START_IDX+ACCELERATION_PAYLOAD_BYTES)
 #define ROTATION_CRC_IDX (PAYLOAD_START_IDX+ROTATION_PAYLOAD_BYTES)
 
+#pragma pack(push, 1)
 typedef struct acceleration_t {
     float x;
     float y;
     float z;
     uint64_t timestamp;
 } acceleration_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct rotation_t {
     float i;
     float j;
@@ -61,6 +64,7 @@ typedef struct rotation_t {
     float accuracy;
     uint64_t timestamp;
 } rotation_t;
+#pragma pack(pop)
 
 esp_err_t host_serial_init(void);
 
