@@ -22,7 +22,16 @@ namespace {
 
 namespace {
   std::shared_ptr<DatabaseManager> db = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
+
+  #ifdef _WIN32
+      std::string path = R"(COM1)";
+  #else
+      std::string path = "/dev/ttyUSB0";
+  #endif
+
 }
+
+class MockSerialPort : public SerialPortBase {};
 
 // sh2_Hal_t bno085_hal_create() {
 //   bno085HalCreateCalls++;
@@ -340,11 +349,13 @@ namespace {
 //   ASSERT_FALSE(std::isfinite(t.m_latestX(0)));
 // }
 
-// TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch) {
-//   RadarPositionNavigationController t;
+TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch) {
+  auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(path, 9600, std::unique_ptr<MockSerialPort>());
+                                                                                                                                                                
+  // RadarPositionNavigationController t(db, std::move(imuSerialPortReader));
 
-//   EXPECT_THROW(t.ParseYamlForKalmanFilterValues("../compose.yml"), std::runtime_error);
-// }
+  // EXPECT_THROW(t.ParseYamlForKalmanFilterValues("../compose.yml"), std::runtime_error);
+}
 
 // TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting) {
 //   RadarPositionNavigationController t;

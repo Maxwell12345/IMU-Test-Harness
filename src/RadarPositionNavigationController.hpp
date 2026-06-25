@@ -21,7 +21,7 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager);
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager, std::unique_ptr<IMUSerialPortReader> serialPort);
 
   ~RadarPositionNavigationController();
 
@@ -174,7 +174,7 @@ private:
 
   IMUManager m_imuManager;
   std::atomic<bool> m_isKFConfigured;
-  IMUSerialPortReader m_imuSerialPortReader;
+  std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;
 
   GpsManager m_gpsManager;
 

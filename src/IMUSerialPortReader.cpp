@@ -18,6 +18,7 @@ IMUSerialPortReader::IMUSerialPortReader(std::string path, unsigned int baudRate
     m_serialComService = std::make_unique<SerialComService>(path,
                                                             baudRate,
                                                             std::move(port));
+    std::cout << "[DEBUG] hello guys\n";
     m_serialComService->InstallCallback(f);
 }
 

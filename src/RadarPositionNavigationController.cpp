@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <thread>
 #include <yaml-cpp/yaml.h>
-
 #define GPS_N 20
 #define GPS_L 5
 #define IMU_N 100
@@ -15,11 +14,11 @@
 
 #define IMU_COM_PORT "/dev/ttyUSB0"
 
-RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager): m_imuManager(dbManager, "./WMM.COF"),
-                                                                                                                  m_imuSerialPortReader(IMU_COM_PORT,
-                                                                                                                                        9600,
-                                                                                                                                        std::make_unique<BoostSerialPort>()){
-  this->m_dbManager = std::move(dbManager);
+RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
+                                                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader):
+                                                                     m_dbManager(dbManager),
+                                                                     m_imuManager(dbManager, "./WMM.COF"),
+                                                                     m_imuSerialPortReader(std::move(imuSerialPortReader)) {
   this->m_isKFConfigured = false;
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
@@ -28,7 +27,7 @@ RadarPositionNavigationController::RadarPositionNavigationController(std::shared
                                                               std::optional<Raw_Accelerometer> optLa){
     imuManager.SensorCallback(optRv, optLa);
   };
-  this->m_imuSerialPortReader.InstallCallback(imuSerialCallback);
+  this->m_imuSerialPortReader->InstallCallback(imuSerialCallback);
 
   auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
     imuManager.UpdateLatestGps(g);
@@ -60,11 +59,11 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
 }
 
 void RadarPositionNavigationController::StartIMUReader() {
-    this->m_imuSerialPortReader.Start();
+    this->m_imuSerialPortReader->Start();
 }
 
 void RadarPositionNavigationController::StopRadarPNT() {
-    this->m_imuSerialPortReader.Stop();
+    this->m_imuSerialPortReader->Stop();
     this->m_isKFConfigured.store(false);
 }
 
