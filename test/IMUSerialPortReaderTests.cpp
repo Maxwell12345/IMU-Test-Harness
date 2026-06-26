@@ -9,12 +9,21 @@
 #include <vector>
 #include <memory>
 
+#include <YamlConfig.hpp>
+
 namespace {
 #ifdef _WIN32
     std::string path = R"(\\.\COM10)";
 #else
     std::string path = R"(/dev/ttyUSB0)";
 #endif
+}
+
+namespace {
+    _ImuSerialPort config = {
+        path,
+        460800
+    };
 }
 
 class MockSerialPort : public SerialPortBase {
@@ -75,7 +84,7 @@ static std::vector<unsigned char> BuildPacket(unsigned char type, const T& paylo
 }
 
 TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum) {
-    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
+    IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
     unsigned char empty[1] = {0x00};
     EXPECT_EQ(reader.CalculateCRC16CCITTFalseChecksum(empty, 0), 0xFFFFUL);
@@ -106,7 +115,7 @@ TEST(_IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum) {
 }
 
 TEST(_IMUSerialPortTest, ValidateIsStartEncoder) {
-    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
+    IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
     unsigned char start = 0xFF;
     unsigned char zero = 0x00;
@@ -118,7 +127,7 @@ TEST(_IMUSerialPortTest, ValidateIsStartEncoder) {
 }
 
 TEST(_IMUSerialPortTest, ValidateGetMessageType) {
-    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
+    IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
     unsigned char accel = 0x00;
     unsigned char rot = 0x01;
@@ -130,7 +139,7 @@ TEST(_IMUSerialPortTest, ValidateGetMessageType) {
 }
 
 TEST(_IMUSerialPortTest, ValidateGetMessageLength) {
-    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
+    IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
     unsigned char zero = 0x00;
     unsigned char one = 0x01;
@@ -142,7 +151,7 @@ TEST(_IMUSerialPortTest, ValidateGetMessageLength) {
 }
 
 TEST(_IMUSerialPortTest, ValidateValidateMessage) {
-    IMUSerialPortReader reader(path, 9600, std::make_unique<MockSerialPort>());
+    IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
     unsigned char payload[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
     unsigned char goodChecksum[2] = {0x29, 0xB1};
@@ -159,7 +168,7 @@ TEST(_IMUSerialPortTest, CallbackIgnoresNonStartByte) {
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = bytes;
 
-    IMUSerialPortReader reader(path, 9600, std::move(port));
+    IMUSerialPortReader reader(config, std::move(port));
     reader.InstallCallback(
         [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
             called = true;
@@ -181,7 +190,7 @@ TEST(_IMUSerialPortTest, CallbackReadsAccelerationPacket) {
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
 
-    IMUSerialPortReader reader(path, 9600, std::move(port));
+    IMUSerialPortReader reader(config, std::move(port));
 
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
@@ -212,7 +221,7 @@ TEST(_IMUSerialPortTest, CallbackReadsRotationPacket) {
     
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
-    IMUSerialPortReader reader(path, 9600, std::move(port));
+    IMUSerialPortReader reader(config, std::move(port));
 
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
@@ -244,7 +253,7 @@ TEST(_IMUSerialPortTest, CallbackRejectsBadChecksum) {
 
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
-    IMUSerialPortReader reader(path, 9600, std::move(port));
+    IMUSerialPortReader reader(config, std::move(port));
 
     bool called = false;
 
@@ -267,7 +276,7 @@ TEST(_IMUSerialPortTest, CallbackThrowsOnBadMessageType) {
 
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
-    IMUSerialPortReader reader(path, 9600, std::move(port));
+    IMUSerialPortReader reader(config, std::move(port));
 
     port = std::make_unique<MockSerialPort>();
     port->m_data = packet;

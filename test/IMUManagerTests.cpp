@@ -2,8 +2,6 @@
 #include <limits>
 #include <vector>
 
-#include <boost/make_shared.hpp>
-#include <boost/shared_ptr.hpp>
 #include <gtest/gtest.h>
 
 #include "DatabaseManager.hpp"
@@ -12,31 +10,21 @@
 #include "IMUManager.hpp"
 
 namespace {
-std::shared_ptr<DatabaseManager> db = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
+  std::shared_ptr<DatabaseManager> db = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
 
-IMUGPSFusionKF_2D_ConstantAcceleration ekf;
+  IMUGPSFusionKF_2D_ConstantAcceleration ekf;
 
-auto ekfNoGps = [](double dt, Vector6d &z_IMU) { return ekf.Step(dt, z_IMU); };
-auto ekfWithGps = [](double dt, Vector6d &z_GPS, Vector6d &z_IMU) { return ekf.Step(dt, z_GPS, z_IMU); };
+  auto ekfNoGps = [](double dt, Vector6d &z_IMU) { return ekf.Step(dt, z_IMU); };
+  auto ekfWithGps = [](double dt, Vector6d &z_GPS, Vector6d &z_IMU) { return ekf.Step(dt, z_GPS, z_IMU); };
 } // namespace
 
 TEST(IMUManagerTest, GetStatsImuReject) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
-  std::optional<Raw_Accelerometer> optLa {
-    Raw_Accelerometer{1,
-                       NAN,
-                       5,
-                       1000000}};
+  std::optional<Raw_Accelerometer> optLa{Raw_Accelerometer{1, NAN, 5, 1000000}};
 
-  std::optional<Raw_RotationVectorWAcc> optRv = {
-    Raw_RotationVectorWAcc{1,
-                       1,
-                       INFINITY,
-                       1,
-                       0.1,
-                       1000000}};
+  std::optional<Raw_RotationVectorWAcc> optRv = {Raw_RotationVectorWAcc{1, 1, INFINITY, 1, 0.1, 1000000}};
 
   IMUManagerStats stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 0);
@@ -71,24 +59,12 @@ TEST(IMUManagerTest, GetStatsImuReject) {
 }
 
 TEST(IMUManagerTest, GetStatsImuAccept) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   // imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
-  std::optional<Raw_Accelerometer> optLa = {
-    Raw_Accelerometer{1,
-                       1,
-                       5,
-                       1000000}
-  };
+  std::optional<Raw_Accelerometer> optLa = {Raw_Accelerometer{1, 1, 5, 1000000}};
 
-  std::optional<Raw_RotationVectorWAcc> optRv = {
-    Raw_RotationVectorWAcc{0.7,
-                       0.5,
-                       0.1,
-                       1,
-                       0.1,
-                       1000000}
-  };
+  std::optional<Raw_RotationVectorWAcc> optRv = {Raw_RotationVectorWAcc{0.7, 0.5, 0.1, 1, 0.1, 1000000}};
 
   IMUManagerStats stats = imuManager.GetStats();
   EXPECT_EQ(stats.imuAccepted, 0);
@@ -116,10 +92,12 @@ TEST(IMUManagerTest, GetStatsImuAccept) {
 
 TEST(IMUManagerTest, GetStatsGpsReject) {
   const std::chrono::seconds STALE_TIME_OUT_S(10);
-  const uint64_t GPS_TIMESTAMP_MS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
-  const uint64_t GPS_TIMESTAMP_MS_INVALID = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
+  const uint64_t GPS_TIMESTAMP_MS =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
+  const uint64_t GPS_TIMESTAMP_MS_INVALID =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
 
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   IMUManagerStats stats = imuManager.GetStats();
@@ -173,10 +151,12 @@ TEST(IMUManagerTest, GetStatsGpsReject) {
 
 TEST(IMUManagerTest, GetStatsGpsAccept) {
   const std::chrono::seconds STALE_TIME_OUT_S(10);
-  const uint64_t GPS_TIMESTAMP_MS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
-  const uint64_t GPS_TIMESTAMP_MS_INVALID = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
+  const uint64_t GPS_TIMESTAMP_MS =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
+  const uint64_t GPS_TIMESTAMP_MS_INVALID =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
 
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   IMUManagerStats stats = imuManager.GetStats();
@@ -204,12 +184,12 @@ TEST(IMUManagerTest, GetStatsGpsAccept) {
 }
 
 TEST(IMUManagerTest, GetLatestGpsReturnsNullopt) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_EQ(imuManager.GetLatestGps(), std::nullopt);
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   GpsUpdate gpsUpdate;
@@ -231,12 +211,14 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsValidGps) {
 }
 
 TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   const std::chrono::seconds STALE_TIME_OUT_S(10);
-  const uint64_t GPS_TIMESTAMP_MS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
-  const uint64_t GPS_TIMESTAMP_MS_INVALID = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
+  const uint64_t GPS_TIMESTAMP_MS =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(1000)).count();
+  const uint64_t GPS_TIMESTAMP_MS_INVALID =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::milliseconds(900)).count();
 
   GpsUpdate gpsUpdate;
   gpsUpdate.latitude = 10;
@@ -288,14 +270,14 @@ TEST(IMUManagerTest, UpdateLatestGpsReturnsInvalidGps) {
 }
 
 TEST(IMUManagerTest, IsInvalidRangeReturnsFalse) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_FALSE(imuManager.IsInvalidRange(0));
   EXPECT_FALSE(imuManager.IsInvalidRange(10));
   EXPECT_FALSE(imuManager.IsInvalidRange(-10));
 }
 
 TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   EXPECT_TRUE(imuManager.IsInvalidRange(NAN));
   EXPECT_TRUE(imuManager.IsInvalidRange(INFINITY));
   EXPECT_TRUE(imuManager.IsInvalidRange(std::numeric_limits<int>::max()));
@@ -305,39 +287,27 @@ TEST(IMUManagerTest, IsInvalidRangeReturnsTrue) {
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsTrue) {
-  IMUManager imuManager(db);
-  Raw_Accelerometer la = {
-    1,
-    2,
-    3,
-    1000000
-  };
+  IMUManager imuManager(db, "WMM.COF");
+  Raw_Accelerometer la = {1, 2, 3, 1000000};
 
   EXPECT_TRUE(imuManager.ValidateImuEvent(std::nullopt, la));
 
-  Raw_RotationVectorWAcc rv = {
-    0.7,
-    0.5,
-    0.3,
-    0.1,
-    0.1,
-    1000000
-  };
+  Raw_RotationVectorWAcc rv = {0.7, 0.5, 0.3, 0.1, 0.1, 1000000};
 
   EXPECT_TRUE(imuManager.ValidateImuEvent(rv, std::nullopt));
 }
 
 TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
 
   float maxLimitF = std::numeric_limits<float>::max();
   uint64_t maxLimitD = std::numeric_limits<uint64_t>::max();
 
   std::vector<std::optional<Raw_Accelerometer>> casesLA = {
-    {Raw_Accelerometer {maxLimitF, 1, 1, 100000}},
-    {Raw_Accelerometer {1, maxLimitF, 1, 100000}},
-    {Raw_Accelerometer {1, 1, maxLimitF, 100000}},
-    {Raw_Accelerometer {1, 1, 1, maxLimitD}},
+      {Raw_Accelerometer{maxLimitF, 1, 1, 100000}},
+      {Raw_Accelerometer{1, maxLimitF, 1, 100000}},
+      {Raw_Accelerometer{1, 1, maxLimitF, 100000}},
+      {Raw_Accelerometer{1, 1, 1, maxLimitD}},
   };
 
   for (auto &c : casesLA) {
@@ -345,12 +315,9 @@ TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
   }
 
   std::vector<std::optional<Raw_RotationVectorWAcc>> casesRV = {
-    {Raw_RotationVectorWAcc {maxLimitF, 1, 1, 1, 1, 100000}},
-    {Raw_RotationVectorWAcc {1, maxLimitF, 1, 1, 1, 100000}},
-    {Raw_RotationVectorWAcc {1, 1, maxLimitF, 1, 1, 100000}},
-    {Raw_RotationVectorWAcc {1, 1, 1, maxLimitF, 1, 100000}},
-    {Raw_RotationVectorWAcc {1, 1, 1, 1, maxLimitF, 100000}},
-    {Raw_RotationVectorWAcc {1, 1, 1, 1, 1, maxLimitD}},
+      {Raw_RotationVectorWAcc{maxLimitF, 1, 1, 1, 1, 100000}}, {Raw_RotationVectorWAcc{1, maxLimitF, 1, 1, 1, 100000}},
+      {Raw_RotationVectorWAcc{1, 1, maxLimitF, 1, 1, 100000}}, {Raw_RotationVectorWAcc{1, 1, 1, maxLimitF, 1, 100000}},
+      {Raw_RotationVectorWAcc{1, 1, 1, 1, maxLimitF, 100000}}, {Raw_RotationVectorWAcc{1, 1, 1, 1, 1, maxLimitD}},
   };
 
   for (auto &c : casesRV) {
@@ -361,7 +328,7 @@ TEST(IMUManagerTest, ValidateImuEventReturnsFalse) {
 }
 
 TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   Raw_Accelerometer la = imuManager.m_imuLinearAcceleration;
@@ -377,12 +344,7 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
   EXPECT_NEAR(la.z, 0, 1e-12);
   EXPECT_NEAR(la.timestamp, 0, 1e-12);
 
-  std::optional<Raw_Accelerometer> optLa = {
-    Raw_Accelerometer{1,
-                       1,
-                       5,
-                       100000}
-  };
+  std::optional<Raw_Accelerometer> optLa = {Raw_Accelerometer{1, 1, 5, 100000}};
 
   imuManager.StoreImuValue(std::nullopt, optLa);
   la = imuManager.m_imuLinearAcceleration;
@@ -391,14 +353,7 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
   EXPECT_NEAR(la.z, 5, 1e-12);
   EXPECT_NEAR(la.timestamp, 100000, 1e-12);
 
-  std::optional<Raw_RotationVectorWAcc> optRv = {
-    Raw_RotationVectorWAcc{0.7,
-                       0.5,
-                       0.1,
-                       1,
-                       0.1,
-                       100000}
-  };
+  std::optional<Raw_RotationVectorWAcc> optRv = {Raw_RotationVectorWAcc{0.7, 0.5, 0.1, 1, 0.1, 100000}};
 
   imuManager.StoreImuValue(optRv, std::nullopt);
   rv = imuManager.m_imuRotationVector;
@@ -411,7 +366,7 @@ TEST(IMUManagerTest, StoreImuValueReturnsVoid) {
 }
 
 TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   GpsUpdate gpsUpdate;
   gpsUpdate.latitude = 1;
   gpsUpdate.longitude = 1;
@@ -422,7 +377,7 @@ TEST(IMUManagerTest, BuildGpsMeasurementVectorReturnsVector) {
 }
 
 TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
   double latitude = 80.0;
   double longitude = 0.0;
@@ -458,7 +413,7 @@ TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
 }
 
 TEST(IMUManagerTest, ReadyForEkfReturnsFalse) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   imuManager.m_ekfInstalled = false;
@@ -478,7 +433,7 @@ TEST(IMUManagerTest, ReadyForEkfReturnsFalse) {
 }
 
 TEST(IMUManagerTest, ReadyForEkfReturnsTrue) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   imuManager.m_ekfInstalled = true;
@@ -488,7 +443,7 @@ TEST(IMUManagerTest, ReadyForEkfReturnsTrue) {
 }
 
 TEST(IMUManagerTest, GetCurrentYearReturnsYear) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
 
   auto ymdNow = std::chrono::system_clock::now();
@@ -497,7 +452,7 @@ TEST(IMUManagerTest, GetCurrentYearReturnsYear) {
 }
 
 TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
   imuManager.m_lastEKFMachineTime = 0;
 
@@ -512,7 +467,7 @@ TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
 }
 
 TEST(IMUManagerTest, ResetImuReadyFlagsExpectsFalse) {
-  IMUManager imuManager(db);
+  IMUManager imuManager(db, "WMM.COF");
   imuManager.m_imuRotationVectorReady = false;
   imuManager.m_imuLinearAccelerationReady = true;
 

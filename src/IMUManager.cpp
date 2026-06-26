@@ -16,7 +16,7 @@ IMUManager::IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::st
 
   m_magneticDeclination.LoadCOF(cofPath);
 
-  m_kineticState = IMUUtils::KineticState(steadyMin, 0.0, 0.0, 0.0, 0.0); 
+  m_kineticState = IMUUtils::KineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
   m_imuRotationVector = {0, 0, 0, 0, 0};
   m_imuLinearAcceleration = {0, 0, 0};
 }
@@ -82,7 +82,7 @@ void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std
   }
 }
 
-bool IMUManager::ReadyForEkf() const { 
+bool IMUManager::ReadyForEkf() const {
   return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady;
 }
 
@@ -146,15 +146,16 @@ void IMUManager::ResetImuReadyFlags() {
   m_imuLinearAccelerationReady = false;
 }
 
-bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa) {
-  if(optLa.has_value()) {
+bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv,
+                                  const std::optional<Raw_Accelerometer> &optLa) {
+  if (optLa.has_value()) {
     return !(IsInvalidRange(optLa.value().x) ||
              IsInvalidRange(optLa.value().y) ||
              IsInvalidRange(optLa.value().z) ||
              IsInvalidRange(optLa.value().timestamp));
   }
 
-  if(optRv.has_value()) {
+  if (optRv.has_value()) {
     return !(IsInvalidRange(optRv.value().i) ||
              IsInvalidRange(optRv.value().j) ||
              IsInvalidRange(optRv.value().k) ||
@@ -166,14 +167,15 @@ bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc>& o
   return false;
 };
 
-void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc>& optRv, const std::optional<Raw_Accelerometer>& optLa) {
-  if(optLa.has_value()) {
+void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optRv,
+                               const std::optional<Raw_Accelerometer> &optLa) {
+  if (optLa.has_value()) {
     m_imuLinearAccelerationReady = true;
     m_imuLinearAcceleration = optLa.value();
     m_databaseManager->EnqueueIMULinearAcceleration(m_imuLinearAcceleration);
   }
 
-  if(optRv.has_value()) {
+  if (optRv.has_value()) {
     m_imuRotationVectorReady = true;
     m_imuRotationVector = optRv.value();
     m_databaseManager->EnqueueIMURotationVector(m_imuRotationVector);
@@ -185,18 +187,13 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
   return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
-                                               const Raw_Accelerometer &la,
-                                               const GpsUpdate &gps,
-                                               int currentYear) {
+Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la,
+                                               const GpsUpdate &gps, int currentYear) {
   double latitude = gps.latitude;
   double longitude = gps.longitude;
   const double RADAR_HEIGHT_M = 10;
 
-  double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real,
-                                                                rv.i,
-                                                                rv.j,
-                                                                rv.k);
+  double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real, rv.i, rv.j, rv.k);
 
   double magneticDeclination = m_magneticDeclination.CalculateDeclination(longitude,
                                                                           latitude,
@@ -207,26 +204,19 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
 
   double trueHeadingRadians = IMUUtils::DegreesToRadians(trueHeading);
 
-  double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians,
-                                                                  la.x,
-                                                                  la.y);
+  double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians, la.x, la.y);
 
-  double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeadingRadians,
-                                                                  la.x,
-                                                                  la.y);
+  double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeadingRadians, la.x, la.y);
 
   double globalGeoAccelerationX = IMUUtils::Convert_Global_X_to_DegPerS2(latitude, globalLinearAccelerationX);
   double globalGeoAccelerationY = IMUUtils::Convert_Global_Y_to_DegPerS2(globalLinearAccelerationY);
 
   IMUUtils::KineticState kineticState;
-    if (m_kineticState.timestamp == steadyMin) {
-      m_kineticState.timestamp = std::chrono::steady_clock::now();
-    }
-    kineticState = IMUUtils::CalculateKineticUpdate(m_kineticState,
-                                                    globalGeoAccelerationX,
-                                                    globalGeoAccelerationY);
-    m_kineticState = kineticState;
-  
+  if (m_kineticState.timestamp == steadyMin) {
+    m_kineticState.timestamp = std::chrono::steady_clock::now();
+  }
+  kineticState = IMUUtils::CalculateKineticUpdate(m_kineticState, globalGeoAccelerationX, globalGeoAccelerationY);
+  m_kineticState = kineticState;
 
   Vector6d imuVector = {0.0,
                         0.0,

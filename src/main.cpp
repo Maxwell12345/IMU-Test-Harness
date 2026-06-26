@@ -12,6 +12,9 @@
 #include "IMUSerialPortReader.hpp"
 #include "BoostSerialPort.hpp"
 #include "gps/GpsManager.hpp"
+#include "DatabaseManager.hpp"
+#include "RadarPositionNavigationController.hpp"
+#include "YamlConfigService.hpp"
 
 std::atomic<bool> keepRunning{true};
 
@@ -24,19 +27,30 @@ int main(int argc,char** argv) {
     try {
         std::signal(SIGINT, signalHandler);
 
-        auto f = [](const GpsUpdate& g){
-            printf("[DEBUG] Lat %0.5f Lon %0.5f\n", g.latitude, g.longitude);
-        };
-        GpsManager gpsManager;
-        gpsManager.InstallCallback(f);
-        gpsManager.Start();
+        YamlConfigService yamlConfigService("config.yaml");
+        auto config = yamlConfigService.GetConfig();
 
-        std::cout << "\nPress ctrl + c to stop application\n\n";
+        auto databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
+        auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(config.imuSerialPort,
+                                                                         std::make_unique<BoostSerialPort>());
+        auto imuManager = std::make_unique<IMUManager>(databaseManager);
+        auto gpsManager = std::make_unique<GpsManagerBase>();
+
+        RadarPositionNavigationController radarPositionNavigationController(config.kalmanValues,
+                                                                            databaseManager,
+                                                                            std::move(imuSerialPortReader),
+                                                                            std::move(gpsManager),
+                                                                            std::move(imuManager));
+
+        radarPositionNavigationController.StartAndConfigureRadarPNT(0, 0);
+        
+        std::cout << "CTRL + C to terminate..." << std::endl;
         while(keepRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        gpsManager.Stop();
+        radarPositionNavigationController.StopRadarPNT();
+        radarPositionNavigationController.TotalDestruction();
 
         return EXIT_SUCCESS;
     } catch(const std::invalid_argument &e) {
