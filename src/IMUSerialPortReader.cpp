@@ -23,10 +23,6 @@ void _IMUSerialPort::Open(const std::string& port) {
         return;
     }
 
-    if (this->m_serial.is_open()) {
-        return;
-    }
-
     this->m_serial.open(port);
 }
 
