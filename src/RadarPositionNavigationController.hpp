@@ -21,7 +21,10 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager, std::unique_ptr<IMUSerialPortReader> serialPort);
+  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
+                                    std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
+                                    std::unique_ptr<GpsManager> m_gpsManager,
+                                    std::unique_ptr<IMUManager> m_imuManager);
 
   ~RadarPositionNavigationController();
 
@@ -74,6 +77,13 @@ public:
    * @exception
    */
   void TotalDestruction();
+
+  /**
+   * @brief Returns PNT running status
+   * 
+   * @return true if running, else false
+   */
+  bool IsRunning() const;
 
 private:
   /**
@@ -147,6 +157,7 @@ private:
    * @exception
    */
   void _GPSCallback(const GpsUpdate &gpsUpdate);
+
   /**
    * @brief Ingest YAML file, parses Tuned Kalman Filter values.
    *
@@ -159,28 +170,27 @@ private:
   void ParseYamlForKalmanFilterValues(std::string filepath);
 
 private:
-  std::thread m_serviceThread;
-
-  std::shared_ptr<DatabaseManager> m_dbManager;
-
   Vector6d m_latestX;
   Matrix6d m_latestP;
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
+  
   double m_gpsChiSqLowerBound;
   double m_gpsChiSqUpperBound;
   double m_imuChiSqLowerBound;
   double m_imuChiSqUpperBound;
-
-  IMUManager m_imuManager;
+  
   std::atomic<bool> m_isKFConfigured;
+  std::atomic<bool> m_running;
+
+  std::unique_ptr<GpsManager> m_gpsManager;
+  std::unique_ptr<IMUManager> m_imuManager;
+  std::shared_ptr<DatabaseManager> m_dbManager;
   std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;
 
-  GpsManager m_gpsManager;
 
   FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTDoesNotStartReaderWhenOpenFails);
   FRIEND_TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSerial);
   FRIEND_TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState);
   FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStateAndCovariance);

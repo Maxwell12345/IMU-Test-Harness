@@ -15,26 +15,32 @@
 #define IMU_COM_PORT "/dev/ttyUSB0"
 
 RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
-                                                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader):
+                                                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
+                                                                     std::unique_ptr<GpsManager> gpsManager,
+                                                                     std::unique_ptr<IMUManager> imuManager):
+                                                                     m_running(false),
+                                                                     m_isKFConfigured(false),
+                                                                     m_latestX(Vector6d::Zero()),
+                                                                     m_latestP(Matrix6d::Zero()),
                                                                      m_dbManager(dbManager),
-                                                                     m_imuManager(dbManager, "./WMM.COF"),
+                                                                     m_imuManager(std::move(imuManager)),
+                                                                     m_gpsManager(std::move(gpsManager)),
                                                                      m_imuSerialPortReader(std::move(imuSerialPortReader)) {
-  this->m_isKFConfigured = false;
-  this->m_latestX = Vector6d::Zero();
-  this->m_latestP = Matrix6d::Zero();
-
   auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
                                                               std::optional<Raw_Accelerometer> optLa){
-    imuManager.SensorCallback(optRv, optLa);
+    imuManager->SensorCallback(optRv, optLa);
   };
   this->m_imuSerialPortReader->InstallCallback(imuSerialCallback);
 
   auto gpsManagerCallback = [&imuManager = this->m_imuManager](const GpsUpdate& g) {
-    imuManager.UpdateLatestGps(g);
+    imuManager->UpdateLatestGps(g);
   };
+  this->m_gpsManager->InstallCallback(gpsManagerCallback);
 }
 
-RadarPositionNavigationController::~RadarPositionNavigationController() { this->TotalDestruction(); }
+RadarPositionNavigationController::~RadarPositionNavigationController() {
+  this->TotalDestruction();
+}
 
 std::function<void(const GpsUpdate &)> RadarPositionNavigationController::GetGPSCallback() {
   return [this](const GpsUpdate &gpsUpdate) { this->_GPSCallback(gpsUpdate); };
@@ -51,11 +57,11 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
     this->m_isKFConfigured = true;
   }
 
-  m_imuManager.InstallEkf(
-      [this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
-      [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
+  m_imuManager->InstallEkf([this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
+                           [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
 
   this->StartIMUReader();
+  this->m_running = true;
 }
 
 void RadarPositionNavigationController::StartIMUReader() {
@@ -64,7 +70,12 @@ void RadarPositionNavigationController::StartIMUReader() {
 
 void RadarPositionNavigationController::StopRadarPNT() {
     this->m_imuSerialPortReader->Stop();
-    this->m_isKFConfigured.store(false);
+    this->m_isKFConfigured = false;
+    this->m_running = false;
+}
+
+bool RadarPositionNavigationController::IsRunning() const {
+  return m_running;
 }
 
 void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile,
@@ -210,7 +221,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
 }
 
 void RadarPositionNavigationController::_GPSCallback(const GpsUpdate &gpsUpdate) {
-  m_imuManager.UpdateLatestGps(gpsUpdate);
+  m_imuManager->UpdateLatestGps(gpsUpdate);
 }
 
 void RadarPositionNavigationController::TotalDestruction() {
