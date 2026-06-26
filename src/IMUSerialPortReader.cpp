@@ -2,7 +2,7 @@
 
 #include "IMUSerialPortReader.hpp"
 
-IMUSerialPortReader::IMUSerialPortReader(std::string path, unsigned int baudRate, std::unique_ptr<SerialPortBase> port){
+IMUSerialPortReader::IMUSerialPortReader(const _ImuSerialPort& config, std::unique_ptr<SerialPortBase> port){
     // Set the CRC-16/CCITT w Polynomial=16
     this->m_cm.cm_width = 16;
     this->m_cm.cm_poly = 0x1021L;
@@ -14,8 +14,8 @@ IMUSerialPortReader::IMUSerialPortReader(std::string path, unsigned int baudRate
     auto f = [this](SerialPortBase& _port){
         this->Callback(_port);
     };
-    m_serialComService = std::make_unique<SerialComService>(path,
-                                                            baudRate,
+    m_serialComService = std::make_unique<SerialComService>(config.path,
+                                                            config.baudRate,
                                                             std::move(port));
     m_serialComService->InstallCallback(f);
 }

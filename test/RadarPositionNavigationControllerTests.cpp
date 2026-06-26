@@ -8,22 +8,41 @@
 #include "RadarPositionNavigationController.hpp"
 #include "gps/GpsManagerBase.hpp"
 
-#define SET_UP()  std::shared_ptr<DatabaseManager> databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db"); \
-                  auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(path, 9600, std::make_unique<MockSerialPort>()); \
-                  auto imuManager = std::make_unique<IMUManager>(databaseManager); \
-                  auto gpsManager = std::make_unique<GpsManagerBase>(); \
-                  RadarPositionNavigationController radarPositionNavigationController(databaseManager, \
-                                                                                      std::move(imuSerialPortReader), \
-                                                                                      std::move(gpsManager), \
-                                                                                      std::move(imuManager));
-
 namespace {
 #ifdef _WIN32
     std::string path = R"(COM1)";
 #else
     std::string path = "/dev/ttyUSB0";
 #endif
+
+  _ImuSerialPort imuSerialPortConfig = {
+    path,
+    460800
+  };
+
+  _KalmanValues kalmanValuesConfig = {
+    20,
+    5,
+    0.20,
+    0.95,
+    100,
+    10,
+    0.20,
+    0.95,
+    100,
+    10
+  };
 }
+
+#define SET_UP()  std::shared_ptr<DatabaseManager> databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db"); \
+                  auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(imuSerialPortConfig, std::make_unique<MockSerialPort>()); \
+                  auto imuManager = std::make_unique<IMUManager>(databaseManager); \
+                  auto gpsManager = std::make_unique<GpsManagerBase>(); \
+                  RadarPositionNavigationController radarPositionNavigationController(kalmanValuesConfig, \
+                                                                                      databaseManager, \
+                                                                                      std::move(imuSerialPortReader), \
+                                                                                      std::move(gpsManager), \
+                                                                                      std::move(imuManager));
 
 class MockSerialPort : public SerialPortBase {};
 

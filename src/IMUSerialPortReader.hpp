@@ -8,6 +8,7 @@
 #include "BoostSerialPort.hpp"
 #include "imu_data.hpp"
 #include "crc/crc.h"
+#include "YamlConfig.hpp"
 
 #include <utility>
 #include <boost/asio.hpp>
@@ -31,7 +32,8 @@ public:
      * 
      * @exception std::exception if serial port is not available or errors out.
      */
-    IMUSerialPortReader(std::string path, unsigned int baudRate, std::unique_ptr<SerialPortBase> port);
+    IMUSerialPortReader(const _ImuSerialPort& config,
+                        std::unique_ptr<SerialPortBase> port);
     
     /**
      * @brief Callback to pass IMU data.

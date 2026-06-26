@@ -23,7 +23,8 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
+  RadarPositionNavigationController(const _KalmanValues& config,
+                                    std::shared_ptr<DatabaseManager> dbManager,
                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
                                     std::unique_ptr<GpsManagerBase> m_gpsManager,
                                     std::unique_ptr<IMUManager> m_imuManager);
@@ -166,12 +167,11 @@ private:
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   
-  YamlConfig m_config;
+  const _KalmanValues& m_config;
   
   std::atomic<bool> m_running;
   std::atomic<bool> m_isKFConfigured;
 
-  YamlConfigService m_yamlConfigService;
   std::unique_ptr<GpsManagerBase> m_gpsManager;
   std::unique_ptr<IMUManager> m_imuManager;
   std::shared_ptr<DatabaseManager> m_dbManager;

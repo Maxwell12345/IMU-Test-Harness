@@ -1,5 +1,16 @@
 kalman_values:
+  gps_n: 20
+  gps_l: 5
   gps_chi_sq_lower_bound: 0.20
   gps_chi_sq_upper_bound: 0.95
+  imu_n: 100
+  imu_l: 10
   imu_chi_sq_lower_bound: 0.20
   imu_chi_sq_upper_bound: 0.95
+  q_n: 100
+  q_l: 10
+
+imu_serial_port:
+  path: \\COM1
+  baud_rate: 460800
+  

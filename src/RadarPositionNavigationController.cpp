@@ -5,20 +5,12 @@
 #include <stdexcept>
 #include <thread>
 
-#define GPS_N 20
-#define GPS_L 5
-#define IMU_N 100
-#define IMU_L 10
-#define Q_N 100
-#define Q_L 10
-
-#define IMU_COM_PORT "/dev/ttyUSB0"
-
-RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
+RadarPositionNavigationController::RadarPositionNavigationController(const _KalmanValues& config,
+                                                                     std::shared_ptr<DatabaseManager> dbManager,
                                                                      std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
                                                                      std::unique_ptr<GpsManagerBase> gpsManager,
                                                                      std::unique_ptr<IMUManager> imuManager):
-                                                                     m_yamlConfigService("config.yaml"),
+                                                                     m_config(config),
                                                                      m_running(false),
                                                                      m_isKFConfigured(false),
                                                                      m_latestX(Vector6d::Zero()),
@@ -27,8 +19,6 @@ RadarPositionNavigationController::RadarPositionNavigationController(std::shared
                                                                      m_imuManager(std::move(imuManager)),
                                                                      m_gpsManager(std::move(gpsManager)),
                                                                      m_imuSerialPortReader(std::move(imuSerialPortReader)) {
-  this->m_config = m_yamlConfigService.GetConfig();
-
   auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
                                                               std::optional<Raw_Accelerometer> optLa){
     imuManager->SensorCallback(optRv, optLa);
@@ -55,10 +45,10 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
   if (!this->m_isKFConfigured) {
     this->ConfigureKalmanFilter(lat0,
                                 lon0,
-                                m_config.kalmanValues.gpsChiSqLowerBound,
-                                m_config.kalmanValues.gpsChiSqUpperBound,
-                                m_config.kalmanValues.imuChiSqLowerBound,
-                                m_config.kalmanValues.imuChiSqUpperBound);
+                                m_config.gpsChiSqLowerBound,
+                                m_config.gpsChiSqUpperBound,
+                                m_config.imuChiSqLowerBound,
+                                m_config.imuChiSqUpperBound);
 
     this->m_isKFConfigured = true;
   }
@@ -143,9 +133,21 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
   double chiSquaredBetaLowerBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile);
   double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile);
 
-  this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(
-      x0, P0, R0_GPS, R0_IMU, Q0, chiSquaredBetaLowerBound_GPS, chiSquaredBetaLowerBound_IMU,
-      chiSquaredBetaUpperBound_GPS, chiSquaredBetaUpperBound_IMU, GPS_N, GPS_L, IMU_N, IMU_L, Q_N, Q_L);
+  this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(x0,
+                                                      P0,
+                                                      R0_GPS,
+                                                      R0_IMU,
+                                                      Q0,
+                                                      chiSquaredBetaLowerBound_GPS,
+                                                      chiSquaredBetaLowerBound_IMU,
+                                                      chiSquaredBetaUpperBound_GPS,
+                                                      chiSquaredBetaUpperBound_IMU,
+                                                      m_config.gpsN,
+                                                      m_config.gpsL,
+                                                      m_config.imuN,
+                                                      m_config.imuL,
+                                                      m_config.qN,
+                                                      m_config.qL);
 }
 
 void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &imuVec) {
@@ -185,10 +187,10 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
   if (needsReconfig) {
     this->ConfigureKalmanFilter(reconfigLat,
                                 reconfigLon,
-                                m_config.kalmanValues.gpsChiSqLowerBound,
-                                m_config.kalmanValues.gpsChiSqUpperBound,
-                                m_config.kalmanValues.imuChiSqLowerBound,
-                                m_config.kalmanValues.imuChiSqUpperBound);
+                                m_config.gpsChiSqLowerBound,
+                                m_config.gpsChiSqUpperBound,
+                                m_config.imuChiSqLowerBound,
+                                m_config.imuChiSqUpperBound);
   }
 }
 
@@ -229,10 +231,10 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
   if (needsReconfig) {
     this->ConfigureKalmanFilter(reconfigLat,
                                 reconfigLon,
-                                m_config.kalmanValues.gpsChiSqLowerBound,
-                                m_config.kalmanValues.gpsChiSqUpperBound,
-                                m_config.kalmanValues.imuChiSqLowerBound,
-                                m_config.kalmanValues.imuChiSqUpperBound);
+                                m_config.gpsChiSqLowerBound,
+                                m_config.gpsChiSqUpperBound,
+                                m_config.imuChiSqLowerBound,
+                                m_config.imuChiSqUpperBound);
   }
 }
 
