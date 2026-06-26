@@ -168,15 +168,11 @@ private:
      * @remark
      */
     inline bool ValidateMessage(const unsigned char* messageChecksum, const unsigned char* message, unsigned int messageLen) {
-        unsigned long realChecksum = CalculateCRC16CCITTFalseChecksum(message, messageLen);
+        uint16_t realChecksum = static_cast<uint16_t>(CalculateCRC16CCITTFalseChecksum(message, messageLen) & 0xFFFFu);
 
-        unsigned int receivedChecksum = (messageChecksum[0] << 8) | messageChecksum[1];
+        uint16_t receivedChecksum = static_cast<uint16_t>((static_cast<uint16_t>(messageChecksum[0]) << 8) | static_cast<uint16_t>(messageChecksum[1]));
 
-        if (realChecksum != receivedChecksum) {
-            return false;
-        }
-
-        return true;
+        return realChecksum == receivedChecksum;
     }
 
     /**

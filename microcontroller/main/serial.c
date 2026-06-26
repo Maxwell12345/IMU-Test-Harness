@@ -147,7 +147,7 @@ esp_err_t send_acceleration_t(const acceleration_t *acceleration) {
     buffer[length++] = ACCELERATION_T_ID;
     buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
 
-    memcpy(buffer+length, &acceleration, sizeof(acceleration_t));
+    memcpy(buffer+length, acceleration, sizeof(acceleration_t));
     length += sizeof(acceleration_t);
 
     uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
@@ -167,7 +167,7 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
     buffer[length++] = ROTATION_T_ID;
     buffer[length++] = ROTATION_PAYLOAD_BYTES;
 
-    memcpy(buffer+length, &rotation, sizeof(rotation_t));
+    memcpy(buffer+length, rotation, sizeof(rotation_t));
     length += sizeof(rotation_t);
 
     uint16_t crc = calculate_crc16_ccitt_false(buffer, length);

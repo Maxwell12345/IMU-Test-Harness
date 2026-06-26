@@ -82,3 +82,5 @@ venv/
 .codex/
 
 python/venv/
+
+./build.sh

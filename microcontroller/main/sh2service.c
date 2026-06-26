@@ -17,7 +17,7 @@
 #include "sh2.h"
 #include "sh2_SensorValue.h"
 
-#define SH2SERVICE_READ_LEN 1024
+#define SH2SERVICE_READ_LEN 128
 
 #define BNO085_RESET_PIN GPIO_NUM_26
 #define SH2SERVICE_TIMEOUT_US 10000000
@@ -33,8 +33,8 @@ static sh2service_config_t s_config = {
     GPIO_NUM_22,
     GPIO_NUM_21,
     GPIO_NUM_27,
-    100000,
-    10000,
+    400000,
+    5000,
     8000,
     2000,
     4096,
@@ -54,6 +54,9 @@ static volatile int s_sensors_enabled;
 static volatile int s_sh2_ready;
 static int64_t s_last_event_us;
 static volatile int s_recovering;
+static volatile int s_valid_measurements = 0;
+static volatile int s_num_valid_acc_measurements;
+static volatile int s_num_valid_rot_measurements;
 
 static esp_err_t open_sh2(void);
 static void sh2service_task(void *arg);
@@ -129,9 +132,9 @@ static int hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t
         return 0;
     }
 
-    if (gpio_get_level(s_config.int_pin) != 0) {
-        return 0;
-    }
+    // if (gpio_get_level(s_config.int_pin) != 0) {
+    //     return 0;
+    // }
 
     uint8_t header[4];
 
@@ -239,7 +242,7 @@ static void recover_i2c_bus(void)
     gpio_set_level(s_config.scl_pin, 1);
     vTaskDelay(pdMS_TO_TICKS(5));
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
         gpio_set_level(s_config.scl_pin, 0);
         esp_rom_delay_us(5);
         gpio_set_level(s_config.scl_pin, 1);
@@ -302,7 +305,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     uint8_t acc = value.status & 0x03;
 
     if (acc == 0 || acc == 1) {
-        printf("Bad status: %d.\n", value.status);
+        // printf("Bad status: %d.\n", value.status);
         return;
     }
 
@@ -314,6 +317,13 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     memset(&out, 0, sizeof(out));
 
     if (value.sensorId == SH2_LINEAR_ACCELERATION) {
+        if(!s_valid_measurements && acc == 3) {
+            s_num_valid_acc_measurements++;
+        }
+        else if (!s_valid_measurements && (acc == 0 || acc == 1)) {
+            s_num_valid_acc_measurements = 0;
+        }
+
         out.type = SH2SERVICE_LINEAR_ACCELERATION;
         out.timestamp_us = esp_timer_get_time();
 
@@ -326,6 +336,13 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     }
 
     if (value.sensorId == SH2_ROTATION_VECTOR) {
+        if(!s_valid_measurements && acc == 3) {
+            s_num_valid_rot_measurements++;
+        }
+        else if (!s_valid_measurements && (acc == 0 || acc == 1)) {
+            s_num_valid_rot_measurements = 0;
+        }
+
         out.type = SH2SERVICE_ROTATION_VECTOR;
         out.timestamp_us = esp_timer_get_time();
 
@@ -337,6 +354,11 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 
         s_callback(&out, s_callback_ctx);
         return;
+    }
+
+    if (s_num_valid_rot_measurements > 500 && s_num_valid_acc_measurements > 500) {
+        sh2_saveDcdNow();
+        s_valid_measurements = 1;
     }
 }
 
@@ -375,6 +397,11 @@ static void service_for_ms(uint32_t ms)
 static int configure_sensors(void)
 {
     int rc;
+
+    rc = sh2_setCalConfig(SH2_CAL_ACCEL | SH2_CAL_GYRO | SH2_CAL_MAG);
+    if (rc != 0) {
+        return rc;
+    }
 
     rc = enable_sensor(SH2_LINEAR_ACCELERATION, s_config.report_interval_us);
     if (rc != 0) {
@@ -471,6 +498,8 @@ static void sh2service_recovery_task(void *arg)
     printf("recovering SH2\n");
 
     for (int i = 0; i < SH2SERVICE_RECOVERY_ATTEMPTS && !s_stop_requested; i++) {
+        s_valid_measurements = 0;
+
         wdt_reset_current(wdt_added);
 
         if (sh2service_open_and_configure() == 0) {
