@@ -27,9 +27,11 @@ void BoostSerialPort::ReadExact(unsigned char* dst, std::size_t len) {
 
 void BoostSerialPort::ReadUntil(std::string& dst, const std::string& delim) {
     boost::asio::streambuf buf;
-    boost::asio::read_until(m_serial, buf, "\n");
+    std::size_t n = boost::asio::read_until(m_serial, buf, delim);
+    dst.resize(n - delim.size());
     std::istream is(&buf);
-    std::getline(is, dst);
+    is.read(dst.data(), dst.size());
+    is.ignore(delim.size());
 }
 
 void BoostSerialPort::SetBaudRate(unsigned int rate) {
