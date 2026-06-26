@@ -1,0 +1,5 @@
+kalman_values:
+  gps_chi_sq_lower_bound: 0.20
+  gps_chi_sq_upper_bound: 0.95
+  imu_chi_sq_lower_bound: 0.20
+  imu_chi_sq_upper_bound: 0.95

@@ -2,8 +2,6 @@
 #include <limits>
 #include <vector>
 
-#include <boost/make_shared.hpp>
-#include <boost/shared_ptr.hpp>
 #include <gtest/gtest.h>
 
 #include "DatabaseManager.hpp"

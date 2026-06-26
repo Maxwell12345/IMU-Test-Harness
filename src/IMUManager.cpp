@@ -37,9 +37,13 @@ void IMUManager::InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackI
   m_ekfInstalled = true;
 }
 
-IMUManagerStats IMUManager::GetStats() const { return m_stats; }
+IMUManagerStats IMUManager::GetStats() const {
+  return m_stats;
+}
 
-std::optional<GpsUpdate> IMUManager::GetLatestGps() const { return m_latestGps; }
+std::optional<GpsUpdate> IMUManager::GetLatestGps() const {
+  return m_latestGps;
+}
 
 void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
   if (update.valid == false) {
@@ -99,8 +103,10 @@ void IMUManager::DispatchToEkf() {
   }
 
   int year = GetCurrentYear();
-  Vector6d zImu =
-      BuildImuMeasurementVector(rotationVectorSnapshot, linearAccelerationSnapshot, gpsUpdateSnapshot.value(), year);
+  Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
+                                            linearAccelerationSnapshot,
+                                            gpsUpdateSnapshot.value(),
+                                            year);
 
   double dtSeconds = PrepareEkfTiming();
 
@@ -143,13 +149,18 @@ void IMUManager::ResetImuReadyFlags() {
 bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv,
                                   const std::optional<Raw_Accelerometer> &optLa) {
   if (optLa.has_value()) {
-    return !(IsInvalidRange(optLa.value().x) || IsInvalidRange(optLa.value().y) || IsInvalidRange(optLa.value().z) ||
+    return !(IsInvalidRange(optLa.value().x) ||
+             IsInvalidRange(optLa.value().y) ||
+             IsInvalidRange(optLa.value().z) ||
              IsInvalidRange(optLa.value().timestamp));
   }
 
   if (optRv.has_value()) {
-    return !(IsInvalidRange(optRv.value().i) || IsInvalidRange(optRv.value().j) || IsInvalidRange(optRv.value().k) ||
-             IsInvalidRange(optRv.value().real) || IsInvalidRange(optRv.value().accuracy) ||
+    return !(IsInvalidRange(optRv.value().i) ||
+             IsInvalidRange(optRv.value().j) ||
+             IsInvalidRange(optRv.value().k) ||
+             IsInvalidRange(optRv.value().real) ||
+             IsInvalidRange(optRv.value().accuracy) ||
              IsInvalidRange(optRv.value().timestamp));
   }
 
@@ -184,8 +195,10 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
 
   double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real, rv.i, rv.j, rv.k);
 
-  double magneticDeclination =
-      m_magneticDeclination.CalculateDeclination(longitude, latitude, RADAR_HEIGHT_M, currentYear);
+  double magneticDeclination = m_magneticDeclination.CalculateDeclination(longitude,
+                                                                          latitude,
+                                                                          RADAR_HEIGHT_M,
+                                                                          currentYear);
 
   double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading, magneticDeclination);
 

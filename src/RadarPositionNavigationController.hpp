@@ -15,6 +15,8 @@
 #include "IMUManager.hpp"
 #include "IMUSerialPortReader.hpp"
 #include "SerialPortBase.hpp"
+#include "YamlConfigService.hpp"
+#include "YamlConfig.hpp"
 
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
@@ -23,7 +25,7 @@ class RadarPositionNavigationController {
 public:
   RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
-                                    std::unique_ptr<GpsManager> m_gpsManager,
+                                    std::unique_ptr<GpsManagerBase> m_gpsManager,
                                     std::unique_ptr<IMUManager> m_imuManager);
 
   ~RadarPositionNavigationController();
@@ -158,32 +160,19 @@ private:
    */
   void _GPSCallback(const GpsUpdate &gpsUpdate);
 
-  /**
-   * @brief Ingest YAML file, parses Tuned Kalman Filter values.
-   *
-   * @param yaml_ingest
-   *
-   * @return none
-   *
-   * @remarks
-   */
-  void ParseYamlForKalmanFilterValues(std::string filepath);
-
 private:
   Vector6d m_latestX;
   Matrix6d m_latestP;
   std::mutex m_kFUpdateMutex;
   IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
   
-  double m_gpsChiSqLowerBound;
-  double m_gpsChiSqUpperBound;
-  double m_imuChiSqLowerBound;
-  double m_imuChiSqUpperBound;
+  YamlConfig m_config;
   
-  std::atomic<bool> m_isKFConfigured;
   std::atomic<bool> m_running;
+  std::atomic<bool> m_isKFConfigured;
 
-  std::unique_ptr<GpsManager> m_gpsManager;
+  YamlConfigService m_yamlConfigService;
+  std::unique_ptr<GpsManagerBase> m_gpsManager;
   std::unique_ptr<IMUManager> m_imuManager;
   std::shared_ptr<DatabaseManager> m_dbManager;
   std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;

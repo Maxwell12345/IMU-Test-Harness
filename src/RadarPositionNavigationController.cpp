@@ -4,7 +4,7 @@
 #include <optional>
 #include <stdexcept>
 #include <thread>
-#include <yaml-cpp/yaml.h>
+
 #define GPS_N 20
 #define GPS_L 5
 #define IMU_N 100
@@ -16,8 +16,9 @@
 
 RadarPositionNavigationController::RadarPositionNavigationController(std::shared_ptr<DatabaseManager> dbManager,
                                                                      std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
-                                                                     std::unique_ptr<GpsManager> gpsManager,
+                                                                     std::unique_ptr<GpsManagerBase> gpsManager,
                                                                      std::unique_ptr<IMUManager> imuManager):
+                                                                     m_yamlConfigService("config.yaml"),
                                                                      m_running(false),
                                                                      m_isKFConfigured(false),
                                                                      m_latestX(Vector6d::Zero()),
@@ -26,6 +27,8 @@ RadarPositionNavigationController::RadarPositionNavigationController(std::shared
                                                                      m_imuManager(std::move(imuManager)),
                                                                      m_gpsManager(std::move(gpsManager)),
                                                                      m_imuSerialPortReader(std::move(imuSerialPortReader)) {
+  this->m_config = m_yamlConfigService.GetConfig();
+
   auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
                                                               std::optional<Raw_Accelerometer> optLa){
     imuManager->SensorCallback(optRv, optLa);
@@ -50,9 +53,12 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
   this->StopRadarPNT();
 
   if (!this->m_isKFConfigured) {
-    this->ParseYamlForKalmanFilterValues("./compose.yml");
-    this->ConfigureKalmanFilter(lat0, lon0, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+    this->ConfigureKalmanFilter(lat0,
+                                lon0,
+                                m_config.kalmanValues.gpsChiSqLowerBound,
+                                m_config.kalmanValues.gpsChiSqUpperBound,
+                                m_config.kalmanValues.imuChiSqLowerBound,
+                                m_config.kalmanValues.imuChiSqUpperBound);
 
     this->m_isKFConfigured = true;
   }
@@ -116,8 +122,10 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
   auto checkPercentileBounds = [](double percentile) { return percentile <= 0.0 || percentile >= 1.0; };
 
   // Calculate Chi SQ stats for df 2 and 4 at percentiles
-  if (checkPercentileBounds(gpsLowerPercentile) || checkPercentileBounds(gpsUpperPercentile) ||
-      checkPercentileBounds(imuLowerPercentile) || checkPercentileBounds(imuUpperPercentile)) {
+  if (checkPercentileBounds(gpsLowerPercentile) ||
+      checkPercentileBounds(gpsUpperPercentile) ||
+      checkPercentileBounds(imuLowerPercentile) ||
+      checkPercentileBounds(imuUpperPercentile)) {
     throw std::runtime_error("One or more Fuzzy fusion Chi SQ percentiles are <= 0 and/or >= 1");
   }
 
@@ -175,8 +183,12 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
   }
 
   if (needsReconfig) {
-    this->ConfigureKalmanFilter(reconfigLat, reconfigLon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+    this->ConfigureKalmanFilter(reconfigLat,
+                                reconfigLon,
+                                m_config.kalmanValues.gpsChiSqLowerBound,
+                                m_config.kalmanValues.gpsChiSqUpperBound,
+                                m_config.kalmanValues.imuChiSqLowerBound,
+                                m_config.kalmanValues.imuChiSqUpperBound);
   }
 }
 
@@ -215,8 +227,12 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
     }
   }
   if (needsReconfig) {
-    this->ConfigureKalmanFilter(reconfigLat, reconfigLon, this->m_gpsChiSqLowerBound, this->m_gpsChiSqUpperBound,
-                                this->m_imuChiSqLowerBound, this->m_imuChiSqUpperBound);
+    this->ConfigureKalmanFilter(reconfigLat,
+                                reconfigLon,
+                                m_config.kalmanValues.gpsChiSqLowerBound,
+                                m_config.kalmanValues.gpsChiSqUpperBound,
+                                m_config.kalmanValues.imuChiSqLowerBound,
+                                m_config.kalmanValues.imuChiSqUpperBound);
   }
 }
 
@@ -234,16 +250,4 @@ void RadarPositionNavigationController::TotalDestruction() {
 
   this->m_latestX = Vector6d::Zero();
   this->m_latestP = Matrix6d::Zero();
-}
-
-void RadarPositionNavigationController::ParseYamlForKalmanFilterValues(std::string filepath) {
-  YAML::Node root = YAML::LoadFile(filepath);
-  if (!root) {
-    throw std::runtime_error("Yaml file results in null");
-  }
-
-  this->m_gpsChiSqLowerBound = root["kalmanvalues"]["gpsChiSqLowerBound"].as<double>();
-  this->m_gpsChiSqUpperBound = root["kalmanvalues"]["gpsChiSqUpperBound"].as<double>();
-  this->m_imuChiSqLowerBound = root["kalmanvalues"]["imuChiSqLowerBound"].as<double>();
-  this->m_imuChiSqUpperBound = root["kalmanvalues"]["imuChiSqUpperBound"].as<double>();
 }

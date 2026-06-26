@@ -13,19 +13,20 @@
 
 #include "NmeaReader.hpp"
 #include "GpsUpdate.hpp"
+#include "GpsManagerBase.hpp"
 
 #include <functional>
 #include <thread>
 #include <atomic>
 #include <mutex>
 
-class GpsManager {
+class GpsManager: public GpsManagerBase {
 public:
     GpsManager();
     
-    void InstallCallback(std::function<void(const GpsUpdate&)> callback);
-    void Start();
-    void Stop();
+    void InstallCallback(std::function<void(const GpsUpdate&)> callback) override;
+    void Start() override;
+    void Stop()  override;
 
 private:
     GpsUpdate BuildGpsUpdate(const NmeaMessage& msg);

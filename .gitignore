@@ -43,6 +43,7 @@
 build/
 Build/
 build-*/
+*build*
 
 # IDE Configurations
 .idea/

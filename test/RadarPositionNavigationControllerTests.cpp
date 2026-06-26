@@ -6,11 +6,12 @@
 
 #include "IMUManager.hpp"
 #include "RadarPositionNavigationController.hpp"
+#include "gps/GpsManagerBase.hpp"
 
 #define SET_UP()  std::shared_ptr<DatabaseManager> databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db"); \
                   auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(path, 9600, std::make_unique<MockSerialPort>()); \
                   auto imuManager = std::make_unique<IMUManager>(databaseManager); \
-                  auto gpsManager = std::make_unique<GpsManager>(); \
+                  auto gpsManager = std::make_unique<GpsManagerBase>(); \
                   RadarPositionNavigationController radarPositionNavigationController(databaseManager, \
                                                                                       std::move(imuSerialPortReader), \
                                                                                       std::move(gpsManager), \
@@ -199,23 +200,4 @@ TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteSt
 
   ASSERT_TRUE(radarPositionNavigationController.m_isKFConfigured.load());
   ASSERT_FALSE(std::isfinite(radarPositionNavigationController.m_latestX(0)));
-}
-
-TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch) {
-  SET_UP();
-
-  EXPECT_THROW(radarPositionNavigationController.ParseYamlForKalmanFilterValues("./dne.yml"), std::runtime_error);
-}
-
-TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting) {
-  SET_UP();
-
-  std::string filepath = "./compose.yml";
-  EXPECT_NO_THROW(radarPositionNavigationController.ParseYamlForKalmanFilterValues(filepath));
-
-  // VALID RANGE: 0 <= x <= 1
-  ASSERT_NEAR(radarPositionNavigationController.m_gpsChiSqLowerBound, 0.20, 1e-6);
-  ASSERT_NEAR(radarPositionNavigationController.m_gpsChiSqUpperBound, 0.95, 1e-6);
-  ASSERT_NEAR(radarPositionNavigationController.m_imuChiSqLowerBound, 0.20, 1e-6);
-  ASSERT_NEAR(radarPositionNavigationController.m_imuChiSqUpperBound, 0.95, 1e-6);
 }

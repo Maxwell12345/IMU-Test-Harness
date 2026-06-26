@@ -15,6 +15,7 @@ SerialComService::SerialComService(std::string path,
                                    m_path(path),
                                    m_baudRate(baudRate),
                                    m_serial(std::move(serialPort)) {
+    std::cout << "[DEBugG] " << path << std::endl;
     if(VerifyPath(path) == false) {
         std::string str;
         #ifdef _WIN32

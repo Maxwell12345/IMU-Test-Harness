@@ -1,10 +1,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 
-#include <iostream>
-
 #include "MagneticDeclination.hpp"
-
 
 TEST(AssociatedLegendreDerivativesTest, PDerivativeValuesMatchExpected) {
     static constexpr double expected[13][13] = {

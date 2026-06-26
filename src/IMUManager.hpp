@@ -202,17 +202,17 @@ private:
    *
    * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
    */
-  Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la,
-                                     const GpsUpdate &gps, int currentYear);
+  Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+                                     const Raw_Accelerometer &la,
+                                     const GpsUpdate &gps,
+                                     int currentYear);
 
-  bool m_imuRotationVectorReady =
-      false; // True when class is updated with new RotationVector measurement and not used yet in EKF
-  bool m_imuLinearAccelerationReady =
-      false;                                       // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
-  Raw_RotationVectorWAcc m_imuRotationVector = {}; // Internal RotationVector measurement state
-  Raw_Accelerometer m_imuLinearAcceleration = {};  // Internal LinearAcceleration measurement state
+  bool m_imuRotationVectorReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
+  bool m_imuLinearAccelerationReady = false;        // True when class is updated with new LinearAcceleration measurement and not used yet in EKF
+  Raw_RotationVectorWAcc m_imuRotationVector = {};  // Internal RotationVector measurement state
+  Raw_Accelerometer m_imuLinearAcceleration = {};   // Internal LinearAcceleration measurement state
 
-  uint64_t m_lastEKFMachineTime = 0; // Machine time of the oldest time used in the EKF innovation in micro seconds
+  uint64_t m_lastEKFMachineTime = 0;    // Machine time of the oldest time used in the EKF innovation in micro seconds
 
   bool m_gpsSentToEkf = false;          // Flag indicating latestGps is sent to ekf
   bool m_ekfInstalled = false;          // True if installed Ekf, else no ekf installed, no call to ekf will be made
