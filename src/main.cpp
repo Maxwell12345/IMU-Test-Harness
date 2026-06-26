@@ -12,10 +12,10 @@
 
 void callback(std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> acc) {
     if (rot.has_value()) {
-        std::cout << rot.value().timestamp << " " << rot.value().i << " " << rot.value().j << " " << rot.value().k << " " << rot.value().accuracy << std::endl;
+        std::cout << "ROT: " << rot.value().timestamp << " " << rot.value().i << " " << rot.value().j << " " << rot.value().k << " " << rot.value().accuracy << std::endl;
     }
     else if (acc.has_value()) {
-        std::cout << acc.value().timestamp << " " << acc.value().x << " " << acc.value().y << " " << acc.value().z << std::endl;
+        std::cout << "ACC: " << acc.value().timestamp << " " << acc.value().x << " " << acc.value().y << " " << acc.value().z << std::endl;
     }
 }
 

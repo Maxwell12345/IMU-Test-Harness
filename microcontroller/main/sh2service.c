@@ -95,37 +95,6 @@ static void hal_close(sh2_Hal_t *self)
 {
 }
 
-// static int hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t_us)
-// {
-//     if (pBuffer == NULL || t_us == NULL || s_dev_handle == NULL || len < 4) {
-//         return 0;
-//     }
-
-//     if (gpio_get_level(s_config.int_pin) != 0) {
-//         return 0;
-//     }
-
-//     unsigned read_len = SH2SERVICE_READ_LEN;
-
-//     if (len < read_len) {
-//         read_len = len;
-//     }
-
-//     esp_err_t err = i2c_master_receive(s_dev_handle, pBuffer, read_len, 10);
-//     if (err != ESP_OK) {
-//         return 0;
-//     }
-
-//     uint16_t packet_len = (uint16_t)pBuffer[0] | ((uint16_t)(pBuffer[1] & 0x7F) << 8);
-
-//     if (packet_len == 0 || packet_len == 0x7FFF || packet_len > read_len) {
-//         return 0;
-//     }
-
-//     *t_us = hal_get_time_us(self);
-//     return packet_len;
-// }
-
 static int hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t_us)
 {
     if (pBuffer == NULL || t_us == NULL || s_dev_handle == NULL || len < 4) {
@@ -136,32 +105,25 @@ static int hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t
     //     return 0;
     // }
 
-    uint8_t header[4];
+    unsigned read_len = SH2SERVICE_READ_LEN;
 
-    esp_err_t err = i2c_master_receive(s_dev_handle, header, 4, 100);
+    if (len < read_len) {
+        read_len = len;
+    }
+
+    esp_err_t err = i2c_master_receive(s_dev_handle, pBuffer, read_len, 10);
     if (err != ESP_OK) {
         return 0;
     }
 
-    uint16_t packet_len = (uint16_t)header[0] | ((uint16_t)(header[1] & 0x7F) << 8);
+    uint16_t packet_len = (uint16_t)pBuffer[0] | ((uint16_t)(pBuffer[1] & 0x7F) << 8);
 
-    if (packet_len < 4 || packet_len == 0x7FFF || packet_len > len || packet_len > SH2SERVICE_READ_LEN) {
-        return 0;
-    }
-
-    err = i2c_master_receive(s_dev_handle, pBuffer, packet_len, 100);
-    if (err != ESP_OK) {
-        return 0;
-    }
-
-    uint16_t got_len = (uint16_t)pBuffer[0] | ((uint16_t)(pBuffer[1] & 0x7F) << 8);
-
-    if (got_len < 4 || got_len == 0x7FFF || got_len > packet_len) {
+    if (packet_len == 0 || packet_len == 0x7FFF || packet_len > read_len) {
         return 0;
     }
 
     *t_us = hal_get_time_us(self);
-    return got_len;
+    return packet_len;
 }
 
 static int hal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len)
@@ -257,37 +219,17 @@ static void recover_i2c_bus(void)
     vTaskDelay(pdMS_TO_TICKS(5));
 }
 
-// static int wait_for_reset(uint32_t ms)
-// {
-//     uint32_t steps = ms / 10;
-
-//     for (uint32_t i = 0; i < steps && !s_reset_seen && !s_stop_requested; i++) {
-//         esp_task_wdt_reset();
-//         sh2_service();
-//         esp_task_wdt_reset();
-//         vTaskDelay(pdMS_TO_TICKS(10));
-//     }
-
-//     return s_reset_seen;
-// }
 static int wait_for_reset(uint32_t ms)
 {
     uint32_t steps = ms / 10;
 
     for (uint32_t i = 0; i < steps && !s_reset_seen && !s_stop_requested; i++) {
-        int level = gpio_get_level(s_config.int_pin);
-
-        if ((i % 50) == 0) {
-            printf("WAIT_RESET,INT,%d\n", level);
-        }
-
         esp_task_wdt_reset();
         sh2_service();
         esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    printf("WAIT_RESET,DONE,%d\n", s_reset_seen);
     return s_reset_seen;
 }
 
