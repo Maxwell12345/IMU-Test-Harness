@@ -28,7 +28,8 @@ int main(int argc,char** argv) {
         std::signal(SIGINT, signalHandler);
 
         YamlConfigService yamlConfigService("config.yaml");
-        auto config = yamlConfigService.GetConfig();
+        const auto config = yamlConfigService.GetConfig();
+        std::cout << "[INFO] Yaml" << std::endl << config.ToString() << std::endl;
 
         auto databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
         auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(config.imuSerialPort,

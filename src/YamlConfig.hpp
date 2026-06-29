@@ -133,7 +133,7 @@ struct YamlConfig {
         imuSerialPort.FromNode(node["imu_serial_port"]);
     }
 
-    std::string ToString() {
+    std::string ToString() const {
         return "kalmanValues:\n" + kalmanValues.ToString() + "\n" +
                "imuserialPort:\n"+ imuSerialPort.ToString();
     }

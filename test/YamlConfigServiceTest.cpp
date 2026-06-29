@@ -7,11 +7,11 @@ TEST(YamlConfigServiceTest, ConstructorThrowsRuntimeError) {
 }
 
 TEST(YamlConfigServiceTest, ConstructorDoesNotThrow) {
-    EXPECT_NO_THROW(YamlConfigService service("config.yaml"));
+    EXPECT_NO_THROW(YamlConfigService service("test_config.yaml"));
 }
 
 TEST(YamlConfigServiceTest, GetConfigReturnsConfig) {
-    YamlConfigService service("config.yaml");
+    YamlConfigService service("test_config.yaml");
     auto config = service.GetConfig();
 
     EXPECT_EQ(20u, config.kalmanValues.gpsN);
@@ -27,7 +27,7 @@ TEST(YamlConfigServiceTest, GetConfigReturnsConfig) {
     EXPECT_EQ(100u, config.kalmanValues.qN);
     EXPECT_EQ(10u, config.kalmanValues.qL);
 
-    EXPECT_EQ("\\\\COM1", config.imuSerialPort.path);
+    EXPECT_EQ(R"(\\COM1)", config.imuSerialPort.path);
     EXPECT_EQ(460800u, config.imuSerialPort.baudRate);
 }
 
