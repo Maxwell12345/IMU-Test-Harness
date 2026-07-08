@@ -6,15 +6,15 @@
 #include <thread>
 
 RadarPositionNavigationController::RadarPositionNavigationController(const _KalmanValues& config,
-                                                                     std::shared_ptr<DatabaseManager> dbManager,
+                                                                     std::shared_ptr<DatabaseManager> databaseManager,
                                                                      std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
                                                                      std::unique_ptr<IMUManager> imuManager):
                                                                      m_config(config),
+                                                                     m_databaseManager(std::move(databaseManager)),
                                                                      m_running(false),
                                                                      m_isKFConfigured(false),
                                                                      m_latestX(Vector6d::Zero()),
                                                                      m_latestP(Matrix6d::Zero()),
-                                                                     m_dbManager(dbManager),
                                                                      m_imuManager(std::move(imuManager)),
                                                                      m_imuSerialPortReader(std::move(imuSerialPortReader)) {
     auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
@@ -160,10 +160,15 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
         }
 
         try {
+            if (dt <= 0 || dt > 0.5) {
+                dt = 0.01;
+            }
             std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
 
             this->m_latestX = output.first;
             this->m_latestP = output.second;
+
+            this->m_databaseManager->EnqueueEkfOutput(m_latestX, m_latestP);
         } catch (const std::exception &e) {
             // TODO: Log this
             std::cout << "[ERROR] " << e.what() << std::endl;
@@ -205,10 +210,17 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &i
         }
 
         try {
+            if (dt <= 0 || dt > 0.5) {
+                dt = 0.01;
+            }
             std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
 
             this->m_latestX = output.first;
             this->m_latestP = output.second;
+
+            std::cout << m_latestX << std::endl;
+
+            this->m_databaseManager->EnqueueEkfOutput(m_latestX, m_latestP);
         } catch (const std::exception &e) {
             // TODO: Log this
             std::cout << "[ERROR] " << e.what() << std::endl;

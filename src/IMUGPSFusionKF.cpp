@@ -34,7 +34,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
                      this->m_zero, this->m_zero, this->m_zero;
 
     this->m_H_IMU << this->m_zero, this->m_zero, this->m_zero,
-                     this->m_zero, this->m_zero, this->m_zero,
+                     this->m_zero, this->m_I, this->m_zero,
                      this->m_zero, this->m_zero, this->m_I;
 
     this->m_jerkPSD = 0.1;
@@ -144,7 +144,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateFuzzyLogicMembershipFunction(do
         upperBound = this->m_chiSquaredBetaUpperBound_GPS;
     }
 
-    const double min_GPS = 0.01; 
+    const double min_GPS = 0.015; 
 
     if (!std::isfinite(chi_squared_stat)) {
         return 0.0;

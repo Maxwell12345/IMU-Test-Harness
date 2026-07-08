@@ -43,17 +43,15 @@ std::optional<GpsUpdate> IMUManager::GetLatestGps() const {
 
 void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
     if (update.valid == false) {
-        std::cout << "VALID false";
         return;
     }
-
     const unsigned int STALE_TIME_OUT_SECONDS = 5;
     double deltaTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - update.receiveTime).count();
     if (deltaTime > STALE_TIME_OUT_SECONDS) {
         return;
     }
 
-    if (m_latestGps.has_value() && update.gpsTimestampMs <= m_latestGps->gpsTimestampMs) {
+    if (m_latestGps.has_value() && update.timestamp <= m_latestGps->timestamp) {
         return;
     }
 
@@ -98,11 +96,13 @@ void IMUManager::DispatchToEkf() {
                                                 linearAccelerationSnapshot,
                                                 gpsUpdateSnapshot.value(),
                                                 year);
-
+    
     double dtSeconds = PrepareEkfTiming();
-
+    
     if (gpsSentToEkfSnapshot == false) {
         Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+
+        this->m_databaseManager->EnqueueGpsUpdate(gpsUpdateSnapshot.value());
         m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
 
         m_gpsSentToEkf = true;

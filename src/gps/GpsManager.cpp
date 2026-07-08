@@ -9,7 +9,7 @@
 
 #include "GpsManager.hpp"
 
-#define NMEA_COM_PORT "/dev/ttyACM0"
+#define NMEA_COM_PORT "/dev/ttyTEST"
 
 GpsManager::GpsManager()
     : m_nmeaReader(NMEA_COM_PORT, 115200) {}
@@ -20,6 +20,7 @@ void GpsManager::InstallCallback(std::function<void(const GpsUpdate&)> callback)
     m_isCallbackInstalled = true;
 }
 
+#include <iostream>
 void GpsManager::Start() {
     if (m_running.exchange(true)) return;
 
@@ -30,25 +31,22 @@ void GpsManager::Start() {
 
         while (m_running) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            // if (m_nmeaReader.GetNmeaMessageReady() == false) continue;
+            if (m_nmeaReader.GetNmeaMessageReady() == false) continue;
 
-            // msg = m_nmeaReader.GetNmeaMessage();
+            msg = m_nmeaReader.GetNmeaMessage();
             // if (msg.validChecksum == false) continue;
 
             GpsUpdate update = BuildGpsUpdate(msg);
 
-            // TODO: Delete.
-            update.latitude = 0.01;
-            update.longitude = -0.2;
-            update.hdop = 0.1;
-            update.valid = true;
-            update.receiveTime = std::chrono::steady_clock::now();        
-            update.gpsTimestampMs = 1;
-            
+            if (update.latitude == 0 || update.longitude == 0) {
+                continue;
+            }
+
             std::function<void(const GpsUpdate&)> callback;
             {
                 std::lock_guard<std::mutex> lock(m_callbackMutex);
                 if (!m_isCallbackInstalled) continue;
+
                 callback = m_callback;
             }
 

@@ -23,7 +23,7 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 class RadarPositionNavigationController {
 public:
   RadarPositionNavigationController(const _KalmanValues& config,
-                                    std::shared_ptr<DatabaseManager> dbManager,
+                                    std::shared_ptr<DatabaseManager> databaseManager,
                                     std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
                                     std::unique_ptr<IMUManager> m_imuManager);
 
@@ -160,35 +160,34 @@ private:
   void _GPSCallback(const GpsUpdate &gpsUpdate);
 
 private:
-  Vector6d m_latestX;
-  Matrix6d m_latestP;
-  std::mutex m_kFUpdateMutex;
-  IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
-  
-  const _KalmanValues& m_config;
-  
-  std::atomic<bool> m_running;
-  std::atomic<bool> m_isKFConfigured;
+    Vector6d m_latestX;
+    Matrix6d m_latestP;
+    std::mutex m_kFUpdateMutex;
+    IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
+    
+    const _KalmanValues& m_config;
+    
+    std::atomic<bool> m_running;
+    std::atomic<bool> m_isKFConfigured;
 
-  std::unique_ptr<IMUManager> m_imuManager;
-  std::shared_ptr<DatabaseManager> m_dbManager;
-  std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;
+    std::unique_ptr<IMUManager> m_imuManager;
+    std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;
 
+    std::shared_ptr<DatabaseManager> m_databaseManager;
 
-  FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSerial);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStateAndCovariance);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsInvalidPercentiles);
-  FRIEND_TEST(RadarPositionNavigationControllerTest,
-              ConfigureKalmanFilterRejectsLowerPercentileGreaterThanUpperPercentile);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyReturnsWithoutConfiguredKF);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsReturnsWithoutConfiguredKF);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyProducesNonFiniteStateBecauseKFUsesSingularR);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch);
-  FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, GetGPSCallbackUpdatesLatestGps);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, StartAndConfigureRadarPNTConfiguresKFAndStartsReader);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, StopRadarPNTStopsThreadAndClosesSerial);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, TotalDestructionStopsReaderCleansKFAndZerosLatestState);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStateAndCovariance);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsInvalidPercentiles);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterRejectsLowerPercentileGreaterThanUpperPercentile);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyReturnsWithoutConfiguredKF);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsReturnsWithoutConfiguredKF);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyProducesNonFiniteStateBecauseKFUsesSingularR);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting);
 };
 
 #endif // RADAR_POSITION_NAVIGATION_CONTROLLER_HPP

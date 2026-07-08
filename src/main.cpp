@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
         const auto config = yamlConfigService.GetConfig();
 
         auto databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db");
+        databaseManager->Start();
         auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(config.imuSerialPort,
                                                                          std::make_unique<BoostSerialPort>());
         auto imuManager = std::make_unique<IMUManager>(databaseManager);
@@ -39,9 +40,9 @@ int main(int argc, char** argv) {
 
         gps.Start();
 
-        radarPositionNavigationController.StartAndConfigureRadarPNT(0, 0);
+        radarPositionNavigationController.StartAndConfigureRadarPNT(30.274137, -97.734889);
         
-        std::cout << "CTRL + C to terminate..." << std::endl;
+        std::cout << "Type anything to stop" << std::endl;
         while(keepRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }

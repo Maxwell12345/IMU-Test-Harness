@@ -1,9 +1,12 @@
 #include "sh2service.h"
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -22,6 +25,18 @@
 #define BNO085_RESET_PIN GPIO_NUM_26
 #define SH2SERVICE_TIMEOUT_US 10000000
 #define SH2SERVICE_RECOVERY_ATTEMPTS 100
+
+#define SH2SERVICE_EVENT_QUEUE_LENGTH 64
+#define SH2SERVICE_CALLBACK_TASK_PRIORITY 8
+#define SH2SERVICE_CALLBACK_RECEIVE_TIMEOUT_MS 100
+#define SH2SERVICE_HARD_YIELD_EVERY_LOOPS 16
+
+#define SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG 0
+#define SH2SERVICE_SLOW_CALLBACK_US 20000
+
+#if SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG
+static const char *TAG = "sh2service";
+#endif
 
 static i2c_master_bus_handle_t s_bus_handle;
 static i2c_master_dev_handle_t s_dev_handle;
@@ -46,21 +61,77 @@ static void *s_callback_ctx;
 
 static TaskHandle_t s_task_handle;
 static TaskHandle_t s_recovery_task_handle;
+static TaskHandle_t s_callback_task_handle;
+static QueueHandle_t s_event_queue;
 
 static volatile int s_stop_requested;
 static volatile int s_running;
 static volatile int s_reset_seen;
 static volatile int s_sensors_enabled;
 static volatile int s_sh2_ready;
-static int64_t s_last_event_us;
+static int64_t s_last_packet_us;
+static int64_t s_last_valid_event_us;
 static volatile int s_recovering;
 static volatile int s_valid_measurements = 0;
 static volatile int s_num_valid_acc_measurements;
 static volatile int s_num_valid_rot_measurements;
+static volatile int s_save_dcd_requested;
+static volatile int s_callback_task_stop_requested;
+static volatile int s_callback_task_running;
+static volatile uint32_t s_dropped_events;
 
 static esp_err_t open_sh2(void);
 static void sh2service_task(void *arg);
 static void sh2service_recovery_task(void *arg);
+static void sh2service_callback_task(void *arg);
+static esp_err_t sh2service_create_callback_task(void);
+static void sh2service_stop_callback_task(void);
+static void enqueue_service_event(const sh2service_event_t *event);
+
+static void reset_event_timestamps(void)
+{
+    int64_t now = esp_timer_get_time();
+
+    s_last_packet_us = now;
+    s_last_valid_event_us = now;
+}
+
+static void reset_valid_measurement_state(void)
+{
+    s_valid_measurements = 0;
+    s_num_valid_acc_measurements = 0;
+    s_num_valid_rot_measurements = 0;
+    s_save_dcd_requested = 0;
+}
+
+static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
+{
+    if (s_valid_measurements) {
+        return;
+    }
+
+    volatile int *counter = NULL;
+
+    if (value->sensorId == SH2_LINEAR_ACCELERATION) {
+        counter = &s_num_valid_acc_measurements;
+    } else if (value->sensorId == SH2_ROTATION_VECTOR) {
+        counter = &s_num_valid_rot_measurements;
+    } else {
+        return;
+    }
+
+    if (acc == 3) {
+        (*counter)++;
+    } else if (acc == 0 || acc == 1) {
+        *counter = 0;
+    }
+
+    if (s_num_valid_rot_measurements > 500 &&
+        s_num_valid_acc_measurements > 500) {
+        s_valid_measurements = 1;
+        s_save_dcd_requested = 1;
+    }
+}
 
 static int wdt_add_current(void)
 {
@@ -149,7 +220,6 @@ static void cleanup_i2c(void)
     }
 }
 
-
 static esp_err_t hard_reset_bno085(void)
 {
     gpio_config_t cfg = {
@@ -229,9 +299,23 @@ static int wait_for_reset(uint32_t ms)
     return s_reset_seen;
 }
 
+static void enqueue_service_event(const sh2service_event_t *event)
+{
+    QueueHandle_t queue = s_event_queue;
+
+    if (queue == NULL || event == NULL) {
+        return;
+    }
+
+    if (xQueueSend(queue, event, 0) != pdTRUE) {
+        s_dropped_events++;
+    }
+}
+
 static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 {
-    s_last_event_us = esp_timer_get_time();
+    int64_t now = esp_timer_get_time();
+    s_last_packet_us = now;
 
     sh2_SensorValue_t value;
 
@@ -242,46 +326,31 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 
     uint8_t acc = value.status & 0x03;
 
-    if (acc == 0 || acc == 1) {
-        return;
-    }
+    update_valid_counts(&value, acc);
 
-    if (s_callback == NULL) {
+    if (acc == 0 || acc == 1) {
         return;
     }
 
     sh2service_event_t out;
     memset(&out, 0, sizeof(out));
+    out.timestamp_us = now;
 
     if (value.sensorId == SH2_LINEAR_ACCELERATION) {
-        if(!s_valid_measurements && acc == 3) {
-            s_num_valid_acc_measurements++;
-        }
-        else if (!s_valid_measurements && (acc == 0 || acc == 1)) {
-            s_num_valid_acc_measurements = 0;
-        }
-
         out.type = SH2SERVICE_LINEAR_ACCELERATION;
-        out.timestamp_us = esp_timer_get_time();
 
         out.data.linear_acceleration.x = value.un.linearAcceleration.x;
         out.data.linear_acceleration.y = value.un.linearAcceleration.y;
         out.data.linear_acceleration.z = value.un.linearAcceleration.z;
 
-        s_callback(&out, s_callback_ctx);
+        enqueue_service_event(&out);
         return;
     }
 
     if (value.sensorId == SH2_ROTATION_VECTOR) {
-        if(!s_valid_measurements && acc == 3) {
-            s_num_valid_rot_measurements++;
-        }
-        else if (!s_valid_measurements && (acc == 0 || acc == 1)) {
-            s_num_valid_rot_measurements = 0;
-        }
+        s_last_valid_event_us = now;
 
         out.type = SH2SERVICE_ROTATION_VECTOR;
-        out.timestamp_us = esp_timer_get_time();
 
         out.data.rotation_vector.i = value.un.rotationVector.i;
         out.data.rotation_vector.j = value.un.rotationVector.j;
@@ -289,25 +358,122 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
         out.data.rotation_vector.real = value.un.rotationVector.real;
         out.data.rotation_vector.accuracy = value.un.rotationVector.accuracy;
 
-        s_callback(&out, s_callback_ctx);
+        enqueue_service_event(&out);
         return;
     }
+}
 
-    if (s_num_valid_rot_measurements > 500 && s_num_valid_acc_measurements > 500) {
-        sh2_saveDcdNow();
-        s_valid_measurements = 1;
+static void sh2service_callback_task(void *arg)
+{
+    sh2service_event_t event;
+
+    s_callback_task_running = 1;
+
+    while (!s_callback_task_stop_requested) {
+        QueueHandle_t queue = s_event_queue;
+
+        if (queue == NULL) {
+            break;
+        }
+
+        if (xQueueReceive(queue, &event, pdMS_TO_TICKS(SH2SERVICE_CALLBACK_RECEIVE_TIMEOUT_MS)) != pdTRUE) {
+            continue;
+        }
+
+        sh2service_callback_t callback = s_callback;
+        void *callback_ctx = s_callback_ctx;
+
+        if (callback == NULL) {
+            continue;
+        }
+
+#if SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG
+        int64_t callback_start_us = esp_timer_get_time();
+#endif
+
+        callback(&event, callback_ctx);
+
+#if SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG
+        int64_t callback_elapsed_us = esp_timer_get_time() - callback_start_us;
+
+        if (callback_elapsed_us > SH2SERVICE_SLOW_CALLBACK_US) {
+            ESP_LOGW(TAG, "slow callback: %lld us, type=%d", callback_elapsed_us, event.type);
+        }
+#endif
     }
+
+    s_callback_task_running = 0;
+    s_callback_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+static esp_err_t sh2service_create_callback_task(void)
+{
+    if (s_event_queue == NULL) {
+        s_event_queue = xQueueCreate(SH2SERVICE_EVENT_QUEUE_LENGTH, sizeof(sh2service_event_t));
+        if (s_event_queue == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+    } else {
+        xQueueReset(s_event_queue);
+    }
+
+    if (s_callback_task_handle != NULL || s_callback_task_running) {
+        return ESP_OK;
+    }
+
+    s_callback_task_stop_requested = 0;
+
+    BaseType_t ok = xTaskCreate(
+        sh2service_callback_task,
+        "sh2cb",
+        s_config.task_stack_size,
+        NULL,
+        SH2SERVICE_CALLBACK_TASK_PRIORITY,
+        &s_callback_task_handle
+    );
+
+    if (ok != pdPASS) {
+        s_callback_task_handle = NULL;
+        vQueueDelete(s_event_queue);
+        s_event_queue = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    return ESP_OK;
+}
+
+static void sh2service_stop_callback_task(void)
+{
+    s_callback_task_stop_requested = 1;
+
+    TaskHandle_t current = xTaskGetCurrentTaskHandle();
+
+    if (current != s_callback_task_handle) {
+        while (s_callback_task_handle != NULL || s_callback_task_running) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+
+    if (s_event_queue != NULL) {
+        vQueueDelete(s_event_queue);
+        s_event_queue = NULL;
+    }
+
+    s_callback_task_stop_requested = 0;
+    s_dropped_events = 0;
 }
 
 static void event_callback(void *cookie, sh2_AsyncEvent_t *event)
 {
     if (event->eventId == SH2_RESET) {
-        s_last_event_us = esp_timer_get_time();
+        reset_event_timestamps();
         s_reset_seen = 1;
         s_sensors_enabled = 0;
     }
 }
-
 
 static int enable_sensor(sh2_SensorId_t id, uint32_t interval_us)
 {
@@ -376,7 +542,7 @@ static int sh2service_open_and_configure(void)
         return err;
     }
 
-    s_last_event_us = esp_timer_get_time();
+    reset_event_timestamps();
     s_sh2_ready = 1;
     return 0;
 }
@@ -435,7 +601,7 @@ static void sh2service_recovery_task(void *arg)
     printf("recovering SH2\n");
 
     for (int i = 0; i < SH2SERVICE_RECOVERY_ATTEMPTS && !s_stop_requested; i++) {
-        s_valid_measurements = 0;
+        reset_valid_measurement_state();
 
         wdt_reset_current(wdt_added);
 
@@ -592,19 +758,32 @@ static esp_err_t open_sh2(void)
 static void sh2service_task(void *arg)
 {
     int wdt_added = wdt_add_current();
+    uint32_t loop_count = 0;
 
     s_running = 1;
     s_sh2_ready = 1;
-    s_last_event_us = esp_timer_get_time();
+    reset_event_timestamps();
 
     while (!s_stop_requested) {
         wdt_reset_current(wdt_added);
 
         sh2_service();
 
+        if (s_save_dcd_requested) {
+            s_save_dcd_requested = 0;
+
+            wdt_reset_current(wdt_added);
+            int rc = sh2_saveDcdNow();
+            wdt_reset_current(wdt_added);
+
+            if (rc != 0) {
+                reset_valid_measurement_state();
+            }
+        }
+
         if (s_reset_seen && !s_sensors_enabled) {
             s_reset_seen = 0;
-            s_last_event_us = esp_timer_get_time();
+            reset_event_timestamps();
             service_for_ms(s_config.startup_delay_ms);
             wdt_reset_current(wdt_added);
 
@@ -617,18 +796,34 @@ static void sh2service_task(void *arg)
                 vTaskDelete(NULL);
             }
 
-            s_last_event_us = esp_timer_get_time();
+            reset_event_timestamps();
         }
 
         int64_t now = esp_timer_get_time();
 
-        if (s_sh2_ready && s_sensors_enabled && now - s_last_event_us > SH2SERVICE_TIMEOUT_US) {
-            printf("SH2 timeout\n");
+        if (s_sh2_ready && s_sensors_enabled && now - s_last_packet_us > SH2SERVICE_TIMEOUT_US) {
+            printf("SH2 packet timeout\n");
             s_running = 0;
             s_task_handle = NULL;
             sh2service_request_recovery();
             wdt_delete_current(wdt_added);
             vTaskDelete(NULL);
+        }
+
+        if (s_sh2_ready && s_sensors_enabled && now - s_last_valid_event_us > SH2SERVICE_TIMEOUT_US) {
+            printf("SH2 valid rotation vector timeout\n");
+            s_running = 0;
+            s_task_handle = NULL;
+            sh2service_request_recovery();
+            wdt_delete_current(wdt_added);
+            vTaskDelete(NULL);
+        }
+
+        loop_count++;
+        if ((loop_count % SH2SERVICE_HARD_YIELD_EVERY_LOOPS) == 0) {
+            vTaskDelay(1);
+        } else {
+            taskYIELD();
         }
     }
 
@@ -661,7 +856,9 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         return timer_err;
     }
 
-    if (s_task_handle != NULL || s_running || s_recovering || s_recovery_task_handle != NULL) {
+    if (s_task_handle != NULL || s_running || s_recovering ||
+        s_recovery_task_handle != NULL || s_callback_task_handle != NULL ||
+        s_callback_task_running) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -673,15 +870,27 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
     s_sensors_enabled = 0;
     s_sh2_ready = 0;
     s_recovering = 0;
+    reset_valid_measurement_state();
+    reset_event_timestamps();
 
-    esp_err_t err = open_sh2();
+    esp_err_t err = sh2service_create_callback_task();
     if (err != ESP_OK) {
-        cleanup_i2c();
-        hard_reset_bno085();
+        s_callback = NULL;
+        s_callback_ctx = NULL;
         return err;
     }
 
-    s_last_event_us = esp_timer_get_time();
+    err = open_sh2();
+    if (err != ESP_OK) {
+        cleanup_i2c();
+        hard_reset_bno085();
+        sh2service_stop_callback_task();
+        s_callback = NULL;
+        s_callback_ctx = NULL;
+        return err;
+    }
+
+    reset_event_timestamps();
     s_sh2_ready = 1;
 
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -692,6 +901,9 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         sh2_close();
         cleanup_i2c();
         hard_reset_bno085();
+        sh2service_stop_callback_task();
+        s_callback = NULL;
+        s_callback_ctx = NULL;
         return err;
     }
 
@@ -700,7 +912,9 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
 
 esp_err_t sh2service_stop(void)
 {
-    if (s_task_handle == NULL && !s_running && s_recovery_task_handle == NULL && !s_recovering) {
+    if (s_task_handle == NULL && !s_running &&
+        s_recovery_task_handle == NULL && !s_recovering &&
+        s_callback_task_handle == NULL && !s_callback_task_running) {
         return ESP_OK;
     }
 
@@ -715,6 +929,8 @@ esp_err_t sh2service_stop(void)
     while (s_task_handle != NULL || s_running || s_recovery_task_handle != NULL || s_recovering) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+
+    sh2service_stop_callback_task();
 
     return ESP_OK;
 }

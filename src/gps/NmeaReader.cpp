@@ -60,6 +60,8 @@ bool NmeaReader::GetNmeaMessageReady() const {
 NmeaMessage NmeaReader::GetNmeaMessage() const {
     std::lock_guard msgGuard(m_nmeaMessageMutex);
     m_nmeaMessageReady = false;
+
+
     return m_nmeaMessage;
 }
 
@@ -68,8 +70,11 @@ void NmeaReader::Callback(SerialPortBase& serial) {
     serial.ReadUntil(line, "\n");
 
     if (!line.empty() && line[0] == '$') {
-        m_nmeaMessage = Parse(line);
-        if(m_nmeaMessage.validChecksum == true) {
+        auto temp = Parse(line);
+        // if(m_nmeaMessage.validChecksum == true && temp.lat != 0 && temp.lon != 0) {
+        if(temp.lat != 0 && temp.lon != 0) {
+            m_nmeaMessage = temp;
+
             m_nmeaMessageReady = true;
         }
     }
