@@ -84,26 +84,26 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
     Matrix6d R0_GPS = Matrix6d::Zero();
     R0_GPS(0, 0) = 1e-10;
     R0_GPS(1, 1) = 1.2e-10;
-    R0_GPS(2, 2) = 1.56e-10;
-    R0_GPS(3, 3) = 1.01e-10;
-    R0_GPS(4, 4) = 1.3e-10;
-    R0_GPS(5, 5) = 1.09e-10;
+    R0_GPS(2, 2) = 1.56e-1;
+    R0_GPS(3, 3) = 1.01e-1;
+    R0_GPS(4, 4) = 1.3e-1;
+    R0_GPS(5, 5) = 1.09e-1;
 
     Matrix6d R0_IMU = Matrix6d::Zero();
-    R0_IMU(0, 0) = 1.2e-8;
-    R0_IMU(1, 1) = 1.1e-8;
-    R0_IMU(2, 2) = 1.2e-8;
-    R0_IMU(3, 3) = 1e-8;
-    R0_IMU(4, 4) = 1e-10;
-    R0_IMU(5, 5) = 1.4e-10;
+    R0_IMU(0, 0) = 1.2e-1;
+    R0_IMU(1, 1) = 1.1e-1;
+    R0_IMU(2, 2) = 1.2e-4;
+    R0_IMU(3, 3) = 1e-4;
+    R0_IMU(4, 4) = 1e-4;
+    R0_IMU(5, 5) = 1.4e-4;
 
     Matrix6d Q0 = Matrix6d::Zero();
-    Q0(0, 0) = 1.22e-14;
-    Q0(1, 1) = 1.04e-14;
-    Q0(2, 2) = 1.3e-12;
-    Q0(3, 3) = 1.2e-12;
-    Q0(4, 4) = 1e-14;
-    Q0(5, 5) = 1.09e-14;
+    Q0(0, 0) = 1.22e-13;
+    Q0(1, 1) = 1.04e-13;
+    Q0(2, 2) = 1.3e-11;
+    Q0(3, 3) = 1.2e-11;
+    Q0(4, 4) = 1e-13;
+    Q0(5, 5) = 1.09e-13;
 
     this->m_latestX = x0;
     this->m_latestP = P0;
@@ -177,8 +177,8 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
                 double lon = this->m_latestX(0, 0);
 
                 if (!std::isfinite(lat) || !std::isfinite(lon)) {
-                this->m_isKFConfigured.store(false);
-                return;
+                    this->m_isKFConfigured.store(false);
+                    return;
                 }
                 // note: original was lat0, lon0
                 needsReconfig = true;

@@ -51,8 +51,6 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
         _IMU_MESSAGE_TYPES_ type = this->GetMessageType(message[1]);
         unsigned int len = this->GetMessageLength(message[2]);
 
-        std::cout << type;
-
         if (len > 73) {
             return;
         }

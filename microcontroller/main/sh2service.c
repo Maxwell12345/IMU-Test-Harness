@@ -126,8 +126,8 @@ static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
         *counter = 0;
     }
 
-    if (s_num_valid_rot_measurements > 500 &&
-        s_num_valid_acc_measurements > 500) {
+    if (s_num_valid_rot_measurements > 5000 &&
+        s_num_valid_acc_measurements > 5000) {
         s_valid_measurements = 1;
         s_save_dcd_requested = 1;
     }

@@ -241,6 +241,8 @@ private:
      */
     void PushInnovationQ(Vector6d &posteriorResidual, Matrix6d &postiori_P);
 
+    double CalculateMahalanobisDistance(Vector6d x, Vector6d mu, Matrix6d sigma);
+
 private:
     // Fusion filter members
     Vector6d m_x; 
@@ -272,8 +274,8 @@ private:
     unsigned m_L_Q;
     unsigned m_l_Q;
 
-    AlignedVector6dDeque m_innocationQueue_GPS;
-    AlignedVector6dDeque m_innocationQueue_IMU;
+    AlignedVector6dDeque m_innovationQueue_GPS;
+    AlignedVector6dDeque m_innovationQueue_IMU;
     AlignedVector6dDeque m_posteriorResidualQueue;
 };
 

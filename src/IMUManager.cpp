@@ -187,39 +187,49 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                                const GpsUpdate &gps, int currentYear) {
     double latitude = gps.latitude;
     double longitude = gps.longitude;
-    const double RADAR_HEIGHT_M = 10;
+    const double RADAR_HEIGHT_M = 4.0;
 
-    double magneticHeading = IMUUtils::Calculate_Magnetic_Heading(rv.real, rv.i, rv.j, rv.k);
+    double magneticDeclinationDeg = m_magneticDeclination.CalculateDeclination(longitude,
+                                                                               latitude,
+                                                                               RADAR_HEIGHT_M,
+                                                                               currentYear);
 
-    double magneticDeclination = m_magneticDeclination.CalculateDeclination(longitude,
-                                                                            latitude,
-                                                                            RADAR_HEIGHT_M,
-                                                                            currentYear);
+    const IMUUtils::ENUAccel acc = IMUUtils::RotateLinearAccelToTrueENU(
+        rv.real, rv.i, rv.j, rv.k,
+        la.x, la.y, la.z,
+        magneticDeclinationDeg
+    );
 
-    double trueHeading = IMUUtils::MagneticToTrueHeading(magneticHeading, magneticDeclination);
+    const double globalGeoAccelerationX =
+        IMUUtils::Convert_Global_X_to_DegPerS2(latitude, acc.east);
 
-    double trueHeadingRadians = IMUUtils::DegreesToRadians(trueHeading);
+    const double globalGeoAccelerationY =
+        IMUUtils::Convert_Global_Y_to_DegPerS2(acc.north);
 
-    double globalLinearAccelerationX = IMUUtils::InertialToGlobal_X(trueHeadingRadians, la.x, la.y);
+    const auto currentTimestamp = std::chrono::steady_clock::now();
 
-    double globalLinearAccelerationY = IMUUtils::InertialToGlobal_Y(trueHeadingRadians, la.x, la.y);
-
-    double globalGeoAccelerationX = IMUUtils::Convert_Global_X_to_DegPerS2(latitude, globalLinearAccelerationX);
-    double globalGeoAccelerationY = IMUUtils::Convert_Global_Y_to_DegPerS2(globalLinearAccelerationY);
-
-    IMUUtils::KineticState kineticState;
     if (m_kineticState.timestamp == steadyMin) {
-        m_kineticState.timestamp = std::chrono::steady_clock::now();
+        m_kineticState = IMUUtils::KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
     }
-    kineticState = IMUUtils::CalculateKineticUpdate(m_kineticState, globalGeoAccelerationX, globalGeoAccelerationY);
+
+    IMUUtils::KineticState kineticState =
+        IMUUtils::CalculateKineticUpdate(
+            m_kineticState,
+            globalGeoAccelerationX,
+            globalGeoAccelerationY,
+            currentTimestamp
+        );
+
     m_kineticState = kineticState;
 
-    Vector6d imuVector = {0.0,
-                        0.0,
-                        kineticState.speedEastWest,
-                        kineticState.speedNorthSouth,
-                        kineticState.accelerationEastWest,
-                        kineticState.accelerationNorthSouth};
+    Vector6d imuVector = {
+        0.0,
+        0.0,
+        kineticState.speedEastWest,
+        kineticState.speedNorthSouth,
+        kineticState.accelerationEastWest,
+        kineticState.accelerationNorthSouth
+    };
 
     return imuVector;
 }
