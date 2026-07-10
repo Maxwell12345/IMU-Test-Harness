@@ -3,8 +3,8 @@
 IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     Vector6d x0, 
     Matrix6d P0, 
-    Matrix6d R0_GPS,
-    Matrix6d R0_IMU,
+    Eigen::Matrix<double, 2, 2> R0_GPS,
+    Eigen::Matrix<double, 2, 2> R0_IMU,
     Matrix6d Q0,
     double chiSquaredBetaLowerBound_GPS,
     double chiSquaredBetaLowerBound_IMU,
@@ -29,15 +29,13 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
     this->m_I = Eigen::Matrix2d::Identity();
     this->m_zero = Eigen::Matrix2d::Zero();
 
-    this->m_H_GPS << this->m_I, this->m_zero, this->m_zero,
-                     this->m_zero, this->m_zero, this->m_zero,
-                     this->m_zero, this->m_zero, this->m_zero;
+    this->m_H_GPS << 1, 0, 0, 0, 0, 0, 
+                     0, 1, 0, 0, 0, 0;
 
-    this->m_H_IMU << this->m_zero, this->m_zero, this->m_zero,
-                     this->m_zero, this->m_zero, this->m_zero,
-                     this->m_zero, this->m_zero, this->m_I;
+    this->m_H_IMU << 0, 0, 0, 0, 1, 0, 
+                     0, 0, 0, 0, 0, 1;
 
-    this->m_jerkPSD = 0.1;
+    this->m_jerkPSD = 0.01;
 
     this->m_N_GPS = N_GPS;
     this->m_L_GPS = L_GPS;
@@ -55,13 +53,10 @@ IMUGPSFusionKF_2D_ConstantAcceleration::IMUGPSFusionKF_2D_ConstantAcceleration(
 void IMUGPSFusionKF_2D_ConstantAcceleration::Clean() {
     this->m_x = Vector6d::Zero();
     this->m_P = Matrix6d::Zero();
-    this->m_R_GPS = Matrix6d::Zero();
-    this->m_R_IMU = Matrix6d::Zero();
+    this->m_R_GPS = Eigen::Matrix<double, 2, 2>::Zero();
+    this->m_R_IMU = Eigen::Matrix<double, 2, 2>::Zero();
     this->m_Q = Matrix6d::Zero();
     this->m_P_propagated_lag = Matrix6d::Zero();
-
-    this->m_H_GPS = Matrix6d::Zero();
-    this->m_H_IMU = Matrix6d::Zero();
 
     this->m_I = Eigen::Matrix2d::Zero();
     this->m_zero = Eigen::Matrix2d::Zero();
@@ -101,8 +96,8 @@ Matrix6d IMUGPSFusionKF_2D_ConstantAcceleration::BuildFk(double dt) {
 }
 
 Eigen::Vector4d 
-IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector6d innovation_IMU) {
-    Matrix6d S_IMU = this->m_H_IMU * priori_P * this->m_H_IMU.transpose() + this->m_R_IMU;
+IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Eigen::Matrix<double, 2, 1> innovation_IMU) {
+    Eigen::Matrix<double, 2, 2> S_IMU = this->m_H_IMU * priori_P * this->m_H_IMU.transpose() + this->m_R_IMU;
 
     Eigen::Matrix<double, 1, 1> NIS_IMU = innovation_IMU.transpose() * S_IMU.inverse() * innovation_IMU;
 
@@ -115,9 +110,9 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector
 }
 
 Eigen::Vector4d 
-IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Vector6d innovation_GPS, Vector6d innovation_IMU) {
-    Matrix6d S_IMU = this->m_H_IMU * priori_P * this->m_H_IMU.transpose() + this->m_R_IMU;
-    Matrix6d S_GPS = this->m_H_GPS * priori_P * this->m_H_GPS.transpose() + this->m_R_GPS;
+IMUGPSFusionKF_2D_ConstantAcceleration::CalculateBetas(Matrix6d priori_P, Eigen::Matrix<double, 2, 1> innovation_GPS, Eigen::Matrix<double, 2, 1> innovation_IMU) {
+    Eigen::Matrix<double, 2, 2> S_IMU = this->m_H_IMU * priori_P * this->m_H_IMU.transpose() + this->m_R_IMU;
+    Eigen::Matrix<double, 2, 2> S_GPS = this->m_H_GPS * priori_P * this->m_H_GPS.transpose() + this->m_R_GPS;
 
     Eigen::Matrix<double, 1, 1> NIS_GPS = innovation_GPS.transpose() * S_GPS.inverse() * innovation_GPS;
     Eigen::Matrix<double, 1, 1> NIS_IMU = innovation_IMU.transpose() * S_IMU.inverse() * innovation_IMU;
@@ -170,40 +165,37 @@ IMUGPSFusionKF_2D_ConstantAcceleration::CalculateFuzzyLogicMembershipFunction(do
     return mu;
 }
 
-std::pair<Matrix6d, Matrix6d> 
-IMUGPSFusionKF_2D_ConstantAcceleration::Calculate_GPS_KalmanGains(Matrix6d priori_P_inv, Vector6d innovation_GPS, Matrix6d postiori_P_GPS_IMU) {
-    Matrix6d R_GPS_inv = this->m_R_GPS.inverse();
-    Matrix6d H_GPS_T = this->m_H_GPS.transpose();
+std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> 
+IMUGPSFusionKF_2D_ConstantAcceleration::Calculate_GPS_KalmanGains(Matrix6d priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_GPS, Matrix6d postiori_P_GPS_IMU) {
+    Eigen::Matrix<double, 2, 2> R_GPS_inv = this->m_R_GPS.inverse();
+    Eigen::Matrix<double, 6, 2> H_GPS_T = this->m_H_GPS.transpose();
     Matrix6d postiori_P_GPS_inv = priori_P_inv + H_GPS_T * R_GPS_inv * this->m_H_GPS;
 
-    Matrix6d K_GPS = postiori_P_GPS_inv.inverse() * H_GPS_T * R_GPS_inv;
+    Eigen::Matrix<double, 6, 2> K_GPS = postiori_P_GPS_inv.inverse() * H_GPS_T * R_GPS_inv;
 
-    Matrix6d K_GPS_given_GPS_plus_IMU = postiori_P_GPS_IMU * H_GPS_T * R_GPS_inv;
+    Eigen::Matrix<double, 6, 2> K_GPS_given_GPS_plus_IMU = postiori_P_GPS_IMU * H_GPS_T * R_GPS_inv;
 
     return {K_GPS, K_GPS_given_GPS_plus_IMU};
 }
 
-std::pair<Matrix6d, Matrix6d> 
-IMUGPSFusionKF_2D_ConstantAcceleration::Calculate_IMU_KalmanGains(Matrix6d priori_P_inv, Vector6d innovation_IMU, Matrix6d postiori_P_GPS_IMU) {
-    Matrix6d R_IMU_inv = this->m_R_IMU.inverse();
-    Matrix6d H_IMU_T = this->m_H_IMU.transpose();
+std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> 
+IMUGPSFusionKF_2D_ConstantAcceleration::Calculate_IMU_KalmanGains(Matrix6d priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_IMU, Matrix6d postiori_P_GPS_IMU) {
+    Eigen::Matrix<double, 2, 2> R_IMU_inv = this->m_R_IMU.inverse();
+    Eigen::Matrix<double, 6, 2> H_IMU_T = this->m_H_IMU.transpose();
     Matrix6d postiori_P_IMU_inv = priori_P_inv + H_IMU_T * R_IMU_inv * this->m_H_IMU;
 
-    Matrix6d K_IMU = postiori_P_IMU_inv.inverse() * H_IMU_T * R_IMU_inv;
+    Eigen::Matrix<double, 6, 2> K_IMU = postiori_P_IMU_inv.inverse() * H_IMU_T * R_IMU_inv;
 
-    Matrix6d K_IMU_given_IMU_plus_IMU = postiori_P_GPS_IMU * H_IMU_T * R_IMU_inv;
+    Eigen::Matrix<double, 6, 2> K_IMU_given_IMU_plus_IMU = postiori_P_GPS_IMU * H_IMU_T * R_IMU_inv;
 
     return {K_IMU, K_IMU_given_IMU_plus_IMU};
 }
 
 
 std::pair<Vector6d, Matrix6d> 
-IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
+IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Eigen::Matrix<double, 2, 1>& z_IMU) {
     // Propagate process noise covariances
     // this->Update_Q(dt, false);
-
-    z_IMU(2,0) = 0.0;
-    z_IMU(3,0) = 0.0;
 
     // Assemble transition state matrix
     Matrix6d F_k = this->BuildFk(dt);
@@ -215,7 +207,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     Matrix6d priori_P = this->m_P_propagated_lag + this->m_Q;
 
     // Calculate IMU innovation.
-    Vector6d innovation_IMU = z_IMU - this->m_H_IMU * priori_x;
+    Eigen::Matrix<double, 2, 1> innovation_IMU = z_IMU - this->m_H_IMU * priori_x;
 
     // Calculate Betas.
     Eigen::Vector4d Betas = this->CalculateBetas(priori_P, innovation_IMU);
@@ -223,8 +215,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     // Calculate IMU Kalman gains.
     Matrix6d priori_P_inv = priori_P.inverse();
 
-    Matrix6d R_GPS_inv = this->m_R_GPS.inverse();
-    Matrix6d R_IMU_inv = this->m_R_IMU.inverse();
+    Eigen::Matrix<double, 2, 2> R_GPS_inv = this->m_R_GPS.inverse();
+    Eigen::Matrix<double, 2, 2> R_IMU_inv = this->m_R_IMU.inverse();
 
     Matrix6d HT_Rinv_H = this->m_H_IMU.transpose() * R_IMU_inv * this->m_H_IMU;
 
@@ -234,7 +226,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
         HT_Rinv_H
     ).inverse();
 
-    std::pair<Matrix6d, Matrix6d> IMU_KalmanGains = this->Calculate_IMU_KalmanGains(priori_P_inv, innovation_IMU, postiori_P_GPS_IMU);
+    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> IMU_KalmanGains = this->Calculate_IMU_KalmanGains(priori_P_inv, innovation_IMU, postiori_P_GPS_IMU);
 
     // Calculate postiori x and P IMU.
     Vector6d postiori_x_IMU = priori_x + IMU_KalmanGains.first * innovation_IMU;
@@ -247,23 +239,20 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_IMU) {
     this->m_P = Betas(0) * priori_P + 
                 Betas(2) * (postiori_P_IMU + x_innovation_IMU * x_innovation_IMU.transpose());
 
-    Vector6d residual_IMU = z_IMU - this->m_H_IMU * this->m_x;
+    Eigen::Matrix<double, 2, 1> residual_IMU = z_IMU - this->m_H_IMU * this->m_x;
 
     this->PushInnovationIMU(residual_IMU, this->m_P);
 
     // Vector6d posteriorResidual = this->m_x - priori_x;
     // this->PushInnovationQ(posteriorResidual, this->m_P);
 
-    return {this->m_x, priori_P};
+    return {this->m_x, this->m_P};
 }
 
 std::pair<Vector6d, Matrix6d> 
-IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6d& z_IMU) {
+IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Eigen::Matrix<double, 2, 1>& z_GPS, Eigen::Matrix<double, 2, 1>& z_IMU) {
     // Propagate process noise covariances
     // this->Update_Q(dt, true);
-
-    z_IMU(2,0) = 0.0;
-    z_IMU(3,0) = 0.0;
 
     // Assemble transition state matrix
     Matrix6d F_k = this->BuildFk(dt);
@@ -275,8 +264,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     Matrix6d priori_P = this->m_P_propagated_lag + this->m_Q;
 
     // Calculate GPS and IMU innovation.
-    Vector6d innovation_IMU = z_IMU - this->m_H_IMU * priori_x;
-    Vector6d innovation_GPS = z_GPS - this->m_H_GPS * priori_x;
+    Eigen::Matrix<double, 2, 1> innovation_IMU = z_IMU - this->m_H_IMU * priori_x;
+    Eigen::Matrix<double, 2, 1> innovation_GPS = z_GPS - this->m_H_GPS * priori_x;
 
     // Calculate Betas.
     Eigen::Vector4d Betas = this->CalculateBetas(priori_P, innovation_GPS, innovation_IMU);
@@ -284,16 +273,16 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     // Calculate GPS and IMU Kalman gains.
     Matrix6d priori_P_inv = priori_P.inverse();
 
-    Matrix6d R_GPS_inv = this->m_R_GPS.inverse();
-    Matrix6d R_IMU_inv = this->m_R_IMU.inverse();
+    Eigen::Matrix<double, 2, 2> R_GPS_inv = this->m_R_GPS.inverse();
+    Eigen::Matrix<double, 2, 2> R_IMU_inv = this->m_R_IMU.inverse();
 
     Matrix6d HT_Rinv_H_GPS = this->m_H_GPS.transpose() * R_GPS_inv * this->m_H_GPS;
     Matrix6d HT_Rinv_H_IMU = this->m_H_IMU.transpose() * R_IMU_inv * this->m_H_IMU;
 
     Matrix6d postiori_P_GPS_IMU = (priori_P_inv + HT_Rinv_H_GPS + HT_Rinv_H_IMU).inverse();
 
-    std::pair<Matrix6d, Matrix6d> IMU_KalmanGains = this->Calculate_IMU_KalmanGains(priori_P_inv, innovation_IMU, postiori_P_GPS_IMU);
-    std::pair<Matrix6d, Matrix6d> GPS_KalmanGains = this->Calculate_GPS_KalmanGains(priori_P_inv, innovation_GPS, postiori_P_GPS_IMU);
+    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> IMU_KalmanGains = this->Calculate_IMU_KalmanGains(priori_P_inv, innovation_IMU, postiori_P_GPS_IMU);
+    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> GPS_KalmanGains = this->Calculate_GPS_KalmanGains(priori_P_inv, innovation_GPS, postiori_P_GPS_IMU);
 
     // Calculate postiori x and P GPS and IMU.
     Vector6d postiori_x_IMU = priori_x + IMU_KalmanGains.first * innovation_IMU;
@@ -310,13 +299,19 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     Vector6d x_innovation_IMU = this->m_x - postiori_x_IMU;
     Vector6d x_innovation_GPS = this->m_x - postiori_x_GPS;
     Vector6d x_innovation_GPS_IMU = this->m_x - postiori_x_GPS_IMU;
-    this->m_P = Betas(0) * priori_P + 
-                Betas(1) * (postiori_P_GPS + x_innovation_GPS * x_innovation_GPS.transpose()) +
-                Betas(2) * (postiori_P_IMU + x_innovation_IMU * x_innovation_IMU.transpose()) +
-                Betas(3) * (postiori_P_GPS_IMU + x_innovation_GPS_IMU * x_innovation_GPS_IMU.transpose());
+    const Vector6d d0   = this->m_x - priori_x;
+    const Vector6d dGPS = this->m_x - postiori_x_GPS;
+    const Vector6d dIMU = this->m_x - postiori_x_IMU;
+    const Vector6d dBoth = this->m_x - postiori_x_GPS_IMU;
 
-    Vector6d residual_GPS = z_GPS - this->m_H_GPS * this->m_x;
-    Vector6d residual_IMU = z_IMU - this->m_H_IMU * this->m_x;
+    this->m_P =
+        Betas(0) * (priori_P + d0 * d0.transpose()) +
+        Betas(1) * (postiori_P_GPS + dGPS * dGPS.transpose()) +
+        Betas(2) * (postiori_P_IMU + dIMU * dIMU.transpose()) +
+        Betas(3) * (postiori_P_GPS_IMU + dBoth * dBoth.transpose());
+
+    Eigen::Matrix<double, 2, 1> residual_GPS = z_GPS - this->m_H_GPS * this->m_x;
+    Eigen::Matrix<double, 2, 1> residual_IMU = z_IMU - this->m_H_IMU * this->m_x;
 
     this->PushInnovationGPS(residual_GPS, this->m_P);
     this->PushInnovationIMU(residual_IMU, this->m_P);
@@ -325,15 +320,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::Step(double dt, Vector6d& z_GPS, Vector6
     // this->PushInnovationQ(posteriorResidual, this->m_P);
 
     return {this->m_x, this->m_P};
-}
-
-void IMUGPSFusionKF_2D_ConstantAcceleration::Update_GPS_R(Matrix6d R_GPS) {
-    this->m_R_GPS = R_GPS;
-}
-
-
-void IMUGPSFusionKF_2D_ConstantAcceleration::Update_IMU_R(Matrix6d R_IMU) {
-    this->m_R_IMU = R_IMU;
 }
 
 void IMUGPSFusionKF_2D_ConstantAcceleration::Update_Q(double dt, bool has_GPS) {
@@ -370,7 +356,7 @@ void IMUGPSFusionKF_2D_ConstantAcceleration::Update_Q(double dt, bool has_GPS) {
 }
 
 void 
-IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Matrix6d& postiori_P) {
+IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Eigen::Matrix<double, 2, 1>& residual, Matrix6d& postiori_P) {
     if (this->m_N_GPS == 0) {
         return;
     }
@@ -384,7 +370,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Ma
     this->m_innovationQueue_GPS.emplace_back(residual);
 
     if (this->m_l_GPS >= this->m_L_GPS) {
-        Matrix6d innovationSum = Matrix6d::Zero();
+        Eigen::Matrix<double, 2, 2> innovationSum = Eigen::Matrix<double, 2, 2>::Zero();
         for (const auto& innovation : this->m_innovationQueue_GPS) {
             innovationSum += innovation * innovation.transpose();
         }
@@ -393,11 +379,6 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Ma
         this->m_R_GPS = innovationSum + this->m_H_GPS * postiori_P * this->m_H_GPS.transpose(); 
 
         double epsilon = 1e-16;
-        this->m_R_GPS(2, 2) = 1.005e-30;
-        this->m_R_GPS(3, 3) = 1.002e-30;
-        this->m_R_GPS(4, 4) = 1.0007e-30;
-        this->m_R_GPS(5, 5) = 1.0001e-30;
-
         this->m_R_GPS(0,0) = std::max(this->m_R_GPS(0,0), epsilon + 2e-18);
         this->m_R_GPS(1,1) = std::max(this->m_R_GPS(1,1), epsilon - 2e-18);
 
@@ -409,9 +390,8 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationGPS(Vector6d& residual, Ma
     this->m_l_GPS++;
 }
 
-
 void 
-IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual, Matrix6d& postiori_P) {
+IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Eigen::Matrix<double, 2, 1>& residual, Matrix6d& postiori_P) {
     if (this->m_N_IMU == 0) {
         return;
     }
@@ -425,7 +405,7 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual, Ma
     this->m_innovationQueue_IMU.emplace_back(residual);
 
     if (this->m_l_IMU >= this->m_L_IMU) {
-        Matrix6d innovationSum = Matrix6d::Zero();
+        Eigen::Matrix<double, 2, 2> innovationSum = Eigen::Matrix<double, 2, 2>::Zero();
         for (const auto& innovation : this->m_innovationQueue_IMU) {
             innovationSum += innovation * innovation.transpose();
         }
@@ -434,112 +414,14 @@ IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual, Ma
         this->m_R_IMU = innovationSum + this->m_H_IMU * postiori_P * this->m_H_IMU.transpose(); 
 
         double epsilon = 1e-16;
-        this->m_R_IMU(0, 0) = 1e30;
-        this->m_R_IMU(1, 1) = 1.0000005e30;
-        this->m_R_IMU(2, 2) = 1.00002e30;
-        this->m_R_IMU(3, 3) = 1.000015e30;
-
-        // this->m_R_IMU(2,2) = std::max(this->m_R_IMU(2,2), epsilon);
-        // this->m_R_IMU(3,3) = std::max(this->m_R_IMU(3,3), epsilon + 2e-18);
-        this->m_R_IMU(4,4) = std::max(this->m_R_IMU(4,4), epsilon - 2e-18);
-        this->m_R_IMU(5,5) = std::max(this->m_R_IMU(5,5), epsilon + 3e-18);
+        this->m_R_IMU(0,0) = std::max(this->m_R_IMU(0,0), epsilon - 2e-18);
+        this->m_R_IMU(1,1) = std::max(this->m_R_IMU(1,1), epsilon + 3e-18);
 
         this->m_l_IMU = 0;
     }
+    
     this->m_l_IMU++;
 }
-
-// void
-// IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationIMU(Vector6d& residual, Matrix6d& postiori_P) {
-//     if (this->m_N_IMU == 0) {
-//         return;
-//     }
-
-//     (void)postiori_P;
-
-//     if (this->m_innovationQueue_IMU.size() < this->m_N_IMU) {
-//         this->m_innovationQueue_IMU.emplace_back(residual);
-//         return;
-//     }
-
-//     this->m_innovationQueue_IMU.pop_front();
-//     this->m_innovationQueue_IMU.emplace_back(residual);
-
-//     if (this->m_l_IMU >= this->m_L_IMU) {
-//         const double N = static_cast<double>(this->m_innovationQueue_IMU.size());
-
-//         if (N > 2.0) {
-//             Vector6d innovationMean = Vector6d::Zero();
-
-//             for (const auto& innovation : this->m_innovationQueue_IMU) {
-//                 innovationMean += innovation;
-//             }
-
-//             innovationMean /= N;
-
-//             const double xMean = 0.5 * (N - 1.0);
-
-//             double Sxx = 0.0;
-//             Vector6d Sxy = Vector6d::Zero();
-
-//             double sampleIndex = 0.0;
-//             for (const auto& innovation : this->m_innovationQueue_IMU) {
-//                 const double x = sampleIndex - xMean;
-
-//                 Sxx += x * x;
-//                 Sxy += x * (innovation - innovationMean);
-
-//                 sampleIndex += 1.0;
-//             }
-
-//             Vector6d regressionSlope = Vector6d::Zero();
-
-//             if (Sxx > 0.0) {
-//                 regressionSlope = Sxy / Sxx;
-//             }
-
-//             const Vector6d regressionIntercept = innovationMean;
-
-//             Matrix6d covarianceMatrix = Matrix6d::Zero();
-
-//             sampleIndex = 0.0;
-//             for (const auto& innovation : this->m_innovationQueue_IMU) {
-//                 const double x = sampleIndex - xMean;
-
-//                 const Vector6d fittedInnovation =
-//                     regressionIntercept + regressionSlope * x;
-
-//                 const Vector6d regressionResidual =
-//                     innovation - fittedInnovation;
-
-//                 covarianceMatrix += regressionResidual * regressionResidual.transpose();
-
-//                 sampleIndex += 1.0;
-//             }
-
-//             covarianceMatrix /= (N - 2.0);
-
-//             covarianceMatrix = 0.5 * (covarianceMatrix + covarianceMatrix.transpose());
-
-//             this->m_R_IMU = covarianceMatrix;
-
-//             double epsilon = 1e-16;
-//             this->m_R_IMU(0, 0) = 1e30;
-//             this->m_R_IMU(1, 1) = 1.0000005e30;
-//             this->m_R_IMU(2, 2) = 1.00002e30;
-//             this->m_R_IMU(3, 3) = 1.000015e30;
-
-//             // this->m_R_IMU(2,2) = std::max(this->m_R_IMU(2,2), epsilon);
-//             // this->m_R_IMU(3,3) = std::max(this->m_R_IMU(3,3), epsilon + 2e-18);
-//             this->m_R_IMU(4,4) = std::max(this->m_R_IMU(4,4), epsilon - 2e-18);
-//             this->m_R_IMU(5,5) = std::max(this->m_R_IMU(5,5), epsilon + 3e-18);
-//         }
-
-//         this->m_l_IMU = 0;
-//     }
-
-//     this->m_l_IMU++;
-// }
 
 void 
 IMUGPSFusionKF_2D_ConstantAcceleration::PushInnovationQ(Vector6d &posteriorResidual, Matrix6d &postiori_P) {

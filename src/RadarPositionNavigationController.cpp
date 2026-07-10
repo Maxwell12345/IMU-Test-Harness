@@ -47,8 +47,8 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
         this->m_isKFConfigured = true;
     }
 
-    m_imuManager->InstallEkf([this](double dt, Vector6d &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
-                           [this](double dt, Vector6d &imuVec, Vector6d &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
+    m_imuManager->InstallEkf([this](double dt, Eigen::Matrix<double, 2, 1> &imuVec) { this->KFCallbackImuOnly(dt, imuVec); },
+                           [this](double dt, Eigen::Matrix<double, 2, 1> &imuVec, Eigen::Matrix<double, 2, 1> &gpsVec) { this->KFCallbackWithGps(dt, imuVec, gpsVec); });
 
     this->StartIMUReader();
     this->m_running = true;
@@ -82,21 +82,13 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
     P0(4, 4) = 1.2e-10;
     P0(5, 5) = 1.8e-10;
 
-    Matrix6d R0_GPS = Matrix6d::Zero();
-    R0_GPS(0, 0) = 1e-10;
-    R0_GPS(1, 1) = 1.2e-10;
-    R0_GPS(2, 2) = 1.56e-1;
-    R0_GPS(3, 3) = 1.01e-1;
-    R0_GPS(4, 4) = 1.3e-1;
-    R0_GPS(5, 5) = 1.09e-1;
+    Eigen::Matrix<double, 2, 2> R0_GPS = Eigen::Matrix<double, 2, 2>::Zero();
+    R0_GPS(0, 0) = 1.0001e-10;
+    R0_GPS(1, 1) = 1.00002e-10;
 
-    Matrix6d R0_IMU = Matrix6d::Zero();
-    R0_IMU(0, 0) = 1.2e-1;
-    R0_IMU(1, 1) = 1.1e-1;
-    R0_IMU(2, 2) = 1.2e-4;
-    R0_IMU(3, 3) = 1e-4;
-    R0_IMU(4, 4) = 1e-4;
-    R0_IMU(5, 5) = 1.4e-4;
+    Eigen::Matrix<double, 2, 2> R0_IMU = Eigen::Matrix<double, 2, 2>::Zero();
+    R0_IMU(0, 0) = 1.002e-4;
+    R0_IMU(1, 1) = 1.001e-4;
 
     Matrix6d Q0 = Matrix6d::Zero();
     Q0(0, 0) = 1.22e-13;
@@ -130,8 +122,8 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
     double chiSquaredBetaLowerBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile);
     double chiSquaredBetaUpperBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile);
 
-    double chiSquaredBetaLowerBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuLowerPercentile);
-    double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(4), imuUpperPercentile);
+    double chiSquaredBetaLowerBound_IMU = boost::math::quantile(boost::math::chi_squared(2), imuLowerPercentile);
+    double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(2), imuUpperPercentile);
 
     this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(x0,
                                                         P0,
@@ -150,7 +142,7 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
                                                         m_config.qL);
 }
 
-void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &imuVec) {
+void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matrix<double, 2, 1> &imuVec) {
     bool needsReconfig = false;
     double reconfigLat = 0.0;
     double reconfigLon = 0.0;
@@ -199,7 +191,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Vector6d &i
     }
 }
 
-void RadarPositionNavigationController::KFCallbackWithGps(double dt, Vector6d &imuVec, Vector6d &gpsVec) {
+void RadarPositionNavigationController::KFCallbackWithGps(double dt, Eigen::Matrix<double, 2, 1> &imuVec, Eigen::Matrix<double, 2, 1> &gpsVec) {
     bool needsReconfig = false;
     double reconfigLat = 0.0;
     double reconfigLon = 0.0;

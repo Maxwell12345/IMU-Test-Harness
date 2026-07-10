@@ -21,8 +21,8 @@ IMUManager::IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::st
     m_imuLinearAcceleration = {0, 0, 0};
 }
 
-void IMUManager::InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
-                            std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps) {
+void IMUManager::InstallEkf(std::function<void(double, Eigen::Matrix<double, 2, 1> &)> ekfCallbackImuOnly,
+                            std::function<void(double, Eigen::Matrix<double, 2, 1> &, Eigen::Matrix<double, 2, 1> &)> ekfCallbackWithGps) {
 
     if (!ekfCallbackImuOnly) {
         throw std::invalid_argument("ekfCallbackImuOnly is nullptr");
@@ -105,7 +105,7 @@ void IMUManager::DispatchToEkf() {
     double dtSeconds = PrepareEkfTiming();
     
     if (gpsSentToEkfSnapshot == false) {
-        Vector6d zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
+        Eigen::Matrix<double, 2, 1> zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
 
         this->m_databaseManager->EnqueueGpsUpdate(gpsUpdateSnapshot.value());
         m_ekfCallbackWithGps(dtSeconds, zImu, zGps);
@@ -190,8 +190,8 @@ void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optR
     }
 }
 
-Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
-    Vector6d gpsVector = {gps.longitude, gps.latitude, 0, 0, 0, 0};
+Eigen::Matrix<double, 2, 1> IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
+    Eigen::Matrix<double, 2, 1> gpsVector = {gps.longitude, gps.latitude};
     return gpsVector;
 }
 
@@ -236,11 +236,7 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
 
     m_kineticState = kineticState;
 
-    Vector6d imuVector = {
-        0.0,
-        0.0,
-        kineticState.speedEastWest,
-        kineticState.speedNorthSouth,
+    Eigen::Matrix<double, 2, 1> imuVector = {
         kineticState.accelerationEastWest,
         kineticState.accelerationNorthSouth
     };

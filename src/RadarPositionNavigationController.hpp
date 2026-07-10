@@ -128,7 +128,7 @@ private:
    * @exception std::runtime_error requires positive non zero df values and percentiles.
    * @exception std::exception KF initialization or Step error.
    */
-  void KFCallbackImuOnly(double dt, Vector6d &imuVec);
+  void KFCallbackImuOnly(double dt, Eigen::Matrix<double, 2, 1> &imuVec);
 
   /**
    * @brief Execute KF with IMU and GPS measurement.
@@ -146,7 +146,7 @@ private:
    * @exception std::runtime_error requires positive non zero df values and percentiles.
    * @exception std::exception KF initialization or Step error.
    */
-  void KFCallbackWithGps(double dt, Vector6d &imuVec, Vector6d &gpsVec);
+  void KFCallbackWithGps(double dt, Eigen::Matrix<double, 2, 1> &imuVec, Eigen::Matrix<double, 2, 1> &gpsVec);
 
   /**
    * @brief GPS callback service in order to set IMUManager GPS state.

@@ -23,18 +23,18 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 class IMUManager
 {
 public:
-  /**
-   * @brief Constructor
-   *
-   * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for
-   * persistence.
-   * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS
-   * available).
-   * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
-   *
-   * @throws std::invalid_argument when databaseManager is nullptr
-   */
-  IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "WMM.COF");
+    /**
+     * @brief Constructor
+     *
+     * @param [in] databaseManager Shared pointer to the Database Manager used to enqueue IMU and EKF output records for
+     * persistence.
+     * @param [in] ekfCallbackImuOnly Callback to the EKF Step(dt, z_IMU) method for IMU-only updates (no fresh GPS
+     * available).
+     * @param [in] ekfCallbackWithGps Callback to the EKF Step(dt, z_GPS, z_IMU) method for fused GPS+IMU updates
+     *
+     * @throws std::invalid_argument when databaseManager is nullptr
+     */
+    IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "WMM.COF");
 
     /**
      * @brief Installs ekf. If none is installed, calls to ekf will not be made.
@@ -47,8 +47,8 @@ public:
      *
      * @return
      */
-    void InstallEkf(std::function<void(double, Vector6d &)> ekfCallbackImuOnly,
-                    std::function<void(double, Vector6d &, Vector6d &)> ekfCallbackWithGps);
+    void InstallEkf(std::function<void(double, Eigen::Matrix<double, 2, 1> &)> ekfCallbackImuOnly,
+                    std::function<void(double, Eigen::Matrix<double, 2, 1> &, Eigen::Matrix<double, 2, 1> &)> ekfCallbackWithGps);
 
     /**
      * @brief Returns the runtime statistics of this class.
@@ -145,20 +145,20 @@ private:
      */
     void ResetImuReadyFlags();
 
-  /**
-   * @brief Checks if a number is out of numerical bounds
-   *
-   * @param [in] x number to be checked
-   *
-   * @return true if number is out of bounds else false
-   */
-  template <typename T>
-  static bool IsInvalidRange(T x)
-  {
-    T maxLimit = std::numeric_limits<T>::max();
-    T minLimit = std::numeric_limits<T>::min();
-    return (x <= minLimit) || (x >= maxLimit) || std::isnan(x) || !std::isfinite(x);
-  }
+    /**
+     * @brief Checks if a number is out of numerical bounds
+     *
+     * @param [in] x number to be checked
+     *
+     * @return true if number is out of bounds else false
+     */
+    template <typename T>
+    static bool IsInvalidRange(T x)
+    {
+        T maxLimit = std::numeric_limits<T>::max();
+        T minLimit = std::numeric_limits<T>::min();
+        return (x <= minLimit) || (x >= maxLimit) || std::isnan(x) || !std::isfinite(x);
+    }
 
   /**
    * @brief Validates incoming IMU events for troublesome values
@@ -191,7 +191,7 @@ private:
      *
      * @return Vector6d EKF-ready GPS measurement vector [x, y, 0, 0, 0, 0]^T in local coordinates.
      */
-    Vector6d BuildGpsMeasurementVector(const GpsUpdate &gps);
+    Eigen::Matrix<double, 2, 1> BuildGpsMeasurementVector(const GpsUpdate &gps);
 
     /**
      * @brief Build an Eigen vector representation of SensorValue data
@@ -234,8 +234,8 @@ private:
     MagneticDeclination m_magneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
     std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
 
-    std::function<void(double, Vector6d &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
-    std::function<void(double, Vector6d &, Vector6d &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data
+    std::function<void(double, Eigen::Matrix<double, 2, 1> &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
+    std::function<void(double, Eigen::Matrix<double, 2, 1> &, Eigen::Matrix<double, 2, 1> &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data
 
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);
