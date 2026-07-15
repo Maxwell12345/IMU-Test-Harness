@@ -18,10 +18,10 @@
 #include <stdexcept>
 #include <chrono>
 #include <numbers>
+#include <array>
 
 namespace IMUUtils
 {
-    inline double METERS_PER_DEGREE = 111111.1;
     inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
     inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
 
@@ -149,39 +149,6 @@ namespace IMUUtils
         double global_Y = std::cos(theta_t) * boat_y - std::sin(theta_t) * boat_x;
         return global_Y;
     };
-
-    /**
-     *
-     * @brief   Converts a linear acceleration along the surface of the Earth oriented East/West from meters/(second^2)
-     * into degrees_longitude / (second^2)
-     *
-     * @param [in] boat_latitude    The latitude of the boat at the moment in time the acceleration was measured, in
-     * units of decimal degrees (DD.dddddd). Latitudes south of the equator are entered as negative values
-     * @param [in] global_x     The linear acceleration of the boat along the East/West axis with East being positive
-     *
-     * @return  A double containing the longitudinal acceleration in degrees per second per second, with East being positive
-     *
-     * @throws out_of_range    If the inputted latitude is outside the inclusive bounds of  [-90.0 , 90.0] decimal degrees
-     */
-    inline double Convert_Global_X_to_DegPerS2(double boat_latitude, double global_x) {
-        if (boat_latitude < -90.0 || boat_latitude > 90.0) {
-            throw std::out_of_range("Latitude values must be between [-90.0 , 90.0] degrees in degreee decimal form (e.g. 12.3456).");
-        }
-        return global_x / (METERS_PER_DEGREE * std::cos(boat_latitude * IMUUtils::RAD_PER_DEGREE));
-    }
-
-    /**
-     *
-     * @brief   Converts a linear acceleration along the surface of the Earth oriented North/South from meters/(second^2)
-     * into degrees_latitude / (second^2)
-     *
-     * @param [in] global_y     The linear acceleration of the boat along the North/South axis with North being positive
-     *
-     * @return  A double containing the latitudinal acceleration in degrees per second per second, with North being positive
-     */
-    inline double Convert_Global_Y_to_DegPerS2(double global_y) {
-        return global_y / METERS_PER_DEGREE;
-    }
 
     /**
      *
@@ -359,6 +326,139 @@ namespace IMUUtils
         const double trueNorth = -std::sin(d) * magEast + std::cos(d) * magNorth;
 
         return {trueEast, trueNorth, up};
+    }
+
+    /**
+     * @brief Converts lat/lon into mercator projected units in meters.
+     *
+     * @param lat WGS84 latitude in degrees.
+     * @param lon WGS84 longitude in degrees.
+     *
+     * @return {E, N, zone, N0} mercator project in meters. The E component is the longitudinal 
+     *                      axis, the N component is the latitudinal axis, the zone is the
+     *                      UTM zone, and N0 is the northern hemosphere coeff required for inverse 
+     *                      calculations.
+     */
+    inline std::array<double, 4> WGS84_to_UTM(double lat, double lon) {
+        // paramters
+        constexpr double piOver180 = std::numbers::pi_v<double> / 180.0;
+        constexpr double a = 6378137.0;
+        constexpr double k0 = 0.9996;
+        constexpr double eSq = 0.0066943799901413169961;
+        constexpr double ePrimeSq = 0.006739496742276;
+        constexpr double r = 6367449.1458234153093;
+        constexpr double U0 = -32144.479935001393;
+        constexpr double U2 = 135.366898504447;
+        constexpr double U4 = -0.709321656818;
+        constexpr double U6 = 0.003986100961;
+        constexpr double E0 = 500000.0;
+
+        // Zone calculation
+        int zone = std::clamp(static_cast<int>(std::floor((lon + 180.0) / 6.0)) + 1, 1, 60);
+
+        if (lat >= 56.0 && lat < 64.0 && lon >= 3.0 && lon < 12.0) {
+            zone = 32;
+        }
+
+        if (lat >= 72.0 && lat < 84.0) {
+            if (lon >= 0.0 && lon < 9.0) zone = 31;
+            else if (lon >= 9.0 && lon < 21.0) zone = 33;
+            else if (lon >= 21.0 && lon < 33.0) zone = 35;
+            else if (lon >= 33.0 && lon < 42.0) zone = 37;
+        }
+
+        // calculated coefficients
+        const double phi0 = 0.0;
+        const double lambda0 = (6.0 * zone - 183.0) * piOver180;
+        const double N0 = lat < 0.0 ? 10000000.0 : 0.0;
+
+        const double phi = lat * piOver180;
+        const double lambda = lon * piOver180;
+
+        const double L = (lambda - lambda0) * std::cos(phi);
+        const double LSq = L * L;
+        const double nSq = ePrimeSq * std::pow(std::cos(phi), 2);
+        const double t = std::tan(phi);
+        const double tSq = t * t;
+        const double tSqSq = tSq * tSq;
+        const double sinPhi = std::sin(phi);
+        const double cosPhi = std::cos(phi);
+        const double cosPhiSq = cosPhi * cosPhi;
+        const double A1 = k0 * a / std::sqrt(1.0 - eSq * std::pow(std::sin(phi),2));
+        const double A2 = 0.5 * A1 * t;
+        const double A3 = 0.166666666666666667 * ( 1 - tSq + nSq );
+        const double A4 = 0.083333333333333333 * ( 5 - tSq + nSq * ( 9 + 4 * nSq ) );
+        const double A5 = 0.008333333333333333 * ( 5 - 18 * tSq + tSqSq + nSq * ( 14 - 58 * tSq ) );
+        const double A6 = 0.002777777777777778 * ( 61 - 58 * tSq + tSqSq + nSq * ( 270 - 330 * tSq ) );
+        const double A7 = 0.000198412698413000 * ( 61 - 479 * tSq + 179 * tSqSq - ( tSqSq * tSq ) );
+        const double omega = phi * r + sinPhi * cosPhi * ( U0 + U2 * cosPhiSq + U4 * ( cosPhiSq * cosPhiSq ) + U6 * ( cosPhiSq * cosPhiSq * cosPhiSq ) );
+        const double S = k0 * omega;
+        const double S0 = 0.0;
+
+        const double E = E0 + A1 * L * ( 1.0 + LSq * (A3 + LSq * ( A5 + A7 * LSq ) ) );
+        const double N = N0 + S - S0 + A2 * LSq * ( 1.0 + LSq * ( A4 + A6 * LSq ) );
+
+        return {E, N, static_cast<double>(zone), N0};
+    }
+
+    /**
+     * @brief Converts UTM x, y, and zone into WGS84 lat/lon.
+     *
+     * @param x UTM x.
+     * @param y UTM y.
+     * @param zone UTM zone.
+     * @param N0 Northern Hemisphere coeff.
+     *
+     * @return {lat, lon} in WGS84 standard.
+     */
+    inline std::array<double, 2> UTM_to_WGS84(double E, double N, double zone, double N0) {
+        // parameters
+        constexpr double piOver180 = std::numbers::pi_v<double> / 180.0;
+        constexpr double one80OverPi = 180.0 / std::numbers::pi_v<double>;
+        constexpr double a = 6378137.0;
+        constexpr double k0 = 0.9996;
+        constexpr double r = 6367449.1458234153093;
+        constexpr double eSq = 0.0066943799901413169961;
+        constexpr double ePrimeSq = 0.006739496742276;
+        constexpr double S0 = 0.0;
+
+        const double V0 = ( ePrimeSq / 4 ) * ( ( ( ( 16384.0 * ePrimeSq - 11025.0 ) * ( ePrimeSq / 64.0 ) + 175.0 ) * ( ePrimeSq / 4.0 ) - 45 ) * ( ePrimeSq / 16 ) + 3 ); 
+        const double V2 = ( ( ePrimeSq * ePrimeSq ) / 32 ) * ( ( ( ( -20464721.0 / 120.0 ) * ePrimeSq + 19413.0 ) * ( ePrimeSq / 8.0 ) - 1477.0 ) * ( ePrimeSq / 32.0 ) + 21.0 );
+        const double V4 = ( ( ePrimeSq * ePrimeSq * ePrimeSq ) / 192.0 ) * ( ( ( 4737141.0 / 28.0 ) * ePrimeSq - 17121.0 ) * ( ePrimeSq / 32.0 ) + 151.0 );
+        const double V6 = ( ( ePrimeSq * ePrimeSq * ePrimeSq * ePrimeSq ) / 1024.0 ) * ( ( -427277.0 / 35.0 ) * ePrimeSq + 1097.0 );
+
+        const double omega = ( N - N0 + S0 ) / ( k0 * r );
+        const double cosOmega = std::cos( omega );
+        const double cosOmegaSq = cosOmega * cosOmega;
+        const double cosOmegaSqSq = cosOmegaSq * cosOmegaSq;
+
+        const double sinOmega = std::sin( omega );
+        const double phiF = omega + ( sinOmega * cosOmega ) * ( V0 + V2 * cosOmegaSq + V4 * cosOmegaSqSq + V6 * cosOmegaSq * cosOmegaSqSq );
+        const double sinPhiF = std::sin( phiF );
+        const double cosPhiF = std::cos( phiF );
+        
+        const double Rf = ( k0 * a ) / std::sqrt( 1 - eSq * sinPhiF * sinPhiF );
+        const double Q = ( E - 500000.0 ) / Rf;
+        const double QSq = Q * Q;
+
+        const double tf = std::tan( phiF );
+        const double NfSq = ePrimeSq * cosPhiF * cosPhiF;
+
+        const double tfSq = tf * tf;
+        const double tfSqSq = tfSq * tfSq;
+
+        const double B2 = -0.5 * tf * ( 1 + NfSq );
+        const double B3 = -( 1.0 / 6.0 ) * ( 1 + 2 * tfSq + NfSq );
+        const double B4 = -( 1.0 / 12.0 ) * ( 5.0 + 3.0 * tfSq + NfSq * ( 1.0 - 9.0 * tfSq ) - 4.0 * NfSq * NfSq );
+        const double B5 = ( 1.0 / 120.0 ) * ( 5.0 + 28.0 * tfSq + 24.0 * tfSqSq + NfSq * ( 6.0 + 8.0 * tfSq ) );
+        const double B6 = ( 1.0 / 360.0 ) * ( 61.0 + 90.0 * tfSq + 45.0 * tfSqSq + NfSq * ( 46.0 - 252.0 * tfSq - 90.0 * tfSqSq ) );
+        const double B7 = -( 1.0 / 5040.0 ) * ( 61.0 + 662.0 * tfSq + 1320.0 * tfSqSq + 720.0 * tfSq * tfSqSq );
+
+        const double phi = phiF + B2 * QSq * ( 1 + QSq * ( B4 + B6 * QSq ) );
+        const double L = Q * ( 1 + QSq * ( B3 + QSq * ( B5 + B7 * QSq * Q ) ) );
+        const double lambda = (6.0 * zone - 183.0) * piOver180 + L / cosPhiF;
+
+        return {phi * one80OverPi, lambda * one80OverPi};
     }
 }; // namespace IMUUtils
 

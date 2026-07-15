@@ -23,6 +23,8 @@ RadarPositionNavigationController::RadarPositionNavigationController(const _Kalm
         imuManager->SensorCallback(optRv, optLa, optRr);
     };
     this->m_imuSerialPortReader->InstallCallback(imuSerialCallback);
+
+    this->m_lastUTMZone = -1;
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() {
@@ -75,28 +77,28 @@ void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, doubl
     x0 << lon0, lat0, 1e-15, 1e-15, 1e-16, 1e-16;
 
     Matrix6d P0 = Matrix6d::Zero();
-    P0(0, 0) = 1.2e-10;
-    P0(1, 1) = 1e-10;
-    P0(2, 2) = 1.9e-8;
-    P0(3, 3) = 1.32e-8;
-    P0(4, 4) = 1.2e-10;
-    P0(5, 5) = 1.8e-10;
+    P0(0, 0) = 20.0001;
+    P0(1, 1) = 20;
+    P0(2, 2) = 12.0001;
+    P0(3, 3) = 12;
+    P0(4, 4) = 9;
+    P0(5, 5) = 9.0001;
 
     Eigen::Matrix<double, 2, 2> R0_GPS = Eigen::Matrix<double, 2, 2>::Zero();
-    R0_GPS(0, 0) = 1.0001e-10;
-    R0_GPS(1, 1) = 1.00002e-10;
+    R0_GPS(0, 0) = 3;
+    R0_GPS(1, 1) = 3.0001;
 
     Eigen::Matrix<double, 2, 2> R0_IMU = Eigen::Matrix<double, 2, 2>::Zero();
-    R0_IMU(0, 0) = 1.002e-4;
-    R0_IMU(1, 1) = 1.001e-4;
+    R0_IMU(0, 0) = 4.0001;
+    R0_IMU(1, 1) = 4;
 
     Matrix6d Q0 = Matrix6d::Zero();
-    Q0(0, 0) = 1.22e-13;
-    Q0(1, 1) = 1.04e-13;
-    Q0(2, 2) = 1.3e-11;
-    Q0(3, 3) = 1.2e-11;
-    Q0(4, 4) = 1e-13;
-    Q0(5, 5) = 1.09e-13;
+    Q0(0, 0) = 1.0001;
+    Q0(1, 1) = 1;
+    Q0(2, 2) = 2.0001;
+    Q0(3, 3) = 2;
+    Q0(4, 4) = 3;
+    Q0(5, 5) = 3.0001;
 
     this->m_latestX = x0;
     this->m_latestP = P0;
@@ -148,7 +150,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matr
     double reconfigLon = 0.0;
     std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
     {
-        if (!this->m_isKFConfigured.load()) {
+        if (!this->m_isKFConfigured.load() || this->m_lastUTMZone == -1) {
             return;
         }
 
@@ -206,7 +208,33 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Eigen::Matr
             if (dt <= 0 || dt > 0.5) {
                 dt = 0.01;
             }
+
+            auto utmGps = IMUUtils::WGS84_to_UTM(gpsVec(1, 0), gpsVec(0, 0));
+
+            gpsVec(0, 0) = utmGps[0];
+            gpsVec(1, 0) = utmGps[1];
+
+            int zone = utmGps[2];
+
+            if (this->m_lastUTMZone != zone && this->m_lastUTMZone != -1) {
+                this->m_kf.UpdatePosition(utmGps[0], utmGps[1]);
+            }
+
+            this->m_lastUTMZone = zone;
+
             std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
+
+            // Check if the KF has surpassed the 
+            auto wgs84 = IMUUtils::UTM_to_WGS84(output.first(0, 0), output.first(1, 0), zone, utmGps[3]);
+            auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], [1]);
+
+            zone = utm[2];
+
+            if (this->m_lastUTMZone != zone) {
+                this->m_kf.UpdatePosition(utm[0], utm[1]);
+            }
+
+            this->m_lastUTMZone = zone;
 
             this->m_latestX = output.first;
             this->m_latestP = output.second;

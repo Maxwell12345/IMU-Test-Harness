@@ -42,30 +42,30 @@ target_link_libraries(${PROJECT_NAME}
         IMUPROC_LIB
 )
 
-# file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
+file(GLOB_RECURSE TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp")
 
-# enable_testing()
-# add_executable(${PROJECT_NAME}_tests
-#     ${TEST_SRC}
-# )
-# target_link_libraries(${PROJECT_NAME}_tests
-#     PRIVATE
-#         IMUPROC_LIB
-#         GTest::gtest
-#         GTest::gtest_main
-#         GTest::gmock
-#         GTest::gmock_main
-# )
+enable_testing()
+add_executable(${PROJECT_NAME}_tests
+    ${TEST_SRC}
+)
+target_link_libraries(${PROJECT_NAME}_tests
+    PRIVATE
+        IMUPROC_LIB
+        GTest::gtest
+        GTest::gtest_main
+        GTest::gmock
+        GTest::gmock_main
+)
 
-# target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
-#     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"
-# )
+target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
+    TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test"
+)
 
-# include(GoogleTest)
-# gtest_discover_tests(${PROJECT_NAME}_tests)
+include(GoogleTest)
+gtest_discover_tests(${PROJECT_NAME}_tests)
 
-# add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
-#     COMMAND ${PROJECT_NAME}_tests
-#     WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
-#     COMMENT "Running ${PROJECT_NAME}_tests"
-# )
+add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
+    COMMAND ${PROJECT_NAME}_tests
+    WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
+    COMMENT "Running ${PROJECT_NAME}_tests"
+)

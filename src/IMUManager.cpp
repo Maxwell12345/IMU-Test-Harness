@@ -214,12 +214,6 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
         magneticDeclinationDeg
     );
 
-    const double globalGeoAccelerationX =
-        IMUUtils::Convert_Global_X_to_DegPerS2(latitude, acc.east);
-
-    const double globalGeoAccelerationY =
-        IMUUtils::Convert_Global_Y_to_DegPerS2(acc.north);
-
     const auto currentTimestamp = std::chrono::steady_clock::now();
 
     if (m_kineticState.timestamp == steadyMin) {
@@ -229,8 +223,8 @@ Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
     IMUUtils::KineticState kineticState =
         IMUUtils::CalculateKineticUpdate(
             m_kineticState,
-            globalGeoAccelerationX,
-            globalGeoAccelerationY,
+            acc.east,
+            acc.north,
             currentTimestamp
         );
 

@@ -164,6 +164,7 @@ private:
     Matrix6d m_latestP;
     std::mutex m_kFUpdateMutex;
     IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
+    std::atomic<int> m_lastUTMZone;
     
     const _KalmanValues& m_config;
     

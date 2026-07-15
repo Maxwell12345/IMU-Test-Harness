@@ -276,28 +276,6 @@ TEST(IMUUtils, Convert_Global_X_Accel_Into_Degrees_Longitude) {
   };
 };
 
-// ----------------------------------------------------------------------------
-TEST(IMUUtils, Convert_Global_Y_Accel_Into_Degrees_Latitude) {
-  struct Case {
-    double accel_y_input;
-    double accel_deg_latitude_output;
-  };
-
-  const std::vector<Case> cases = {
-      // Near equator at +1 m/s2
-      {1.0, 1.0 / 111111.11},
-      // Near equator at -1 m/s2
-      {-1.0, -1.0 / 111111.11},
-  };
-
-  for (const auto &c : cases) {
-    EXPECT_NEAR(
-        IMUUtils::Convert_Global_Y_to_DegPerS2(c.accel_y_input),
-        c.accel_deg_latitude_output, 1e-9
-    );
-  };
-};
-// ----------------------------------------------------------------------------
 TEST(IMUUtils, Calculating_Magnetic_Heading_From_Rotation_Vectors) {
   struct Case {
     double w_input;
@@ -417,4 +395,226 @@ TEST(IMUUtils, KineticUpdates) {
     EXPECT_NEAR(thirdState.accelerationNorthSouth, -1.0, 1e-12);
     EXPECT_NEAR(thirdState.speedEastWest, .003, 1e-12);
     EXPECT_NEAR(thirdState.speedNorthSouth, 0.0, 1e-12);
+}
+
+TEST(IMUUtils, WGS84_to_UTMTests) {
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(30.272884413486207,-97.74489895728875);
+        auto point2 = IMUUtils::WGS84_to_UTM(30.272885413486208,-97.74489995728875);
+        double mercator_distance = std::hypot(point2[0] - point1[0],point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 0.14675938895142, 0.0000001);
+    }
+
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(20.736223782144965,121.86724791604726);
+        auto point2 = IMUUtils::WGS84_to_UTM(20.736123782144965,121.86734791604727);
+        double mercator_distance = std::hypot(point2[0] - point1[0],point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 15.196908912050178, 0.00001);
+    }
+
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(-39.223277923963025,143.17886116659233);
+        auto point2 = IMUUtils::WGS84_to_UTM(-39.213277923963027,143.16886116659234);
+        double mercator_distance = std::hypot(point2[0] - point1[0],point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 1406.5801614702168, 1.0);
+    }
+
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(63.133702046071825,-165.3609490928344);
+        auto point2 = IMUUtils::WGS84_to_UTM(63.033702046071824,-165.26094909283441);
+        double mercator_distance = std::hypot(point2[0] - point1[0],point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 12233.212012160137, 10.0);
+    }
+
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(-62.684373621915974,-64.52170570858675);
+        auto point2 = IMUUtils::WGS84_to_UTM(-61.684373621915974,-65.52170570858675);
+        double mercator_distance = std::hypot(point2[0] - point1[0],point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 122981.73833530223, 10.0);
+    }
+
+    {
+        auto point1 = IMUUtils::WGS84_to_UTM(29.940582911429292,48.77482933117357);
+        auto point2 = IMUUtils::WGS84_to_UTM(34.940582911429289,53.77482933117357);
+        double mercator_distance = std::hypot(point2[0] - point1[0], point2[1] - point1[1]);
+        EXPECT_NEAR(mercator_distance, 726630.5340157725, 10.0);
+    }
+}
+
+TEST(IMUUtils, UTM_to_WGS84Tests) {
+    {
+        auto point = UTM_to_WGS84(355263.84370631055, 2769368.6305411784, 51., 0.0);
+        EXPECT_NEAR(point[0], 25.033000, 0.00001);
+        EXPECT_NEAR(point[1], 121.565400, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(324182.2094294755, 5591607.607408224, 36., 0.0);
+        EXPECT_NEAR(point[0], 50.450100, 0.00001);
+        EXPECT_NEAR(point[1], 30.523400, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(484902.6214104738, 3619781.607950021, 11., 0.0);
+        EXPECT_NEAR(point[0], 32.715700, 0.00001);
+        EXPECT_NEAR(point[1], -117.161100, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(600105.5994494675, 3627015.7043538853, 17., 0.0);
+        EXPECT_NEAR(point[0], 32.776500, 0.00001);
+        EXPECT_NEAR(point[1], -79.931100, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(465609.1687300466, 9317795.753332414, 31., 0.0);
+        EXPECT_NEAR(point[0], 83.900000, 0.00001);
+        EXPECT_NEAR(point[1], 0.100000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(443247.87180748064, 1128161.3728647754, 31., 10000000.0);
+        EXPECT_NEAR(point[0], -79.900000, 0.00001);
+        EXPECT_NEAR(point[1], 0.100000, 0.00001);
+    }
+}
+
+TEST(IMUUtils, UTM_to_WGS84_to_UTM_and_vice_versa_tests) {
+    {
+        auto utm = IMUUtils::WGS84_to_UTM(0.000001, 0.000001);
+        auto wgs84 = IMUUtils::UTM_to_WGS84(utm[0], utm[1], utm[2], utm[3]);
+        EXPECT_NEAR(wgs84[0], 0.000001, 0.00001);
+        EXPECT_NEAR(wgs84[1], 0.000001, 0.00001);
+    }
+
+    {
+        auto utm = IMUUtils::WGS84_to_UTM(83.999000, 5.999000);
+        auto wgs84 = IMUUtils::UTM_to_WGS84(utm[0], utm[1], utm[2], utm[3]);
+        EXPECT_NEAR(wgs84[0], 83.999000, 0.00001);
+        EXPECT_NEAR(wgs84[1], 5.999000, 0.00001);
+    }
+
+    {
+        auto utm = IMUUtils::WGS84_to_UTM(-79.999000, -177.000100);
+        auto wgs84 = IMUUtils::UTM_to_WGS84(utm[0], utm[1], utm[2], utm[3]);
+        EXPECT_NEAR(wgs84[0], -79.999000, 0.00001);
+        EXPECT_NEAR(wgs84[1], -177.000100, 0.00001);
+    }
+
+    {
+        auto utm = IMUUtils::WGS84_to_UTM(0.000001, 179.999000);
+        auto wgs84 = IMUUtils::UTM_to_WGS84(utm[0], utm[1], utm[2], utm[3]);
+        EXPECT_NEAR(wgs84[0], 0.000001, 0.00001);
+        EXPECT_NEAR(wgs84[1], 179.999000, 0.00001);
+    }
+
+    {
+        auto utm = IMUUtils::WGS84_to_UTM(-0.000001, -179.999000);
+        auto wgs84 = IMUUtils::UTM_to_WGS84(utm[0], utm[1], utm[2], utm[3]);
+        EXPECT_NEAR(wgs84[0], -0.000001, 0.00001);
+        EXPECT_NEAR(wgs84[1], -179.999000, 0.00001);
+    }
+
+    {
+        auto wgs84 = IMUUtils::UTM_to_WGS84(166021.44317933184, 0.0, 31., 0.0);
+        auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], wgs84[1]);
+        EXPECT_NEAR(utm[0], 166021.44317933184, 0.01);
+        EXPECT_NEAR(utm[1], 0.0, 0.01);
+        EXPECT_NEAR(utm[2], 31., 0.0);
+        EXPECT_NEAR(utm[3], 0.0, 0.0);
+    }
+
+    {
+        auto wgs84 = IMUUtils::UTM_to_WGS84(833978.5568206682, 0.0, 30., 0.0);
+        auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], wgs84[1]);
+        EXPECT_NEAR(utm[0], 833978.5568206682, 0.01);
+        EXPECT_NEAR(utm[1], 0.0, 0.01);
+        EXPECT_NEAR(utm[2], 30., 0.0);
+        EXPECT_NEAR(utm[3], 0.0, 0.0);
+    }
+
+    {
+        auto wgs84 = IMUUtils::UTM_to_WGS84(500000.0, 9328093.83056051, 31., 0.0);
+        auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], wgs84[1]);
+        EXPECT_NEAR(utm[0], 500000.0, 0.01);
+        EXPECT_NEAR(utm[1], 9328093.83056051, 0.01);
+        EXPECT_NEAR(utm[2], 31., 0.0);
+        EXPECT_NEAR(utm[3], 0.0, 0.0);
+    }
+
+    {
+        auto wgs84 = IMUUtils::UTM_to_WGS84(500000.0, 1116915.0440516975, 31., 10000000.0);
+        auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], wgs84[1]);
+        EXPECT_NEAR(utm[0], 500000.0, 0.01);
+        EXPECT_NEAR(utm[1], 1116915.0440516975, 0.01);
+        EXPECT_NEAR(utm[2], 31., 0.0);
+        EXPECT_NEAR(utm[3], 10000000.0, 0.0);
+    }
+
+    {
+        auto wgs84 = IMUUtils::UTM_to_WGS84(500000.0, 9999999.0, 60., 10000000.0);
+        auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], wgs84[1]);
+        EXPECT_NEAR(utm[0], 500000.0, 0.01);
+        EXPECT_NEAR(utm[1], 9999999.0, 0.01);
+        EXPECT_NEAR(utm[2], 60., 0.0);
+        EXPECT_NEAR(utm[3], 10000000.0, 0.0);
+    }
+}
+
+TEST(IMUUtils, UTM_to_WGS84OutsideNormalBoundsTests) {
+    {
+        auto point = UTM_to_WGS84(1079218.653553612, 3333984.371390104, 14., 0.0);
+
+        EXPECT_NEAR(point[0], 30.000000, 0.00001);
+        EXPECT_NEAR(point[1], -93.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(1051706.264848742, 5006840.966858340, 14., 0.0);
+
+        EXPECT_NEAR(point[0], 45.000000, 0.00001);
+        EXPECT_NEAR(point[1], -92.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(-79218.653553612, 3333984.371390104, 14., 0.0);
+
+        EXPECT_NEAR(point[0], 30.000000, 0.00001);
+        EXPECT_NEAR(point[1], -105.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(-51706.264848742, 5006840.966858340, 14., 0.0);
+
+        EXPECT_NEAR(point[0], 45.000000, 0.00001);
+        EXPECT_NEAR(point[1], -106.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(500000.000000000, 9551375.062623605, 31., 0.0);
+
+        EXPECT_NEAR(point[0], 86.000000, 0.00001);
+        EXPECT_NEAR(point[1], 3.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(500000.000000000, 9663020.129747849, 32., 0.0);
+
+        EXPECT_NEAR(point[0], 87.000000, 0.00001);
+        EXPECT_NEAR(point[1], 9.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(500000.000000000, 895171.028425648, 31., 10000000.0);
+
+        EXPECT_NEAR(point[0], -82.000000, 0.00001);
+        EXPECT_NEAR(point[1], 3.000000, 0.00001);
+    }
+
+    {
+        auto point = UTM_to_WGS84(500000.000000000, 783540.980941838, 32., 10000000.0);
+
+        EXPECT_NEAR(point[0], -83.000000, 0.00001);
+        EXPECT_NEAR(point[1], 9.000000, 0.00001);
+    }
 }

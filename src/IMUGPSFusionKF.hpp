@@ -5,9 +5,6 @@
 #include <Eigen/Dense> 
 #include <deque>
 
-using Vector6d = Eigen::Matrix<double, 6, 1>;
-using Matrix6d = Eigen::Matrix<double, 6, 6>;
-
 class IMUGPSFusionKF_2D_ConstantAcceleration {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -16,11 +13,11 @@ public:
     IMUGPSFusionKF_2D_ConstantAcceleration() = default;
 
     IMUGPSFusionKF_2D_ConstantAcceleration(
-        Vector6d x0, // initial state vector
-        Matrix6d P0, // initial error covariance matrix
+        Eigen::Matrix<double, 6, 1> x0, // initial state vector
+        Eigen::Matrix<double, 6, 6> P0, // initial error covariance matrix
         Eigen::Matrix<double, 2, 2> R0_GPS, // initial GPS measurement noise covariance
         Eigen::Matrix<double, 2, 2> R0_IMU, // initial IUM measurement noise covariance
-        Matrix6d Q0, // initial process noise covariance
+        Eigen::Matrix<double, 6, 6> Q0, // initial process noise covariance
         double chiSquaredBetaLowerBound_GPS, // lower bound chi squared probability for "valid" GPS innovations
         double chiSquaredBetaLowerBound_IMU, // lower bound chi squared probability for "valid" IMU innovations
         double chiSquaredBetaUpperBound_GPS, // upper bound chi squared probability for "valid" GPS innovations
@@ -50,7 +47,7 @@ public:
      * 
      * @return {x(k|k), P(k|k)} - pseudo-fused postiori x and P
      */
-    std::pair<Vector6d, Matrix6d> Step(double dt, Eigen::Matrix<double, 2, 1>& z_IMU);
+    std::pair<Eigen::Matrix<double, 6, 1>, Eigen::Matrix<double, 6, 6>> Step(double dt, Eigen::Matrix<double, 2, 1>& z_IMU);
 
     /**
      * @brief Single shot multiple sensor context aware Kalman Filter approximation.
@@ -66,7 +63,7 @@ public:
      * 
      * @exception
      */
-    std::pair<Vector6d, Matrix6d> Step(double dt, Eigen::Matrix<double, 2, 1>& z_GPS, Eigen::Matrix<double, 2, 1>& z_IMU);
+    std::pair<Eigen::Matrix<double, 6, 1>, Eigen::Matrix<double, 6, 6>> Step(double dt, Eigen::Matrix<double, 2, 1>& z_GPS, Eigen::Matrix<double, 2, 1>& z_IMU);
 
     /**
      * @brief Constructs the state transition matrix. It is a constant acceleration
@@ -80,7 +77,7 @@ public:
      * 
      * @exception
      */
-    Matrix6d BuildFk(double dt);
+    Eigen::Matrix<double, 6, 6> BuildFk(double dt);
 
     /**
      * @brief Calculates the weighting of the GPS and IMU filter for fusion. Beta GPS is 
@@ -95,7 +92,7 @@ public:
      * 
      * @exception
      */
-    Eigen::Vector4d CalculateBetas(Matrix6d priori_P, Eigen::Matrix<double, 2, 1> innovation_IMU);
+    Eigen::Vector4d CalculateBetas(Eigen::Matrix<double, 6, 6> priori_P, Eigen::Matrix<double, 2, 1> innovation_IMU);
 
     /**
      * @brief Calculates the weighting of the GPS and IMU filter for fusion. Beta GPS is 
@@ -111,7 +108,7 @@ public:
      * 
      * @exception
      */
-    Eigen::Vector4d CalculateBetas(Matrix6d priori_P, Eigen::Matrix<double, 2, 1> innovation_GPS, Eigen::Matrix<double, 2, 1> innovation_IMU);
+    Eigen::Vector4d CalculateBetas(Eigen::Matrix<double, 6, 6> priori_P, Eigen::Matrix<double, 2, 1> innovation_GPS, Eigen::Matrix<double, 2, 1> innovation_IMU);
 
     /**
      * @brief Calculate GPS Kalman Gains.
@@ -126,7 +123,7 @@ public:
      * 
      * @exception
      */
-    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> Calculate_GPS_KalmanGains(Matrix6d priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_GPS, Matrix6d postiori_P_GPS_IMU);
+    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> Calculate_GPS_KalmanGains(Eigen::Matrix<double, 6, 6> priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_GPS, Eigen::Matrix<double, 6, 6> postiori_P_GPS_IMU);
 
     /**
      * @brief Calculate IMU Kalman Gains.
@@ -141,7 +138,7 @@ public:
      * 
      * @exception
      */
-    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> Calculate_IMU_KalmanGains(Matrix6d priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_IMU, Matrix6d postiori_P_GPS_IMU);
+    std::pair<Eigen::Matrix<double, 6, 2>, Eigen::Matrix<double, 6, 2>> Calculate_IMU_KalmanGains(Eigen::Matrix<double, 6, 6> priori_P_inv, Eigen::Matrix<double, 2, 1> innovation_IMU, Eigen::Matrix<double, 6, 6> postiori_P_GPS_IMU);
 
     /**
      * @brief Update Q(k) through analytical methods.
@@ -156,6 +153,20 @@ public:
      * @exception
      */
     void Update_Q(double dt, bool has_GPS);
+
+    /**
+     * @brief Reset position when crossing UTM zone boundaries.
+     * 
+     * @param [in] E - the Easting UTM position.
+     * @param [in] N - the Northing UTM position.
+     * 
+     * @return
+     * 
+     * @remarks
+     * 
+     * @exception
+     */
+    void UpdatePosition(double E, double N);
 
 private:
 
@@ -185,7 +196,7 @@ private:
      * 
      * @exception
      */
-    void PushInnovationGPS(Eigen::Matrix<double, 2, 1> &innovation_GPS, Matrix6d &postiori_P_GPS);
+    void PushInnovationGPS(Eigen::Matrix<double, 2, 1> &innovation_GPS, Eigen::Matrix<double, 6, 6> &postiori_P_GPS);
 
     /**
      * @brief Update IMU adaptive filter queue.
@@ -199,7 +210,7 @@ private:
      * 
      * @exception
      */
-    void PushInnovationIMU(Eigen::Matrix<double, 2, 1> &innovation_IMU, Matrix6d &postiori_P_IMU);
+    void PushInnovationIMU(Eigen::Matrix<double, 2, 1> &innovation_IMU, Eigen::Matrix<double, 6, 6> &postiori_P_IMU);
 
     /**
      * @brief Update Q adaptive filter queue.
@@ -213,20 +224,18 @@ private:
      * 
      * @exception
      */
-    void PushInnovationQ(Vector6d &posteriorResidual, Matrix6d &postiori_P);
-
-    double CalculateMahalanobisDistance(Vector6d x, Vector6d mu, Matrix6d sigma);
+    void PushInnovationQ(Eigen::Matrix<double, 6, 1> &posteriorResidual, Eigen::Matrix<double, 6, 6> &postiori_P);
 
 private:
     // Fusion filter members
-    Vector6d m_x; 
-    Matrix6d m_P; 
+    Eigen::Matrix<double, 6, 1> m_x; 
+    Eigen::Matrix<double, 6, 6> m_P; 
     Eigen::Matrix<double, 2, 2> m_R_GPS;
     Eigen::Matrix<double, 2, 2> m_R_IMU;
-    Matrix6d m_Q;
+    Eigen::Matrix<double, 6, 6> m_Q;
     Eigen::Matrix<double, 2, 6> m_H_GPS;
     Eigen::Matrix<double, 2, 6> m_H_IMU;
-    Matrix6d m_P_propagated_lag;
+    Eigen::Matrix<double, 6, 6> m_P_propagated_lag;
     double m_chiSquaredBetaLowerBound_IMU;
     double m_chiSquaredBetaLowerBound_GPS;
     double m_chiSquaredBetaUpperBound_IMU;
@@ -237,7 +246,7 @@ private:
 
     // Adaptive filter members
     using AlignedVector2dDeque = std::deque<Eigen::Matrix<double, 2, 1>, Eigen::aligned_allocator<Eigen::Matrix<double, 2, 1>>>;
-    using AlignedVector6dDeque = std::deque<Vector6d, Eigen::aligned_allocator<Vector6d>>;
+    using AlignedVector6Deque = std::deque<Eigen::Matrix<double, 6, 1>, Eigen::aligned_allocator<Eigen::Matrix<double, 6, 1>>>;
 
     unsigned m_N_GPS;
     unsigned m_L_GPS;
@@ -251,7 +260,9 @@ private:
 
     AlignedVector2dDeque m_innovationQueue_GPS;
     AlignedVector2dDeque m_innovationQueue_IMU;
-    AlignedVector6dDeque m_posteriorResidualQueue;
+    AlignedVector6Deque m_posteriorResidualQueue;
+
+    
 };
 
 #endif
