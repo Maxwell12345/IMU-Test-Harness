@@ -9,7 +9,7 @@
 
 #include "GpsManager.hpp"
 
-#define NMEA_COM_PORT "/dev/ttyTEST"
+#define NMEA_COM_PORT "/dev/ttyUSB0"
 
 GpsManager::GpsManager()
     : m_nmeaReader(NMEA_COM_PORT, 115200) {}

@@ -63,8 +63,8 @@ static std::vector<unsigned char> BuildPacket(unsigned char type, const T& paylo
 
     unsigned int crc = 0xFFFF;
 
-    for (unsigned long i = 0; i < sizeof(T); ++i) {
-        crc ^= static_cast<unsigned int>((packet.data() + 3)[i]) << 8;
+    for (unsigned long i = 0; i < 3 + sizeof(T); ++i) {
+        crc ^= static_cast<unsigned int>(packet[i]) << 8;
 
         for (int j = 0; j < 8; ++j) {
             if (crc & 0x8000) {
@@ -129,12 +129,14 @@ TEST(IMUSerialPortTest, ValidateIsStartEncoder) {
 TEST(IMUSerialPortTest, ValidateGetMessageType) {
     IMUSerialPortReader reader(config, std::make_unique<MockSerialPort>());
 
-    unsigned char accel = 0x00;
-    unsigned char rot = 0x01;
-    unsigned char bad = 0x02;
+    unsigned char accel = 0x01;
+    unsigned char rot = 0x02;
+    unsigned char status = 0x03;
+    unsigned char bad = 0xFF;
 
     EXPECT_EQ(reader.GetMessageType(accel), _IMU_MESSAGE_TYPES_::ACCELERATION);
     EXPECT_EQ(reader.GetMessageType(rot), _IMU_MESSAGE_TYPES_::ROTATION_VECTOR);
+    EXPECT_EQ(reader.GetMessageType(status), _IMU_MESSAGE_TYPES_::STATUS_MSG);
     EXPECT_THROW(reader.GetMessageType(bad), std::runtime_error);
 }
 
@@ -183,9 +185,9 @@ TEST(IMUSerialPortTest, CallbackIgnoresNonStartByte) {
 }
 
 TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
-    Raw_Accelerometer expected{};
+    Raw_Accelerometer expected = {0.f,0.f,0.f,(uint64_t)0};
     std::memset(&expected, 0x11, sizeof(expected));
-    auto packet = BuildPacket(0x00, expected);
+    auto packet = BuildPacket(0x01, expected);
     
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
@@ -217,7 +219,7 @@ TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
 TEST(IMUSerialPortTest, CallbackReadsRotationPacket) {
     Raw_RotationVectorWAcc expected{};
     std::memset(&expected, 0x22, sizeof(expected));
-    auto packet = BuildPacket(0x01, expected);
+    auto packet = BuildPacket(0x02, expected);
     
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
@@ -270,15 +272,24 @@ TEST(IMUSerialPortTest, CallbackRejectsBadChecksum) {
     EXPECT_FALSE(called);
 }
 
-TEST(IMUSerialPortTest, CallbackThrowsOnBadMessageType) {
-    
-    std::vector<unsigned char> packet = {0xA5, 0x02};
+TEST(IMUSerialPortTest, CallbackNotCalledOnBadMessageType) {
+    std::vector<unsigned char> packet = {0xA5, 0xFF, 0x10};
 
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
     IMUSerialPortReader reader(config, std::move(port));
 
-    port = std::make_unique<MockSerialPort>();
-    port->m_data = packet;
-    EXPECT_THROW(reader.Callback(*port), std::runtime_error);
+    bool called = false;
+
+    reader.InstallCallback(
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+            called = true;
+        }
+    );
+
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
+
+    EXPECT_FALSE(called);
 }
