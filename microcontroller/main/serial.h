@@ -34,10 +34,12 @@
 #define ACCELERATION_MSG_BYTES (1+1+1+ACCELERATION_PAYLOAD_BYTES+2)
 #define ROTATION_PAYLOAD_BYTES (5*sizeof(float)+sizeof(uint64_t))
 #define ROTATION_MSG_BYTES (1+1+1+ROTATION_PAYLOAD_BYTES+2)
+#define STATUS_PAYLOAD_BYTES (1+8)
+#define STATUS_MSG_BYTES (1+1+1+STATUS_PAYLOAD_BYTES+2)
 
 #define ACCELERATION_T_ID 1
 #define ROTATION_T_ID 2
-#define ERROR_MSG_ID 3
+#define STATUS_MSG_ID 3
 
 #define MAGIC_BYTE_IDX 0
 #define MSG_TYPE_IDX 1
@@ -53,9 +55,7 @@ typedef struct acceleration_t {
     float z;
     uint64_t timestamp;
 } acceleration_t;
-#pragma pack(pop)
 
-#pragma pack(push, 1)
 typedef struct rotation_t {
     float i;
     float j;
@@ -64,6 +64,20 @@ typedef struct rotation_t {
     float accuracy;
     uint64_t timestamp;
 } rotation_t;
+
+enum imu_status {
+    INITIALIZING=0,
+    HEALTHY,
+    IMU_UNAVAILABLE,
+    NO_DATA_RECEIVED_AFTER_BOOT,
+    IMU_RESET_FAILURE,
+    NO_DETECTED_IMU,
+};
+
+typedef struct processor_status_t {
+    enum imu_status status;
+    uint64_t timestamp;
+} processor_status_t;
 #pragma pack(pop)
 
 esp_err_t host_serial_init(void);
@@ -77,5 +91,7 @@ esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation);
 esp_err_t send_acceleration_t(const acceleration_t *acceleration);
 
 esp_err_t send_rotation_t(const rotation_t *rotation);
+
+esp_err_t send_status_t(const processor_status_t *processor_status);
 
 #endif //IMU_TEST_HARNESS_SERIAL_H

@@ -14,6 +14,7 @@
 #include "esp_task_wdt.h"
 #include "sdkconfig.h"
 #include "esp_err.h"
+#include "serial.h"
 
 #include "driver/gpio.h"
 
@@ -34,6 +35,9 @@
 #define SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG 0
 #define SH2SERVICE_SLOW_CALLBACK_US 20000
 
+#define RED_TEXT "\033[31m"
+#define WHITE_TEXT "\033[37m"
+
 #if SH2SERVICE_ENABLE_CALLBACK_TIMING_LOG
 static const char *TAG = "sh2service";
 #endif
@@ -48,6 +52,7 @@ static sh2service_config_t s_config = {
     GPIO_NUM_22,
     GPIO_NUM_21,
     GPIO_NUM_27,
+    GPIO_NUM_26,
     400000,
     5000,
     8000,
@@ -80,7 +85,11 @@ static volatile int s_callback_task_stop_requested;
 static volatile int s_callback_task_running;
 static volatile uint32_t s_dropped_events;
 
+static volatile enum imu_status s_last_imu_status = NO_DETECTED_IMU;
+
 static esp_err_t open_sh2(void);
+static esp_err_t hard_recover_and_open_sh2(void);
+static esp_err_t soft_reset_sh2(void);
 static void sh2service_task(void *arg);
 static void sh2service_recovery_task(void *arg);
 static void sh2service_callback_task(void *arg);
@@ -102,6 +111,21 @@ static void reset_valid_measurement_state(void)
     s_num_valid_acc_measurements = 0;
     s_num_valid_rot_measurements = 0;
     s_save_dcd_requested = 0;
+}
+
+static void update_imu_status(enum imu_status status)
+{
+    enum imu_status previous = s_last_imu_status;
+
+    s_last_imu_status = status;
+
+    // if (previous == status) {
+    //     return;
+    // }
+
+    int64_t now = esp_timer_get_time();
+    const processor_status_t stat = {status, now};
+    send_status_t(&stat);
 }
 
 static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
@@ -222,6 +246,7 @@ static void cleanup_i2c(void)
 
 static esp_err_t hard_reset_bno085(void)
 {
+    printf("\n%sFiring IMU reset%s\n", "\033[33m", WHITE_TEXT);
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << BNO085_RESET_PIN,
         .mode = GPIO_MODE_OUTPUT,
@@ -232,14 +257,19 @@ static esp_err_t hard_reset_bno085(void)
 
     esp_err_t err = gpio_config(&cfg);
     if (err != ESP_OK) {
+        printf("\n%sIMU reset error%s\n", RED_TEXT, WHITE_TEXT);
+        update_imu_status(IMU_RESET_FAILURE);
         return err;
     }
+
+    update_imu_status(IMU_UNAVAILABLE);
 
     gpio_set_level(BNO085_RESET_PIN, 0);
     vTaskDelay(pdMS_TO_TICKS(50));
 
     gpio_set_level(BNO085_RESET_PIN, 1);
     vTaskDelay(pdMS_TO_TICKS(1000));
+    printf("\n%sIMU reset complete%s\n", "\033[32m", WHITE_TEXT);
 
     return ESP_OK;
 }
@@ -327,6 +357,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     uint8_t acc = value.status & 0x03;
 
     update_valid_counts(&value, acc);
+    update_imu_status(HEALTHY);
 
     if (acc == 0 || acc == 1) {
         return;
@@ -472,6 +503,7 @@ static void event_callback(void *cookie, sh2_AsyncEvent_t *event)
         reset_event_timestamps();
         s_reset_seen = 1;
         s_sensors_enabled = 0;
+        update_imu_status(IMU_UNAVAILABLE);
     }
 }
 
@@ -522,22 +554,52 @@ static int configure_sensors(void)
     return 0;
 }
 
+static esp_err_t soft_reset_sh2(void)
+{
+    reset_event_timestamps();
+    s_reset_seen = 0;
+    s_sensors_enabled = 0;
+    update_imu_status(IMU_UNAVAILABLE);
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int rc = sh2_devReset();
+    if (rc != 0) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_FAIL;
+    }
+
+    if (!wait_for_reset(s_config.reset_wait_ms)) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_ERR_TIMEOUT;
+    }
+
+    service_for_ms(s_config.startup_delay_ms);
+
+    rc = configure_sensors();
+    if (rc != 0) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_FAIL;
+    }
+
+    reset_event_timestamps();
+    return ESP_OK;
+}
+
 static int sh2service_open_and_configure(void)
 {
     sh2_close();
     cleanup_i2c();
-    hard_reset_bno085();
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
     printf("sh2service_open_and_configure!\n");
 
-    esp_err_t err = open_sh2();
+    esp_err_t err = hard_recover_and_open_sh2();
 
     if (err != ESP_OK) {
         sh2_close();
         cleanup_i2c();
-        hard_reset_bno085();
         s_sh2_ready = 0;
         return err;
     }
@@ -634,7 +696,6 @@ static void sh2service_recovery_task(void *arg)
 
     sh2_close();
     cleanup_i2c();
-    hard_reset_bno085();
 
     wdt_delete_current(wdt_added);
     vTaskDelete(NULL);
@@ -691,16 +752,9 @@ static esp_err_t open_sh2(void)
 
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    esp_err_t err = hard_reset_bno085();
+    esp_err_t err = init_int_pin();
     if (err != ESP_OK) {
-        return err;
-    }
-
-    recover_i2c_bus();
-
-    err = init_int_pin();
-    if (err != ESP_OK) {
-        hard_reset_bno085();
+        update_imu_status(NO_DETECTED_IMU);
         return err;
     }
 
@@ -708,6 +762,7 @@ static esp_err_t open_sh2(void)
 
     err = init_i2c();
     if (err != ESP_OK) {
+        update_imu_status(NO_DETECTED_IMU);
         return err;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -720,39 +775,41 @@ static esp_err_t open_sh2(void)
 
     int rc = sh2_open(&s_hal, event_callback, NULL);
     if (rc != 0) {
+        update_imu_status(NO_DETECTED_IMU);
         return ESP_FAIL;
     }
 
     rc = sh2_setSensorCallback(sensor_callback, NULL);
     if (rc != 0) {
         sh2_close();
+        update_imu_status(NO_DETECTED_IMU);
         return ESP_FAIL;
     }
 
-    s_reset_seen = 0;
-    s_sensors_enabled = 0;
-
-    vTaskDelay(pdMS_TO_TICKS(10));
-    rc = sh2_devReset();
-    if (rc != 0) {
+    err = soft_reset_sh2();
+    if (err != ESP_OK) {
         sh2_close();
-        return ESP_FAIL;
-    }
-
-    if (!wait_for_reset(s_config.reset_wait_ms)) {
-        sh2_close();
-        return ESP_ERR_TIMEOUT;
-    }
-
-    service_for_ms(s_config.startup_delay_ms);
-
-    rc = configure_sensors();
-    if (rc != 0) {
-        sh2_close();
-        return ESP_FAIL;
+        cleanup_i2c();
+        return err;
     }
 
     return ESP_OK;
+}
+
+static esp_err_t hard_recover_and_open_sh2(void)
+{
+    esp_err_t err = hard_reset_bno085();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    recover_i2c_bus();
+    err = open_sh2();
+    if (err != ESP_OK && s_last_imu_status == IMU_UNAVAILABLE) {
+        update_imu_status(NO_DETECTED_IMU);
+    }
+
+    return err;
 }
 
 static void sh2service_task(void *arg)
@@ -789,6 +846,7 @@ static void sh2service_task(void *arg)
 
             int rc = configure_sensors();
             if (rc != 0) {
+                update_imu_status(IMU_RESET_FAILURE);
                 s_running = 0;
                 s_task_handle = NULL;
                 sh2service_request_recovery();
@@ -803,20 +861,28 @@ static void sh2service_task(void *arg)
 
         if (s_sh2_ready && s_sensors_enabled && now - s_last_packet_us > SH2SERVICE_TIMEOUT_US) {
             printf("SH2 packet timeout\n");
-            s_running = 0;
-            s_task_handle = NULL;
-            sh2service_request_recovery();
-            wdt_delete_current(wdt_added);
-            vTaskDelete(NULL);
+            if (soft_reset_sh2() != ESP_OK) {
+                s_running = 0;
+                s_task_handle = NULL;
+                sh2service_request_recovery();
+                wdt_delete_current(wdt_added);
+                vTaskDelete(NULL);
+            }
+
+            continue;
         }
 
         if (s_sh2_ready && s_sensors_enabled && now - s_last_valid_event_us > SH2SERVICE_TIMEOUT_US) {
             printf("SH2 valid rotation vector timeout\n");
-            s_running = 0;
-            s_task_handle = NULL;
-            sh2service_request_recovery();
-            wdt_delete_current(wdt_added);
-            vTaskDelete(NULL);
+            if (soft_reset_sh2() != ESP_OK) {
+                s_running = 0;
+                s_task_handle = NULL;
+                sh2service_request_recovery();
+                wdt_delete_current(wdt_added);
+                vTaskDelete(NULL);
+            }
+
+            continue;
         }
 
         loop_count++;
@@ -832,7 +898,6 @@ static void sh2service_task(void *arg)
 
     sh2_close();
     cleanup_i2c();
-    hard_reset_bno085();
 
     s_callback = NULL;
     s_callback_ctx = NULL;
@@ -880,10 +945,9 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         return err;
     }
 
-    err = open_sh2();
+    err = sh2service_open_and_configure();
     if (err != ESP_OK) {
         cleanup_i2c();
-        hard_reset_bno085();
         sh2service_stop_callback_task();
         s_callback = NULL;
         s_callback_ctx = NULL;
@@ -900,7 +964,6 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         s_sh2_ready = 0;
         sh2_close();
         cleanup_i2c();
-        hard_reset_bno085();
         sh2service_stop_callback_task();
         s_callback = NULL;
         s_callback_ctx = NULL;

@@ -1,1 +1,6 @@
 imu_log.csv
+sdkconfig
+sdkconfig.defaults
+sdkconfig.old
+eim_config.toml
+__pycache__/

@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "sh2service.h"
 
@@ -13,6 +14,7 @@
 #include "shtp.h"
 #include "esp_log_level.h"
 #include <serial.h>
+#include <time.h>
 
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
@@ -61,6 +63,11 @@ void app_main(void)
 
     printf("\n\n\n");
     printf("BOOT,APP_MAIN\n");
+
+
+    int64_t now = esp_timer_get_time();
+    const processor_status_t stat = {INITIALIZING, now};
+    send_status_t(&stat);
 
     esp_err_t err = sh2service_start(imu_callback, NULL);
     if (err != ESP_OK) {

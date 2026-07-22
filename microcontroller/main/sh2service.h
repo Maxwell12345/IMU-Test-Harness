@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 
@@ -48,6 +49,7 @@ typedef struct {
     gpio_num_t scl_pin;
     gpio_num_t sda_pin;
     gpio_num_t int_pin;
+    gpio_num_t reset_pin;
 
     uint32_t i2c_speed_hz;
     uint32_t report_interval_us;
