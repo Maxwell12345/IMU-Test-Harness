@@ -18,8 +18,9 @@ RadarPositionNavigationController::RadarPositionNavigationController(const _Kalm
                                                                      m_imuManager(std::move(imuManager)),
                                                                      m_imuSerialPortReader(std::move(imuSerialPortReader)) {
     auto imuSerialCallback = [&imuManager = this->m_imuManager](std::optional<Raw_RotationVectorWAcc> optRv,
-                                                              std::optional<Raw_Accelerometer> optLa){
-        imuManager->SensorCallback(optRv, optLa);
+                                                                std::optional<Raw_Accelerometer> optLa,
+                                                                std::optional<Raw_RotationRate> optRr){
+        imuManager->SensorCallback(optRv, optLa, optRr);
     };
     this->m_imuSerialPortReader->InstallCallback(imuSerialCallback);
 }

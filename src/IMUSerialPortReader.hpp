@@ -18,7 +18,8 @@
 
 enum _IMU_MESSAGE_TYPES_ {
     ACCELERATION = 0,
-    ROTATION_VECTOR = 1
+    ROTATION_VECTOR = 1,
+    ROTATION_RATE = 2
 };
 
 class IMUSerialPortReader {
@@ -44,7 +45,7 @@ public:
      * 
      * @remark Beware of timing. There will be a delay between when the measurement was produced and real machine time. Use the timestamp in the payloads.
      */
-    void InstallCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)>);
+    void InstallCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>)>);
 
     /**
      * @brief Starts the serial port listener thread, decodes IMU serial data, and passes entries to callback.
@@ -115,6 +116,9 @@ private:
                 
             case 0x02:
                 return _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
+
+            case 0x03:
+                return _IMU_MESSAGE_TYPES_::ROTATION_RATE;
             
             default:
                 throw std::runtime_error("Unsupported type");
@@ -162,7 +166,7 @@ private:
 
     cm_t m_cm;
     std::unique_ptr<SerialComService> m_serialComService;
-    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
+    std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>)> m_callback;
 
     FRIEND_TEST(IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
     FRIEND_TEST(IMUSerialPortTest, ValidateIsStartEncoder);

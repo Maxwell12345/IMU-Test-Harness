@@ -20,7 +20,7 @@ IMUSerialPortReader::IMUSerialPortReader(const _ImuSerialPort& config, std::uniq
     m_serialComService->InstallCallback(f);
 }
 
-void IMUSerialPortReader::InstallCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> callback) {
+void IMUSerialPortReader::InstallCallback(std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>)> callback) {
     this->m_callback = callback;
 }
 
@@ -74,7 +74,7 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                 std::memcpy(&accel, message + 3, sizeof(accel));
 
                 if (this->m_callback) {
-                    this->m_callback(std::nullopt, accel);
+                    this->m_callback(std::nullopt, accel, std::nullopt);
                 }
 
                 return;
@@ -89,7 +89,22 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                 std::memcpy(&rot, message + 3, sizeof(rot));
 
                 if (this->m_callback) {
-                    this->m_callback(rot, std::nullopt);
+                    this->m_callback(rot, std::nullopt, std::nullopt);
+                }
+
+                return;
+            }
+
+            case _IMU_MESSAGE_TYPES_::ROTATION_RATE: {
+                if (len != sizeof(Raw_RotationRate)) {
+                    return;
+                }
+
+                Raw_RotationRate dRotation = {};
+                std::memcpy(&dRotation, message + 3, sizeof(dRotation));
+
+                if (this->m_callback) {
+                    this->m_callback(std::nullopt, std::nullopt, dRotation);
                 }
 
                 return;

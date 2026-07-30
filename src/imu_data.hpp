@@ -31,6 +31,18 @@ typedef struct Raw_Accelerometer {
 #pragma pack(pop)
 
 /**
+ * @brief Raw serial port rotation rate c-struct.
+ */
+#pragma pack(push, 1)
+typedef struct Raw_RotationRate {
+    float d_roll;
+    float d_pitch;
+    float d_raw;
+    uint64_t timestamp;
+} rotation_rate_t;
+#pragma pack(pop)
+
+/**
  * @brief Raw 3-axis accelerometer measurement from the BNO085.
  */
 struct AccelerometerData {

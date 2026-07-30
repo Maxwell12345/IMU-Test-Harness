@@ -59,12 +59,12 @@ void IMUManager::UpdateLatestGps(const GpsUpdate &update) {
     m_gpsSentToEkf = false;
 }
 
-void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa) {
+void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std::optional<Raw_Accelerometer> optLa, std::optional<Raw_RotationRate> optRr) {
     // if (ValidateImuEvent(optRv, optLa) == false) {
     //     return;
     // }
 
-    StoreImuValue(optRv, optLa);
+    StoreImuValue(optRv, optLa, optRr);
 
     if (ReadyForEkf()) {
         DispatchToEkf();
@@ -72,12 +72,16 @@ void IMUManager::SensorCallback(std::optional<Raw_RotationVectorWAcc> optRv, std
 }
 
 bool IMUManager::ReadyForEkf() const {
-    return m_ekfInstalled && m_imuRotationVectorReady && m_imuLinearAccelerationReady;
+    return m_ekfInstalled &&
+           m_imuRotationVectorReady &&
+           m_imuLinearAccelerationReady &&
+           m_imuRotationRateReady;
 }
 
 void IMUManager::DispatchToEkf() {
     Raw_RotationVectorWAcc rotationVectorSnapshot = m_imuRotationVector;
     Raw_Accelerometer linearAccelerationSnapshot = m_imuLinearAcceleration;
+    Raw_RotationRate rotationRateSnapshot = m_imuRotationRate;
 
     bool gpsSentToEkfSnapshot;
     std::optional<GpsUpdate> gpsUpdateSnapshot;
@@ -93,10 +97,11 @@ void IMUManager::DispatchToEkf() {
 
     int year = GetCurrentYear();
     Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
-                                                linearAccelerationSnapshot,
-                                                gpsUpdateSnapshot.value(),
-                                                year);
-    
+                                              linearAccelerationSnapshot,
+                                              rotationRateSnapshot,
+                                              gpsUpdateSnapshot.value(),
+                                              year);
+
     double dtSeconds = PrepareEkfTiming();
     
     if (gpsSentToEkfSnapshot == false) {
@@ -143,7 +148,8 @@ void IMUManager::ResetImuReadyFlags() {
 }
 
 bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &optRv,
-                                  const std::optional<Raw_Accelerometer> &optLa) {
+                                  const std::optional<Raw_Accelerometer> &optLa,
+                                  const std::optional<Raw_RotationRate> &optRr) {
     if (optLa.has_value()) {
         return !(IsInvalidRange(optLa.value().x) ||
                 IsInvalidRange(optLa.value().y) ||
@@ -164,7 +170,8 @@ bool IMUManager::ValidateImuEvent(const std::optional<Raw_RotationVectorWAcc> &o
 };
 
 void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optRv,
-                               const std::optional<Raw_Accelerometer> &optLa) {
+                               const std::optional<Raw_Accelerometer> &optLa,
+                               const std::optional<Raw_RotationRate> &optRr) {
     if (optLa.has_value()) {
         m_imuLinearAccelerationReady = true;
         m_imuLinearAcceleration = optLa.value();
@@ -176,6 +183,11 @@ void IMUManager::StoreImuValue(const std::optional<Raw_RotationVectorWAcc> &optR
         m_imuRotationVector = optRv.value();
         m_databaseManager->EnqueueIMURotationVector(m_imuRotationVector);
     }
+
+    if (optRr.has_value()) {
+        m_imuRotationRateReady = true;
+        m_imuRotationRate = optRr.value();
+    }
 }
 
 Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
@@ -183,7 +195,9 @@ Vector6d IMUManager::BuildGpsMeasurementVector(const GpsUpdate &gps) {
     return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv, const Raw_Accelerometer &la,
+Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+                                               const Raw_Accelerometer &la,
+                                               const Raw_RotationRate &rr,
                                                const GpsUpdate &gps, int currentYear) {
     double latitude = gps.latitude;
     double longitude = gps.longitude;
