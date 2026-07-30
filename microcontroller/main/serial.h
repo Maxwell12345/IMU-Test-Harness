@@ -34,10 +34,13 @@
 #define ACCELERATION_MSG_BYTES (1+1+1+ACCELERATION_PAYLOAD_BYTES+2)
 #define ROTATION_PAYLOAD_BYTES (5*sizeof(float)+sizeof(uint64_t))
 #define ROTATION_MSG_BYTES (1+1+1+ROTATION_PAYLOAD_BYTES+2)
+#define ROTATION_RATE_PAYLOAD_BYTES (3*sizeof(float)+sizeof(uint64_t))
+#define ROTATION_RATE_MSG_BYTES (1+1+1+ROTATION_RATE_PAYLOAD_BYTES+2)
 
 #define ACCELERATION_T_ID 1
 #define ROTATION_T_ID 2
-#define ERROR_MSG_ID 3
+#define ROTATION_RATE_T_ID 3
+#define ERROR_MSG_ID 4
 
 #define MAGIC_BYTE_IDX 0
 #define MSG_TYPE_IDX 1
@@ -45,6 +48,7 @@
 #define PAYLOAD_START_IDX 3
 #define ACCELERATION_CRC_IDX (PAYLOAD_START_IDX+ACCELERATION_PAYLOAD_BYTES)
 #define ROTATION_CRC_IDX (PAYLOAD_START_IDX+ROTATION_PAYLOAD_BYTES)
+#define ROTATION_RATE_CRC_IDX (PAYLOAD_START_IDX+ROTATION_RATE_PAYLOAD_BYTES)
 
 #pragma pack(push, 1)
 typedef struct acceleration_t {
@@ -66,6 +70,15 @@ typedef struct rotation_t {
 } rotation_t;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct rotation_rate_t {
+    float d_roll;
+    float d_pitch;
+    float d_raw;
+    uint64_t timestamp;
+} rotation_rate_t;
+#pragma pack(pop)
+
 esp_err_t host_serial_init(void);
 
 esp_err_t host_serial_write_all(const void *data, size_t length);
@@ -77,5 +90,7 @@ esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation);
 esp_err_t send_acceleration_t(const acceleration_t *acceleration);
 
 esp_err_t send_rotation_t(const rotation_t *rotation);
+
+esp_err_t send_rotation_rate_t(const rotation_rate_t *rotationRate);
 
 #endif //IMU_TEST_HARNESS_SERIAL_H

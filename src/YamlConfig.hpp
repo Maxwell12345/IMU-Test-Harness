@@ -14,8 +14,6 @@ struct _KalmanValues {
     unsigned int imuL;
     double imuChiSqLowerBound;
     double imuChiSqUpperBound;
-    unsigned int qN;
-    unsigned int qL;
 
     void FromNode(YAML::Node node) {
         std::string requiredFields[] = {
@@ -26,9 +24,7 @@ struct _KalmanValues {
             "imu_n",
             "imu_l",
             "imu_chi_sq_lower_bound",
-            "imu_chi_sq_upper_bound",
-            "q_n",
-            "q_l"
+            "imu_chi_sq_upper_bound"
         };
 
         for(auto& f : requiredFields) {
@@ -45,37 +41,6 @@ struct _KalmanValues {
         imuL = node["imu_l"].as<unsigned int>();
         imuChiSqLowerBound = node["imu_chi_sq_lower_bound"].as<double>();
         imuChiSqUpperBound = node["imu_chi_sq_upper_bound"].as<double>();
-        qN = node["q_n"].as<unsigned int>();
-        qL = node["q_l"].as<unsigned int>();
-    }
-
-    std::string ToString() const {
-        char buff[512];
-        const char* format =
-            "\tgpsN: %u\n"
-            "\tgpsL: %u\n"
-            "\tgpsChiSqLowerBound: %f\n"
-            "\tgpsChiSqUpperBound: %f\n"
-            "\timuN: %u\n"
-            "\timuL: %u\n"
-            "\timuChiSqLowerBound: %f\n"
-            "\timuChiSqUpperBound: %f\n"
-            "\tqN: %u\n"
-            "\tqL: %u\n";
-
-        snprintf(buff, sizeof(buff), format,
-                gpsN,
-                gpsL,
-                gpsChiSqLowerBound,
-                gpsChiSqUpperBound,
-                imuN,
-                imuL,
-                imuChiSqLowerBound,
-                imuChiSqUpperBound,
-                qN,
-                qL);
-
-        return std::string(buff);
     }
 };
 
@@ -131,11 +96,6 @@ struct YamlConfig {
 
         kalmanValues.FromNode(node["kalman_values"]);
         imuSerialPort.FromNode(node["imu_serial_port"]);
-    }
-
-    std::string ToString() const {
-        return "kalmanValues:\n" + kalmanValues.ToString() + "\n" +
-               "imuserialPort:\n"+ imuSerialPort.ToString();
     }
 };
 

@@ -22,154 +22,164 @@ using Matrix6d = Eigen::Matrix<double, 6, 6>;
 
 class RadarPositionNavigationController {
 public:
-  RadarPositionNavigationController(const _KalmanValues& config,
-                                    std::shared_ptr<DatabaseManager> databaseManager,
-                                    std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
-                                    std::unique_ptr<IMUManager> m_imuManager);
+    RadarPositionNavigationController(const _KalmanValues& config,
+                                        std::shared_ptr<DatabaseManager> databaseManager,
+                                        std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
+                                        std::unique_ptr<IMUManager> m_imuManager);
 
-  ~RadarPositionNavigationController();
+    ~RadarPositionNavigationController();
 
-  /**
-   * @brief Provides a callback for a GPS service to receive asyncronous data.
-   *
-   * @return
-   *
-   * @remarks Intended use is in an asynchronous GPS service.
-   *
-   * @exception
-   */
-  std::function<void(const GpsUpdate &)> GetGPSCallback();
+    /**
+     * @brief Provides a callback for a GPS service to receive asyncronous data.
+     *
+     * @return
+     *
+     * @remarks Intended use is in an asynchronous GPS service.
+     *
+     * @exception
+     */
+    std::function<void(const GpsUpdate &)> GetGPSCallback();
 
-  /**
-   * @brief Begins self tracking process. We assume all order
-   *        position derivatives are 0.
-   *
-   * @param [in] lat0 the initial starting latitude position of the radar.
-   * @param [in] lon0 the initial starting longitude position of the radar.
-   *
-   * @return
-   *
-   * @remarks
-   *
-   * @exception
-   */
-  void StartAndConfigureRadarPNT(double lat0, double lon0);
+    /**
+     * @brief Begins self tracking process. We assume all order
+     *        position derivatives are 0.
+     *
+     * @param [in] lat0 the initial starting latitude position of the radar.
+     * @param [in] lon0 the initial starting longitude position of the radar.
+     *
+     * @return
+     *
+     * @remarks
+     *
+     * @exception
+     */
+    void StartAndConfigureRadarPNT(double lat0, double lon0);
 
-  /**
-   * @brief Stops self tracking process.
-   *
-   * @return
-   *
-   * @remarks This logically kills the KF posteriori update mechanism. The state
-   *          of the KF will remain available for predictions.
-   *
-   * @exception std::runtime_error requires positive non zero df values and percentiles.
-   * @exception std::exception KF initialization error.
-   */
-  void StopRadarPNT();
+    /**
+     * @brief Stops self tracking process.
+     *
+     * @return
+     *
+     * @remarks This logically kills the KF posteriori update mechanism. The state
+     *          of the KF will remain available for predictions.
+     *
+     * @exception std::runtime_error requires positive non zero df values and percentiles.
+     * @exception std::exception KF initialization error.
+     */
+    void StopRadarPNT();
 
-  /**
-   * @brief Stops self tracking process.
-   *
-   * @return
-   *
-   * @remarks This logically kills all tracking and destroys KF memory entirely.
-   *
-   * @exception
-   */
-  void TotalDestruction();
+    /**
+     * @brief Stops self tracking process.
+     *
+     * @return
+     *
+     * @remarks This logically kills all tracking and destroys KF memory entirely.
+     *
+     * @exception
+     */
+    void TotalDestruction();
 
-  /**
-   * @brief Returns PNT running status
-   * 
-   * @return true if running, else false
-   */
-  bool IsRunning() const;
+    /**
+     * @brief Returns PNT running status
+     * 
+     * @return true if running, else false
+     */
+    bool IsRunning() const;
 
 private:
-  /**
-   * @brief Starts the IMU serial reader service if one was constructed.
-   *    Called by StartAndConfigureRadarPNT() to begin feeding data
-   *    from the serial port into IMUManager + the Kalman filter.
-   */
-  void StartIMUReader();
+    /**
+     * @brief Starts the IMU serial reader service if one was constructed.
+     *    Called by StartAndConfigureRadarPNT() to begin feeding data
+     *    from the serial port into IMUManager + the Kalman filter.
+     */
+    void StartIMUReader();
 
-  /**
-   * @brief Sets initial conditions in KF.
-   *
-   * @param [in] lat0 the initial starting latitude position of the radar.
-   * @param [in] lon0 the initial starting longitude position of the radar.
-   * @param [in] gpsLowerPercentile Fuzzy algo GPS Chi SQ lower bound (0.0, 1.0).
-   * @param [in] gpsUpperPercentile Fuzzy algo GPS Chi SQ upper bound (0.0, 1.0).
-   * @param [in] imuLowerPercentile Fuzzy algo IMU Chi SQ lower bound (0.0, 1.0).
-   * @param [in] imuUpperPercentile Fuzzy algo IMU Chi SQ upper bound (0.0, 1.0).
-   *
-   * @return
-   *
-   * @remarks Requires chi sq percentiles for fuzzy fusion algorithm.
-   *
-   * @exception std::runtime_error requires positive non zero df values and percentiles.
-   * @exception std::exception KF initialization error.
-   */
-  void ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile, double gpsUpperPercentile,
-                             double imuLowerPercentile, double imuUpperPercentile);
+    /**
+     * @brief Sets initial conditions in KF.
+     *
+     * @param [in] lat0 the initial starting latitude position of the radar.
+     * @param [in] lon0 the initial starting longitude position of the radar.
+     * @param [in] gpsLowerPercentile Fuzzy algo GPS Chi SQ lower bound (0.0, 1.0).
+     * @param [in] gpsUpperPercentile Fuzzy algo GPS Chi SQ upper bound (0.0, 1.0).
+     * @param [in] imuLowerPercentile Fuzzy algo IMU Chi SQ lower bound (0.0, 1.0).
+     * @param [in] imuUpperPercentile Fuzzy algo IMU Chi SQ upper bound (0.0, 1.0).
+     *
+     * @return
+     *
+     * @remarks Requires chi sq percentiles for fuzzy fusion algorithm.
+     *
+     * @exception std::runtime_error requires positive non zero df values and percentiles.
+     * @exception std::exception KF initialization error.
+     */
+    void ConfigureKalmanFilter(double lat0, double lon0);
 
-  /**
-   * @brief Execute KF with IMU measurement only.
-   *
-   * @param [in] dt the time delta from the last step to the current time (measurement time).
-   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,
-   * alat]^T
-   *
-   * @return
-   *
-   * @remarks Run single shot fusion EKF algorithm with null GPS for deadreckoning without GPS.
-   *
-   * @exception std::runtime_error requires positive non zero df values and percentiles.
-   * @exception std::exception KF initialization or Step error.
-   */
-  void KFCallbackImuOnly(double dt, Eigen::Matrix<double, 2, 1> &imuVec);
+    /**
+     * @brief Execute KF with IMU measurement only.
+     *
+     * @param [in] dt the time delta from the last step to the current time (measurement time).
+     * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,
+     * alat]^T
+     *
+     * @return
+     *
+     * @remarks Run single shot fusion EKF algorithm with null GPS for deadreckoning without GPS.
+     *
+     * @exception std::runtime_error requires positive non zero df values and percentiles.
+     * @exception std::exception KF initialization or Step error.
+     */
+    void KFCallbackImuOnly(double dt, Eigen::Matrix<double, 2, 1> &imuVec);
 
-  /**
-   * @brief Execute KF with IMU and GPS measurement.
-   *
-   * @param [in] dt the time delta from the last step to the current time (measurement time).
-   * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,
-   * alat]^T
-   * @param [in] gpsVec the IMU measurement vector. This is a column vector of 6 items [lon, lat, null, null, null,
-   * null]^T
-   *
-   * @return
-   *
-   * @remarks Run single shot fusion EKF algorithm with GPS measurement to adjust and fuse position kinematics.
-   *
-   * @exception std::runtime_error requires positive non zero df values and percentiles.
-   * @exception std::exception KF initialization or Step error.
-   */
-  void KFCallbackWithGps(double dt, Eigen::Matrix<double, 2, 1> &imuVec, Eigen::Matrix<double, 2, 1> &gpsVec);
+    /**
+     * @brief Execute KF with IMU and GPS measurement.
+     *
+     * @param [in] dt the time delta from the last step to the current time (measurement time).
+     * @param [in] imuVec the IMU measurement vector. This is a column vector of 6 items [null, null, vlon, vlat, alon,alat]^T
+     * 
+     * @param [in] gpsVec the IMU measurement vector. This is a column vector of 6 items [lon, lat, null, null, null,null]^T
+     * 
+     *
+     * @return
+     *
+     * @remarks Run single shot fusion EKF algorithm with GPS measurement to adjust and fuse position kinematics.
+     *
+     * @exception std::runtime_error requires positive non zero df values and percentiles.
+     * @exception std::exception KF initialization or Step error.
+     */
+    void KFCallbackWithGps(double dt, Eigen::Matrix<double, 2, 1> &imuVec, Eigen::Matrix<double, 2, 1> &gpsVec);
 
-  /**
-   * @brief GPS callback service in order to set IMUManager GPS state.
-   *
-   * @return
-   *
-   * @remarks
-   *
-   * @exception
-   */
-  void _GPSCallback(const GpsUpdate &gpsUpdate);
+    /**
+     * @brief GPS callback service in order to set IMUManager GPS state.
+     *
+     * @return
+     *
+     * @remarks
+     *
+     * @exception
+     */
+    void _GPSCallback(const GpsUpdate &gpsUpdate);
+
+    inline bool ConvertGPSToENU(double& E, double& N, double gpsLat, double gpsLon);
+
+    inline bool ValidateAndUpdateENUOrigin(Eigen::Matrix<double, 6, 1> &x);
+
+    inline void ConvertKFStateToWGS84(double& lat, double& lon, Eigen::Matrix<double, 6, 1> &x); 
+    
+    inline void RestKFOrigin(double oldLatOrigin, double oldLonOrigin);
 
 private:
     Vector6d m_latestX;
     Matrix6d m_latestP;
     std::mutex m_kFUpdateMutex;
-    IMUGPSFusionKF_2D_ConstantAcceleration m_kf;
-    std::atomic<int> m_lastUTMZone;
+    IMUGPSFusionKF m_kf;
     
     const _KalmanValues& m_config;
     
     std::atomic<bool> m_running;
     std::atomic<bool> m_isKFConfigured;
+
+    std::atomic<bool> m_hasOrigin;
+    std::pair<double,double> m_originLatLon;
+    std::pair<double,double> m_originEN;    
 
     std::unique_ptr<IMUManager> m_imuManager;
     std::unique_ptr<IMUSerialPortReader> m_imuSerialPortReader;

@@ -1,1059 +1,595 @@
+#!/usr/bin/env python3
+
 import argparse
 import csv
-import json
-import os
-import subprocess
+import queue
+import serial
+import sqlite3
+import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-import numpy as np
-import serial
-from serial import SerialException
-
-
-HTML = r"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Live IMU Adaptive 3D Kinematics</title>
-<style>
-html, body {
-    margin: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: white;
-    font-family: Arial, sans-serif;
-}
-#c {
-    width: 100vw;
-    height: 100vh;
-    display: block;
-}
-#panel {
-    position: fixed;
-    right: 16px;
-    top: 16px;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid #999;
-    border-radius: 8px;
-    padding: 12px;
-    font-size: 14px;
-    width: 280px;
-}
-button {
-    margin: 4px;
-    padding: 6px 10px;
-}
-label {
-    display: block;
-    margin-top: 8px;
-}
-input[type="range"] {
-    width: 100%;
-}
-.small {
-    font-size: 12px;
-    color: #333;
-}
-</style>
-</head>
-<body>
-<canvas id="c"></canvas>
-<div id="panel">
-    <button id="zero">Zero / Level</button>
-    <button id="reset">Reset Motion</button>
-    <label>
-        <input id="motionEnabled" type="checkbox" checked>
-        motion enabled
-    </label>
-    <label>
-        <input id="adaptiveRest" type="checkbox" checked>
-        adaptive rest lock
-    </label>
-    <label>
-        <input id="adaptiveBias" type="checkbox" checked>
-        adaptive bias estimate
-    </label>
-    <label>
-        motion scale
-        <input id="motionScale" type="range" min="1" max="80" value="12">
-    </label>
-    <label>
-        drift damping
-        <input id="damping" type="range" min="0" max="100" value="2">
-    </label>
-    <label>
-        gate strength
-        <input id="gateStrength" type="range" min="20" max="200" value="100">
-    </label>
-    <label>
-        rest strictness
-        <input id="restStrictness" type="range" min="1" max="100" value="35">
-    </label>
-    <div class="small">WASD move, Q/E down/up, click+drag look, Z zero, R reset</div>
-</div>
-<script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
-
-const zeroButton = document.getElementById("zero");
-const resetButton = document.getElementById("reset");
-const motionEnabled = document.getElementById("motionEnabled");
-const adaptiveRest = document.getElementById("adaptiveRest");
-const adaptiveBias = document.getElementById("adaptiveBias");
-const motionScaleSlider = document.getElementById("motionScale");
-const dampingSlider = document.getElementById("damping");
-const gateStrengthSlider = document.getElementById("gateStrength");
-const restStrictnessSlider = document.getElementById("restStrictness");
-
-let latest = {
-    R: [[1,0,0],[0,1,0],[0,0,1]],
-    imu_time_us: 0,
-    accuracy: 0,
-    la: null,
-    rv_count: 0,
-    la_count: 0,
-    line: "",
-    la_host_time: 0,
-    rv_host_time: 0,
-    la_imu_time_us: 0,
-    la_samples: []
-};
-
-let zeroMatrix = [[1,0,0],[0,1,0],[0,0,1]];
-let isZeroed = false;
-
-let camera = {
-    pos: [3.0, -5.0, 3.0],
-    yaw: Math.atan2(5.0, -3.0),
-    pitch: -0.45,
-    speed: 6.0,
-    mouseSensitivity: 0.0025,
-    lastFrameTime: performance.now(),
-    keys: {}
-};
-
-let motion = {
-    pos: [0, 0, 0],
-    vel: [0, 0, 0],
-    bias: [0, 0, 0],
-    noise: [0.06, 0.06, 0.06],
-    pPos: [0, 0, 0],
-    pVel: [0, 0, 0],
-    path: [],
-    lastLaCount: 0,
-    lastLaImuTimeUs: null,
-    lastAccelRaw: null,
-    lastAccelUse: null,
-    lastR: null,
-    stillTime: 0,
-    accepted: 0,
-    rejected: 0,
-    maha: 0,
-    angularRate: 0,
-    jerk: 0,
-    confidence: 1,
-    status: "init"
-};
-
-const base = [
-    [-1.0, -0.6, -0.15],
-    [ 1.0, -0.6, -0.15],
-    [ 1.0,  0.6, -0.15],
-    [-1.0,  0.6, -0.15],
-    [-1.0, -0.6,  0.15],
-    [ 1.0, -0.6,  0.15],
-    [ 1.0,  0.6,  0.15],
-    [-1.0,  0.6,  0.15]
-];
-
-const edges = [
-    [0,1], [1,2], [2,3], [3,0],
-    [4,5], [5,6], [6,7], [7,4],
-    [0,4], [1,5], [2,6], [3,7]
-];
-
-function identity() {
-    return [[1,0,0],[0,1,0],[0,0,1]];
-}
-
-function transpose(A) {
-    return [
-        [A[0][0], A[1][0], A[2][0]],
-        [A[0][1], A[1][1], A[2][1]],
-        [A[0][2], A[1][2], A[2][2]]
-    ];
-}
-
-function matMul(A, B) {
-    return [
-        [
-            A[0][0] * B[0][0] + A[0][1] * B[1][0] + A[0][2] * B[2][0],
-            A[0][0] * B[0][1] + A[0][1] * B[1][1] + A[0][2] * B[2][1],
-            A[0][0] * B[0][2] + A[0][1] * B[1][2] + A[0][2] * B[2][2]
-        ],
-        [
-            A[1][0] * B[0][0] + A[1][1] * B[1][0] + A[1][2] * B[2][0],
-            A[1][0] * B[0][1] + A[1][1] * B[1][1] + A[1][2] * B[2][1],
-            A[1][0] * B[0][2] + A[1][1] * B[1][2] + A[1][2] * B[2][2]
-        ],
-        [
-            A[2][0] * B[0][0] + A[2][1] * B[1][0] + A[2][2] * B[2][0],
-            A[2][0] * B[0][1] + A[2][1] * B[1][1] + A[2][2] * B[2][1],
-            A[2][0] * B[0][2] + A[2][1] * B[1][2] + A[2][2] * B[2][2]
-        ]
-    ];
-}
-
-function matVec(A, v) {
-    return [
-        A[0][0] * v[0] + A[0][1] * v[1] + A[0][2] * v[2],
-        A[1][0] * v[0] + A[1][1] * v[1] + A[1][2] * v[2],
-        A[2][0] * v[0] + A[2][1] * v[1] + A[2][2] * v[2]
-    ];
-}
-
-function add(a, b) {
-    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
-
-function sub(a, b) {
-    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function scaleVec(a, s) {
-    return [a[0] * s, a[1] * s, a[2] * s];
-}
-
-function norm(a) {
-    return Math.hypot(a[0], a[1], a[2]);
-}
-
-function dot(a, b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function cross(a, b) {
-    return [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]
-    ];
-}
-
-function normalize(v) {
-    const n = Math.max(1e-12, norm(v));
-    return [v[0] / n, v[1] / n, v[2] / n];
-}
-
-function clamp(x, a, b) {
-    return Math.max(a, Math.min(b, x));
-}
-
-function smoothAlpha(dt, tau) {
-    return 1.0 - Math.exp(-dt / Math.max(1e-6, tau));
-}
-
-function rotationAngle(A, B) {
-    const C = matMul(transpose(A), B);
-    const tr = C[0][0] + C[1][1] + C[2][2];
-    return Math.acos(clamp((tr - 1.0) * 0.5, -1.0, 1.0));
-}
-
-function getDisplayRFrom(R) {
-    return matMul(zeroMatrix, R || latest.R);
-}
-
-function getDisplayR() {
-    return getDisplayRFrom(latest.R);
-}
-
-function resetMotion() {
-    motion.pos = [0, 0, 0];
-    motion.vel = [0, 0, 0];
-    motion.bias = [0, 0, 0];
-    motion.noise = [0.06, 0.06, 0.06];
-    motion.pPos = [0, 0, 0];
-    motion.pVel = [0, 0, 0];
-    motion.path = [];
-    motion.lastLaCount = latest.la_count;
-    motion.lastLaImuTimeUs = latest.la_imu_time_us || null;
-    motion.lastAccelRaw = null;
-    motion.lastAccelUse = null;
-    motion.lastR = null;
-    motion.stillTime = 0;
-    motion.accepted = 0;
-    motion.rejected = 0;
-    motion.maha = 0;
-    motion.angularRate = 0;
-    motion.jerk = 0;
-    motion.confidence = 1;
-    motion.status = "reset";
-}
-
-function resize() {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(window.innerWidth * dpr);
-    canvas.height = Math.floor(window.innerHeight * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function getCameraBasis() {
-    const cp = Math.cos(camera.pitch);
-    const sp = Math.sin(camera.pitch);
-    const cy = Math.cos(camera.yaw);
-    const sy = Math.sin(camera.yaw);
-
-    const forward = normalize([cp * cy, cp * sy, sp]);
-    const worldUp = [0.0, 0.0, 1.0];
-    const right = normalize(cross(forward, worldUp));
-    const trueUp = cross(right, forward);
-
-    return { forward, right, trueUp };
-}
-
-function updateCamera() {
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - camera.lastFrameTime) / 1000.0);
-    camera.lastFrameTime = now;
-
-    const b = getCameraBasis();
-    const flatForward = normalize([b.forward[0], b.forward[1], 0.0]);
-    const flatRight = normalize([b.right[0], b.right[1], 0.0]);
-    const step = camera.speed * dt;
-
-    if (camera.keys["w"]) camera.pos = add(camera.pos, scaleVec(flatForward, step));
-    if (camera.keys["s"]) camera.pos = add(camera.pos, scaleVec(flatForward, -step));
-    if (camera.keys["d"]) camera.pos = add(camera.pos, scaleVec(flatRight, step));
-    if (camera.keys["a"]) camera.pos = add(camera.pos, scaleVec(flatRight, -step));
-    if (camera.keys["q"]) camera.pos[2] -= step;
-    if (camera.keys["e"]) camera.pos[2] += step;
-}
-
-function project(points) {
-    const b = getCameraBasis();
-
-    return points.map(p => {
-        const rel = [
-            p[0] - camera.pos[0],
-            p[1] - camera.pos[1],
-            p[2] - camera.pos[2]
-        ];
-
-        const x = dot(rel, b.right);
-        const y = dot(rel, b.trueUp);
-        const z = dot(rel, b.forward);
-
-        if (z <= 0.02) {
-            return [1000000, 1000000];
-        }
-
-        const s = 2.5 / z;
-        return [x * s, y * s];
-    });
-}
-
-function screen(p) {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const s = Math.min(w, h) * 0.30;
-    return [w * 0.5 + p[0] * s, h * 0.57 - p[1] * s];
-}
-
-function line(a, b, color, width) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
-    ctx.stroke();
-}
-
-function integrateLaSample(nowUs, la, rawR, rvAccuracy) {
-    if (!nowUs) {
-        return;
-    }
-
-    if (motion.lastLaImuTimeUs === null) {
-        motion.lastLaImuTimeUs = nowUs;
-        motion.lastR = getDisplayRFrom(rawR);
-        return;
-    }
-
-    if (nowUs <= motion.lastLaImuTimeUs) {
-        return;
-    }
-
-    let dt = (nowUs - motion.lastLaImuTimeUs) / 1000000.0;
-
-    if (dt > 0.5) {
-        motion.lastLaImuTimeUs = nowUs;
-        motion.lastAccelRaw = null;
-        motion.lastAccelUse = null;
-        motion.lastR = getDisplayRFrom(rawR);
-        motion.status = "gap reset";
-        return;
-    }
-
-    dt = clamp(dt, 0.0005, 0.05);
-
-    const R = getDisplayRFrom(rawR);
-    const aRaw = matVec(R, la);
-    const accelNorm = norm(la);
-    const absAccelNorm = norm(aRaw);
-    const angle = motion.lastR === null ? 0.0 : rotationAngle(motion.lastR, R);
-    const angularRate = angle / dt;
-    const accQuality = Number.isFinite(rvAccuracy) ? clamp(1.0 - rvAccuracy / 1.2, 0.15, 1.0) : 0.65;
-    const restStrictness = Number(restStrictnessSlider.value) / 100.0;
-    const restAccel = 0.025 + 0.22 * restStrictness;
-    const restAngular = 0.015 + 0.30 * restStrictness;
-    const restVel = 0.03 + 0.35 * restStrictness;
-    const damping = Number(dampingSlider.value) / 1000.0;
-    const gateScale = Number(gateStrengthSlider.value) / 100.0;
-    let usedAccel = aRaw;
-    let maha = 0.0;
-    let rejected = false;
-
-    if (motion.lastAccelRaw !== null) {
-        const da = sub(aRaw, motion.lastAccelRaw);
-        motion.jerk = norm(da) / dt;
-
-        for (let i = 0; i < 3; i++) {
-            const s = Math.max(0.015, motion.noise[i]);
-            maha += (da[i] * da[i]) / (s * s + 1e-9);
-        }
-
-        const chi99 = 11.3449 * gateScale * gateScale;
-        const impossible = absAccelNorm > 60.0 || motion.jerk > 250.0;
-        const spike = maha > chi99 && absAccelNorm > Math.max(1.0, 3.0 * norm(motion.noise));
-
-        if (impossible || spike) {
-            rejected = true;
-            usedAccel = motion.lastAccelRaw;
-            motion.rejected += 1;
-        } else {
-            const beta = smoothAlpha(dt, 0.8);
-
-            for (let i = 0; i < 3; i++) {
-                const e = Math.abs(da[i]);
-                motion.noise[i] = clamp((1.0 - beta) * motion.noise[i] + beta * e, 0.015, 6.0);
-            }
-        }
-    }
-
-    motion.maha = maha;
-    motion.angularRate = angularRate;
-
-    const speed = norm(motion.vel);
-    const lowDynamics = accelNorm < restAccel && angularRate < restAngular;
-    const velocityAllowsRest = speed < restVel;
-    const restCandidate = adaptiveRest.checked && lowDynamics && velocityAllowsRest;
-
-    if (restCandidate) {
-        motion.stillTime += dt;
-    } else {
-        motion.stillTime = Math.max(0.0, motion.stillTime - 3.0 * dt);
-    }
-
-    const stationary = motion.stillTime > 0.45;
-
-    if (adaptiveBias.checked) {
-        const tau = stationary ? 0.25 : 90.0;
-        const alpha = smoothAlpha(dt, tau);
-
-        if (stationary || accelNorm < restAccel * 1.5) {
-            for (let i = 0; i < 3; i++) {
-                motion.bias[i] = (1.0 - alpha) * motion.bias[i] + alpha * usedAccel[i];
-            }
-        }
-    }
-
-    const a = sub(usedAccel, motion.bias);
-    let aUse = a;
-
-    if (motion.lastAccelUse !== null) {
-        aUse = [
-            0.5 * (motion.lastAccelUse[0] + a[0]),
-            0.5 * (motion.lastAccelUse[1] + a[1]),
-            0.5 * (motion.lastAccelUse[2] + a[2])
-        ];
-    }
-
-    if (stationary) {
-        const decay = Math.exp(-dt / 0.08);
-        motion.vel[0] *= decay;
-        motion.vel[1] *= decay;
-        motion.vel[2] *= decay;
-
-        if (norm(motion.vel) < 0.006) {
-            motion.vel = [0, 0, 0];
-        }
-
-        motion.pVel = scaleVec(motion.pVel, Math.exp(-dt / 0.15));
-        motion.status = "rest lock";
-    } else {
-        motion.vel[0] += aUse[0] * dt;
-        motion.vel[1] += aUse[1] * dt;
-        motion.vel[2] += aUse[2] * dt;
-
-        if (damping > 0.0) {
-            const d = Math.exp(-damping * dt);
-            motion.vel[0] *= d;
-            motion.vel[1] *= d;
-            motion.vel[2] *= d;
-        }
-
-        motion.status = rejected ? "gated" : "inertial";
-    }
-
-    motion.pos[0] += motion.vel[0] * dt + 0.5 * aUse[0] * dt * dt;
-    motion.pos[1] += motion.vel[1] * dt + 0.5 * aUse[1] * dt * dt;
-    motion.pos[2] += motion.vel[2] * dt + 0.5 * aUse[2] * dt * dt;
-
-    const q = accQuality * (stationary ? 0.25 : 1.0);
-
-    for (let i = 0; i < 3; i++) {
-        const av = motion.noise[i] * motion.noise[i] / Math.max(0.05, q);
-        motion.pVel[i] = Math.max(0.0, motion.pVel[i] + av * dt * dt);
-        motion.pPos[i] = Math.max(0.0, motion.pPos[i] + motion.pVel[i] * dt * dt + 0.25 * av * dt * dt * dt * dt);
-    }
-
-    const posSigma = Math.sqrt(motion.pPos[0] + motion.pPos[1] + motion.pPos[2]);
-    const biasMag = norm(motion.bias);
-    motion.confidence = clamp(accQuality * Math.exp(-posSigma / 25.0) * Math.exp(-biasMag / 4.0), 0.0, 1.0);
-
-    motion.lastAccelRaw = aRaw;
-    motion.lastAccelUse = a;
-    motion.lastR = R;
-    motion.lastLaImuTimeUs = nowUs;
-    motion.accepted += rejected ? 0 : 1;
-    motion.path.push([...motion.pos]);
-}
-
-function integrateMotion() {
-    if (!motionEnabled.checked) {
-        motion.lastLaCount = latest.la_count;
-        motion.lastLaImuTimeUs = latest.la_imu_time_us || motion.lastLaImuTimeUs;
-        latest.la_samples = [];
-        return;
-    }
-
-    const samples = Array.isArray(latest.la_samples) ? latest.la_samples : [];
-
-    if (samples.length > 0) {
-        for (const s of samples) {
-            integrateLaSample(s[0], [s[1], s[2], s[3]], s[4], s[5]);
-        }
-
-        latest.la_samples = [];
-        motion.lastLaCount = latest.la_count;
-    } else if (latest.la !== null && latest.la_count !== motion.lastLaCount) {
-        integrateLaSample(latest.la_imu_time_us, latest.la, latest.R, latest.accuracy);
-        motion.lastLaCount = latest.la_count;
-    }
-
-    while (motion.path.length > 5000) {
-        motion.path.shift();
-    }
-}
-
-function drawPath(scale) {
-    if (motion.path.length < 2) {
-        return;
-    }
-
-    const pts3 = motion.path.map(p => scaleVec(p, scale));
-    const pts2 = project(pts3).map(screen);
-
-    ctx.strokeStyle = "#777";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(pts2[0][0], pts2[0][1]);
-
-    for (let i = 1; i < pts2.length; i++) {
-        ctx.lineTo(pts2[i][0], pts2[i][1]);
-    }
-
-    ctx.stroke();
-}
-
-function drawUncertainty(scale) {
-    const s = Math.sqrt(motion.pPos[0] + motion.pPos[1] + motion.pPos[2]) * scale;
-
-    if (!Number.isFinite(s) || s <= 0.001) {
-        return;
-    }
-
-    const center = scaleVec(motion.pos, scale);
-    const pts = [];
-
-    for (let i = 0; i <= 48; i++) {
-        const a = 2.0 * Math.PI * i / 48.0;
-        pts.push([center[0] + Math.cos(a) * s, center[1] + Math.sin(a) * s, center[2]]);
-    }
-
-    const pts2 = project(pts).map(screen);
-    ctx.strokeStyle = "rgba(0,0,0,0.22)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pts2[0][0], pts2[0][1]);
-
-    for (let i = 1; i < pts2.length; i++) {
-        ctx.lineTo(pts2[i][0], pts2[i][1]);
-    }
-
-    ctx.stroke();
-}
-
-function drawGroundGrid(scale) {
-    const lim = 20;
-    const pts = [];
-
-    for (let i = -lim; i <= lim; i++) {
-        pts.push([[i, -lim, 0], [i, lim, 0]]);
-        pts.push([[-lim, i, 0], [lim, i, 0]]);
-    }
-
-    for (const g of pts) {
-        const p = project([scaleVec(g[0], scale), scaleVec(g[1], scale)]).map(screen);
-        line(p[0], p[1], "rgba(0,0,0,0.10)", 1);
-    }
-}
-
-function draw() {
-    updateCamera();
-    integrateMotion();
-
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-
-    const R = getDisplayR();
-    const motionScale = Number(motionScaleSlider.value);
-    const center = scaleVec(motion.pos, motionScale);
-
-    drawGroundGrid(motionScale);
-    drawPath(motionScale);
-    drawUncertainty(motionScale);
-
-    const verts = base.map(p => add(matVec(R, p), center));
-    const projected = project(verts).map(screen);
-
-    for (const e of edges) {
-        line(projected[e[0]], projected[e[1]], "black", 3);
-    }
-
-    const axes3 = [
-        center,
-        add(center, matVec(R, [1.5, 0.0, 0.0])),
-        add(center, matVec(R, [0.0, 1.5, 0.0])),
-        add(center, matVec(R, [0.0, 0.0, 1.5]))
-    ];
-
-    const axes2 = project(axes3).map(screen);
-
-    line(axes2[0], axes2[1], "red", 4);
-    line(axes2[0], axes2[2], "green", 4);
-    line(axes2[0], axes2[3], "blue", 4);
-
-    ctx.font = "bold 18px Arial";
-    ctx.fillStyle = "red";
-    ctx.fillText("X", axes2[1][0], axes2[1][1]);
-    ctx.fillStyle = "green";
-    ctx.fillText("Y", axes2[2][0], axes2[2][1]);
-    ctx.fillStyle = "blue";
-    ctx.fillText("Z", axes2[3][0], axes2[3][1]);
-
-    let laText = "LA: none";
-
-    if (latest.la !== null) {
-        laText = `LA: ${latest.la[0].toFixed(3)}, ${latest.la[1].toFixed(3)}, ${latest.la[2].toFixed(3)}`;
-    }
-
-    const sigma = Math.sqrt(motion.pPos[0] + motion.pPos[1] + motion.pPos[2]);
-    const rejectPct = motion.accepted + motion.rejected > 0 ? 100.0 * motion.rejected / (motion.accepted + motion.rejected) : 0.0;
-
-    const text = [
-        `RV count: ${latest.rv_count}`,
-        `LA count: ${latest.la_count}`,
-        `imu_time_us: ${latest.imu_time_us}`,
-        `accuracy: ${Number(latest.accuracy).toFixed(3)}`,
-        `zeroed: ${isZeroed ? "yes" : "no"}`,
-        `model: ${motion.status}`,
-        `pos m: ${motion.pos[0].toFixed(3)}, ${motion.pos[1].toFixed(3)}, ${motion.pos[2].toFixed(3)}`,
-        `vel m/s: ${motion.vel[0].toFixed(3)}, ${motion.vel[1].toFixed(3)}, ${motion.vel[2].toFixed(3)}`,
-        `bias m/s^2: ${motion.bias[0].toFixed(3)}, ${motion.bias[1].toFixed(3)}, ${motion.bias[2].toFixed(3)}`,
-        `noise m/s^2: ${motion.noise[0].toFixed(3)}, ${motion.noise[1].toFixed(3)}, ${motion.noise[2].toFixed(3)}`,
-        `angular rate rad/s: ${motion.angularRate.toFixed(3)}`,
-        `jerk m/s^3: ${motion.jerk.toFixed(1)}`,
-        `mahalanobis: ${motion.maha.toFixed(2)}`,
-        `reject: ${rejectPct.toFixed(1)}%`,
-        `pos sigma m: ${sigma.toFixed(3)}`,
-        `confidence: ${(100.0 * motion.confidence).toFixed(1)}%`,
-        `camera: ${camera.pos[0].toFixed(2)}, ${camera.pos[1].toFixed(2)}, ${camera.pos[2].toFixed(2)}`,
-        laText,
-        latest.line
-    ];
-
-    ctx.fillStyle = "black";
-    ctx.font = "16px Arial";
-    let y = 24;
-
-    for (const t of text) {
-        ctx.fillText(t, 16, y);
-        y += 22;
-    }
-
-    requestAnimationFrame(draw);
-}
-
-async function poll() {
-    try {
-        const r = await fetch("/state", { cache: "no-store" });
-        latest = await r.json();
-    } catch (e) {
-    }
-
-    setTimeout(poll, 1);
-}
-
-zeroButton.onclick = () => {
-    zeroMatrix = transpose(latest.R);
-    isZeroed = true;
-    resetMotion();
-};
-
-resetButton.onclick = () => {
-    resetMotion();
-};
-
-window.addEventListener("keydown", e => {
-    const k = e.key.toLowerCase();
-    camera.keys[k] = true;
-
-    if (e.key === " " || k === "z") {
-        zeroMatrix = transpose(latest.R);
-        isZeroed = true;
-        resetMotion();
-    }
-
-    if (k === "r") {
-        resetMotion();
-    }
-});
-
-window.addEventListener("keyup", e => {
-    camera.keys[e.key.toLowerCase()] = false;
-});
-
-canvas.addEventListener("click", () => {
-    canvas.requestPointerLock();
-});
-
-window.addEventListener("mousemove", e => {
-    if (document.pointerLockElement !== canvas && e.buttons !== 1) {
-        return;
-    }
-
-    camera.yaw += e.movementX * camera.mouseSensitivity;
-    camera.pitch -= e.movementY * camera.mouseSensitivity;
-    camera.pitch = Math.max(-1.45, Math.min(1.45, camera.pitch));
-});
-
-window.addEventListener("blur", () => {
-    camera.keys = {};
-});
-
-window.addEventListener("resize", resize);
-resize();
-poll();
-draw();
-</script>
-</body>
-</html>
-"""
-
-
-def open_port(port, baud):
-    ser = serial.Serial()
-    ser.port = port
-    ser.baudrate = baud
-    ser.timeout = 1
-    ser.write_timeout = 1
-    ser.rtscts = False
-    ser.dsrdtr = False
-
-    if os.name == "posix":
-        ser.exclusive = True
-
-    ser.open()
-    ser.dtr = False
-    ser.rts = False
-    time.sleep(0.25)
-    return ser
+from serial.tools import list_ports
+
+DATABASE_STOP = object()
+STOP_EVENT = threading.Event()
+printTimeGps = 0
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p", "--port", default="/dev/ttyUSB0")
+    parser.add_argument("-b", "--baud", type=int, default=115200)
+    parser.add_argument("-d", "--database", default="imu_data.db")
+    parser.add_argument("--queue-size", type=int, default=10000)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--flush-interval", type=float, default=0.25)
+    parser.add_argument("--gps-baud", type=int, default=115200)
+    return parser.parse_args()
 
 
 def parse_line(line):
-    parts = line.split(",")
+    try:
+        fields = next(csv.reader([line]))
+    except csv.Error:
+        return None
 
     try:
-        if len(parts) == 5 and parts[0] == "LA":
+        if fields[0] == "DRPY" and len(fields) == 5:
             return {
-                "type": "LA",
-                "host_time": time.time(),
-                "imu_time_us": int(parts[1]),
-                "x": float(parts[2]),
-                "y": float(parts[3]),
-                "z": float(parts[4]),
-                "i": "",
-                "j": "",
-                "k": "",
-                "real": "",
-                "accuracy": "",
+                "type": "DRPY",
+                "timestamp_us": int(fields[1]),
+                "d_roll": float(fields[2]),
+                "d_pitch": float(fields[3]),
+                "d_yaw": float(fields[4]),
             }
 
-        if len(parts) == 7 and parts[0] == "RV":
+        if fields[0] == "RV" and len(fields) == 7:
             return {
                 "type": "RV",
-                "host_time": time.time(),
-                "imu_time_us": int(parts[1]),
-                "x": "",
-                "y": "",
-                "z": "",
-                "i": float(parts[2]),
-                "j": float(parts[3]),
-                "k": float(parts[4]),
-                "real": float(parts[5]),
-                "accuracy": float(parts[6]),
+                "timestamp_us": int(fields[1]),
+                "i": float(fields[2]),
+                "j": float(fields[3]),
+                "k": float(fields[4]),
+                "real": float(fields[5]),
+                "accuracy": float(fields[6]),
             }
-    except ValueError:
+
+        if fields[0] == "LA" and len(fields) == 5:
+            return {
+                "type": "LA",
+                "timestamp_us": int(fields[1]),
+                "ax": float(fields[2]),
+                "ay": float(fields[3]),
+                "az": float(fields[4]),
+            }
+    except (ValueError, IndexError):
         return None
 
     return None
 
 
-def quat_to_matrix(i, j, k, real):
-    q = np.array([real, i, j, k], dtype=float)
-    n = np.linalg.norm(q)
-
-    if n <= 0.0:
-        return np.eye(3)
-
-    w, x, y, z = q / n
-
-    return np.array([
-        [1.0 - 2.0 * y * y - 2.0 * z * z, 2.0 * x * y - 2.0 * z * w, 2.0 * x * z + 2.0 * y * w],
-        [2.0 * x * y + 2.0 * z * w, 1.0 - 2.0 * x * x - 2.0 * z * z, 2.0 * y * z - 2.0 * x * w],
-        [2.0 * x * z - 2.0 * y * w, 2.0 * y * z + 2.0 * x * w, 1.0 - 2.0 * x * x - 2.0 * y * y],
-    ])
-
-
-def serial_worker(args, state, lock, stop_event):
-    fieldnames = [
-        "type",
-        "host_time",
-        "imu_time_us",
-        "x",
-        "y",
-        "z",
-        "i",
-        "j",
-        "k",
-        "real",
-        "accuracy",
-    ]
-
-    ser = None
-
-    with open(args.output, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-
-        while not stop_event.is_set():
-            try:
-                ser = open_port(args.port, args.baud)
-                print(f"connected,{args.port},{args.baud}")
-
-                while not stop_event.is_set():
-                    raw = ser.readline()
-
-                    if not raw:
-                        continue
-
-                    line = raw.decode("utf-8", errors="ignore").strip()
-
-                    if not line:
-                        continue
-
-                    if args.print_lines:
-                        print(line)
-
-                    row = parse_line(line)
-
-                    if row is None:
-                        continue
-
-                    writer.writerow(row)
-                    f.flush()
-
-                    with lock:
-                        state["line"] = line
-
-                        if row["type"] == "RV":
-                            R = quat_to_matrix(row["i"], row["j"], row["k"], row["real"]).tolist()
-                            state["R"] = R
-                            state["last_R"] = R
-                            state["imu_time_us"] = row["imu_time_us"]
-                            state["accuracy"] = row["accuracy"]
-                            state["rv_count"] += 1
-                            state["rv_host_time"] = row["host_time"]
-
-                        if row["type"] == "LA":
-                            R = state.get("last_R") or state.get("R")
-                            accuracy = state.get("accuracy", 0.0)
-                            sample = [row["imu_time_us"], row["x"], row["y"], row["z"], R, accuracy]
-                            state["la"] = [row["x"], row["y"], row["z"]]
-                            state["imu_time_us"] = row["imu_time_us"]
-                            state["la_imu_time_us"] = row["imu_time_us"]
-                            state["la_count"] += 1
-                            state["la_host_time"] = row["host_time"]
-                            state["la_samples"].append(sample)
-
-                            if len(state["la_samples"]) > 4000:
-                                del state["la_samples"][:-4000]
-
-            except SerialException as e:
-                print(f"serial_error,{e}")
-
-                if ser is not None:
-                    try:
-                        ser.close()
-                    except Exception:
-                        pass
-
-                ser = None
-                time.sleep(1)
-
-            except Exception as e:
-                print(f"error,{e}")
-
-                if ser is not None:
-                    try:
-                        ser.close()
-                    except Exception:
-                        pass
-
-                ser = None
-                time.sleep(1)
-
-        if ser is not None:
-            try:
-                ser.close()
-            except Exception:
-                pass
-
-
-def make_handler(state, lock):
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, fmt, *args):
-            return
-
-        def do_GET(self):
-            if self.path == "/" or self.path.startswith("/?"):
-                data = HTML.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-                return
-
-            if self.path == "/state":
-                with lock:
-                    snapshot = dict(state)
-                    snapshot["la_samples"] = list(state.get("la_samples", []))
-                    state["la_samples"] = []
-
-                data = json.dumps(snapshot).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-                return
-
-            self.send_response(404)
-            self.end_headers()
-
-    return Handler
-
-
-def open_browser(url):
-    try:
-        subprocess.Popen(
-            ["cmd.exe", "/c", "start", "", url],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+def print_measurement(data):
+    if data["type"] == "DRPY":
+        print(
+            f'DRPY  t={data["timestamp_us"]} us  '
+            f'd_roll={data["d_roll"]:.6f} rad/s  '
+            f'd_pitch={data["d_pitch"]:.6f} rad/s  '
+            f'd_yaw={data["d_yaw"]:.6f} rad/s'
         )
-    except Exception:
-        pass
+        return
+
+    if data["type"] == "RV":
+        print(
+            f'RV    t={data["timestamp_us"]} us  '
+            f'i={data["i"]:.6f}  '
+            f'j={data["j"]:.6f}  '
+            f'k={data["k"]:.6f}  '
+            f'real={data["real"]:.6f}  '
+            f'accuracy={data["accuracy"]:.6f}'
+        )
+        return
+
+    if data["type"] == "LA":
+        print(
+            f'LA    t={data["timestamp_us"]} us  '
+            f'ax={data["ax"]:.6f} m/s²  '
+            f'ay={data["ay"]:.6f} m/s²  '
+            f'az={data["az"]:.6f} m/s²'
+        )
+
+
+def initialize_database(connection):
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute("PRAGMA temp_store=MEMORY")
+    connection.execute("PRAGMA busy_timeout=30000")
+
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS imu_delta_rotation_rate (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_us INTEGER NOT NULL,
+            host_timestamp_ns INTEGER NOT NULL,
+            d_roll REAL NOT NULL,
+            d_pitch REAL NOT NULL,
+            d_yaw REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS imu_rotation_vector (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_us INTEGER NOT NULL,
+            host_timestamp_ns INTEGER NOT NULL,
+            i REAL NOT NULL,
+            j REAL NOT NULL,
+            k REAL NOT NULL,
+            real REAL NOT NULL,
+            accuracy REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS imu_linear_acceleration (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_us INTEGER NOT NULL,
+            host_timestamp_ns INTEGER NOT NULL,
+            ax REAL NOT NULL,
+            ay REAL NOT NULL,
+            az REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS gps1_nmea (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            host_timestamp_ns INTEGER NOT NULL,
+            usb_vendor_id INTEGER NOT NULL,
+            usb_product_id INTEGER NOT NULL,
+            usb_serial_number TEXT,
+            nmea TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS gps2_nmea (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            host_timestamp_ns INTEGER NOT NULL,
+            usb_vendor_id INTEGER NOT NULL,
+            usb_product_id INTEGER NOT NULL,
+            usb_serial_number TEXT,
+            nmea TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_gps1_host_timestamp
+            ON gps1_nmea(host_timestamp_ns);
+
+        CREATE INDEX IF NOT EXISTS idx_gps2_host_timestamp
+            ON gps2_nmea(host_timestamp_ns);
+
+        CREATE INDEX IF NOT EXISTS idx_gps1_serial
+            ON gps1_nmea(usb_serial_number);
+
+        CREATE INDEX IF NOT EXISTS idx_gps2_serial
+            ON gps2_nmea(usb_serial_number);
+
+        CREATE INDEX IF NOT EXISTS idx_delta_rotation_timestamp
+            ON imu_delta_rotation_rate(timestamp_us);
+
+        CREATE INDEX IF NOT EXISTS idx_rotation_vector_timestamp
+            ON imu_rotation_vector(timestamp_us);
+
+        CREATE INDEX IF NOT EXISTS idx_linear_acceleration_timestamp
+            ON imu_linear_acceleration(timestamp_us);
+        """
+    )
+
+    connection.commit()
+
+
+def insert_batch(connection, measurements):
+    delta_rotation_rows = []
+    rotation_vector_rows = []
+    linear_acceleration_rows = []
+    gps1_rows = []
+    gps2_rows = []
+
+    for data in measurements:
+        if data["type"] == "DRPY":
+            delta_rotation_rows.append(
+                (
+                    data["timestamp_us"],
+                    data["host_timestamp_ns"],
+                    data["d_roll"],
+                    data["d_pitch"],
+                    data["d_yaw"],
+                )
+            )
+        elif data["type"] == "RV":
+            rotation_vector_rows.append(
+                (
+                    data["timestamp_us"],
+                    data["host_timestamp_ns"],
+                    data["i"],
+                    data["j"],
+                    data["k"],
+                    data["real"],
+                    data["accuracy"],
+                )
+            )
+        elif data["type"] == "LA":
+            linear_acceleration_rows.append(
+                (
+                    data["timestamp_us"],
+                    data["host_timestamp_ns"],
+                    data["ax"],
+                    data["ay"],
+                    data["az"],
+                )
+            )
+        elif data["type"] == "GPS1":
+            gps1_rows.append(
+                (
+                    data["host_timestamp_ns"],
+                    data["usb_vendor_id"],
+                    data["usb_product_id"],
+                    data["usb_serial_number"],
+                    data["nmea"],
+                )
+            )
+
+        elif data["type"] == "GPS2":
+            gps2_rows.append(
+                (
+                    data["host_timestamp_ns"],
+                    data["usb_vendor_id"],
+                    data["usb_product_id"],
+                    data["usb_serial_number"],
+                    data["nmea"],
+                )
+            )
+
+    with connection:
+        if delta_rotation_rows:
+            connection.executemany(
+                """
+                INSERT INTO imu_delta_rotation_rate (
+                    timestamp_us,
+                    host_timestamp_ns,
+                    d_roll,
+                    d_pitch,
+                    d_yaw
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                delta_rotation_rows,
+            )
+
+        if rotation_vector_rows:
+            connection.executemany(
+                """
+                INSERT INTO imu_rotation_vector (
+                    timestamp_us,
+                    host_timestamp_ns,
+                    i,
+                    j,
+                    k,
+                    real,
+                    accuracy
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                rotation_vector_rows,
+            )
+
+        if linear_acceleration_rows:
+            connection.executemany(
+                """
+                INSERT INTO imu_linear_acceleration (
+                    timestamp_us,
+                    host_timestamp_ns,
+                    ax,
+                    ay,
+                    az
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                linear_acceleration_rows,
+            )
+
+        if gps1_rows:
+            connection.executemany(
+                """
+                INSERT INTO gps1_nmea (
+                    host_timestamp_ns,
+                    usb_vendor_id,
+                    usb_product_id,
+                    usb_serial_number,
+                    nmea
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                gps1_rows,
+            )
+
+
+        if gps2_rows:
+            connection.executemany(
+                """
+                INSERT INTO gps2_nmea (
+                    host_timestamp_ns,
+                    usb_vendor_id,
+                    usb_product_id,
+                    usb_serial_number,
+                    nmea
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                gps2_rows,
+            )
+
+def find_ublox_ports():
+    """
+    Returns a list of serial device paths corresponding to u-blox GPS receivers.
+    """
+
+    ports = []
+
+    for port in list_ports.comports():
+        manufacturer = (port.manufacturer or "").lower()
+        description = (port.description or "").lower()
+        product = (port.product or "").lower()
+        hwid = (port.hwid or "").lower()
+
+        if (
+            "u-blox" in manufacturer
+            or "u-blox" in description
+            or "u-blox" in product
+            or "1546" in hwid        # u-blox USB Vendor ID
+        ):
+            ports.append({
+                "device": port.device,
+                "vendor_id": port.vid or 0,
+                "product_id": port.pid or 0,
+                "serial_number": port.serial_number,
+            })
+
+    return sorted(ports, key=lambda x: x["device"])
+
+def print_serial_devices():
+    for port in list_ports.comports():
+        print(
+            f"{port.device:15} "
+            f"manufacturer={port.manufacturer!r} "
+            f"product={port.product!r} "
+            f"description={port.description!r} "
+            f"hwid={port.hwid}"
+        )
+
+
+class DatabaseWriter(threading.Thread):
+    def __init__(self, database_path, measurement_queue, batch_size, flush_interval):
+        super().__init__(name="database-writer")
+        self.database_path = database_path
+        self.measurement_queue = measurement_queue
+        self.batch_size = batch_size
+        self.flush_interval = flush_interval
+        self.error = None
+        self.rows_written = 0
+
+    def run(self):
+        connection = None
+
+        try:
+            connection = sqlite3.connect(self.database_path, timeout=30.0)
+            initialize_database(connection)
+
+            batch = []
+            flush_deadline = time.monotonic() + self.flush_interval
+
+            while True:
+                timeout = max(0.0, flush_deadline - time.monotonic())
+
+                try:
+                    data = self.measurement_queue.get(timeout=timeout)
+                except queue.Empty:
+                    data = None
+
+                if data is DATABASE_STOP:
+                    if batch:
+                        insert_batch(connection, batch)
+                        self.rows_written += len(batch)
+                    break
+
+                if data is not None:
+                    batch.append(data)
+
+                if batch and (len(batch) >= self.batch_size or time.monotonic() >= flush_deadline):
+                    insert_batch(connection, batch)
+                    self.rows_written += len(batch)
+                    batch.clear()
+                    flush_deadline = time.monotonic() + self.flush_interval
+
+        except Exception as error:
+            self.error = error
+
+        finally:
+            if connection is not None:
+                connection.close()
+
+
+def stop_database_writer(writer, measurement_queue):
+    while writer.is_alive():
+        try:
+            measurement_queue.put(DATABASE_STOP, timeout=0.25)
+            break
+        except queue.Full:
+            if writer.error is not None or not writer.is_alive():
+                break
+
+    writer.join()
+
+def gps_reader(
+    port,
+    receiver_name,
+    measurement_queue,
+    vendor_id,
+    product_id,
+    serial_number,
+    baud,
+):
+    global printTimeGps
+    try:
+        with serial.Serial(port, baud, timeout=1) as ser:
+            print(f"{receiver_name} connected on {port}")
+
+            while not STOP_EVENT.is_set():
+                raw = ser.readline()
+
+                if not raw:
+                    continue
+                sentence = raw.decode(
+                            "ascii",
+                            errors="ignore"
+                        ).strip()
+
+                if printTimeGps < 10:
+                    printTimeGps += 1
+                else:
+                    
+                    printTimeGps = 0
+
+                measurement_queue.put_nowait(
+                    {
+                        "type": receiver_name,
+                        "host_timestamp_ns": time.monotonic_ns(),
+                        "usb_vendor_id": vendor_id,
+                        "usb_product_id": product_id,
+                        "usb_serial_number": serial_number,
+                        "nmea": sentence
+                    },
+                )
+
+    except serial.SerialException as e:
+        STOP_EVENT.set()
+        print(
+            f"{receiver_name} serial error: {e}",
+            file=sys.stderr
+        )
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("port")
-    parser.add_argument("-b", "--baud", type=int, default=115200)
-    parser.add_argument("-o", "--output", default="imu_log.csv")
-    parser.add_argument("--print-lines", action="store_true")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--web-port", type=int, default=8765)
-    parser.add_argument("--no-browser", action="store_true")
-    args = parser.parse_args()
+    args = parse_args()
 
-    lock = threading.Lock()
-    stop_event = threading.Event()
+    if args.queue_size <= 0:
+        print("Queue size must be greater than zero", file=sys.stderr)
+        return 1
 
-    state = {
-        "R": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-        "last_R": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-        "imu_time_us": 0,
-        "accuracy": 0.0,
-        "la": None,
-        "rv_count": 0,
-        "la_count": 0,
-        "line": "",
-        "la_host_time": 0.0,
-        "rv_host_time": 0.0,
-        "la_imu_time_us": 0,
-        "la_samples": [],
-    }
+    if args.batch_size <= 0:
+        print("Batch size must be greater than zero", file=sys.stderr)
+        return 1
 
-    thread = threading.Thread(
-        target=serial_worker,
-        args=(args, state, lock, stop_event),
-        daemon=True,
-    )
-    thread.start()
+    if args.flush_interval <= 0.0:
+        print("Flush interval must be greater than zero", file=sys.stderr)
+        return 1
 
-    server = ThreadingHTTPServer((args.host, args.web_port), make_handler(state, lock))
-    url = f"http://localhost:{args.web_port}"
+    measurement_queue = queue.Queue(maxsize=args.queue_size)
+    database_writer = DatabaseWriter(args.database, measurement_queue, args.batch_size, args.flush_interval)
+    database_writer.start()
 
-    print(f"viewer,{url}")
+    gps_ports = find_ublox_ports()
+    print("Detected u-blox receivers:")
+    for gps in gps_ports:
+        print(
+            f"  {gps['device']} "
+            f"VID={gps['vendor_id']} "
+            f"PID={gps['product_id']} "
+            f"SER={gps['serial_number']}"
+        )
 
-    if not args.no_browser:
-        open_browser(url)
+    if len(gps_ports) < 2:
+        raise RuntimeError(
+            f"Expected 2 u-blox receivers, found {len(gps_ports)}: {gps_ports}"
+        )
+
+    gps_threads = []
+
+    for receiver_id, port in enumerate(gps_ports, start=1):
+
+        receiver_name = f"GPS{receiver_id}"
+
+        thread = threading.Thread(
+            target=gps_reader,
+            args=(
+                port["device"],
+                receiver_name,
+                measurement_queue,
+                port["vendor_id"],
+                port["product_id"],
+                port["serial_number"],
+                args.gps_baud,
+            ),
+            daemon=True,
+            name=receiver_name,
+        )
+
+        thread.start()
+        gps_threads.append(thread)
+
+        print(
+            f"Started {receiver_name}: "
+            f"{port['device']} "
+            f"VID={port['vendor_id']} "
+            f"PID={port['product_id']} "
+            f"SER={port['serial_number']}"
+        )
+
+    exit_code = 0
 
     try:
-        server.serve_forever()
+        with serial.Serial(args.port, args.baud, timeout=1) as serial_port:
+            print(f"Connected to {args.port} at {args.baud} baud")
+            print(f"Logging asynchronously to {args.database}")
+
+            while True:
+                if database_writer.error is not None:
+                    raise RuntimeError(f"database writer failed: {database_writer.error}")
+
+                raw = serial_port.readline()
+
+                if not raw:
+                    continue
+
+                line = raw.decode("utf-8", errors="ignore").strip()
+                data = parse_line(line)
+
+                if data is None:
+                    continue
+
+                data["host_timestamp_ns"] = time.monotonic_ns()
+
+                try:
+                    measurement_queue.put(data, timeout=1)
+                except queue.Full:
+                    raise RuntimeError(
+                        f"database queue reached its {args.queue_size}-measurement limit"
+                    )
+
+                print_measurement(data)
+
+    except serial.SerialException as error:
+        print(f"Serial error: {error}", file=sys.stderr)
+        exit_code = 1
+
+    except RuntimeError as error:
+        print(f"Logging error: {error}", file=sys.stderr)
+        exit_code = 1
+
     except KeyboardInterrupt:
-        pass
+        print("\nStopping")
+
     finally:
-        stop_event.set()
-        server.shutdown()
-        server.server_close()
-        print("stopped")
+        STOP_EVENT.set()
+
+        for thread in gps_threads:
+            thread.join(timeout=2)
+
+        stop_database_writer(database_writer, measurement_queue)
+
+        if database_writer.error is not None:
+            print(f"Database error: {database_writer.error}", file=sys.stderr)
+            exit_code = 1
+        else:
+            print(f"Wrote {database_writer.rows_written} measurements to {args.database}")
+
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

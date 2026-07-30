@@ -56,6 +56,8 @@ static sh2service_config_t s_config = {
     20
 };
 
+static uint8_t SENSOR_CAL_MASK = SH2_CAL_ACCEL | SH2_CAL_GYRO | SH2_CAL_MAG;
+
 static sh2service_callback_t s_callback;
 static void *s_callback_ctx;
 
@@ -328,7 +330,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 
     update_valid_counts(&value, acc);
 
-    if (acc == 0 || acc == 1) {
+    if (acc < 2) {
         return;
     }
 
@@ -347,7 +349,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
         return;
     }
 
-    if (value.sensorId == SH2_ROTATION_VECTOR) {
+    if (value.sensorId == SH2_ROTATION_VECTOR) {    
         s_last_valid_event_us = now;
 
         out.type = SH2SERVICE_ROTATION_VECTOR;
@@ -357,6 +359,29 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
         out.data.rotation_vector.k = value.un.rotationVector.k;
         out.data.rotation_vector.real = value.un.rotationVector.real;
         out.data.rotation_vector.accuracy = value.un.rotationVector.accuracy;
+
+        // const float MIN_ACC = 0.25;
+        // const float MAX_ACC = 0.3;
+        // if(out.data.rotation_vector.accuracy <= MIN_ACC){
+        //     SENSOR_CAL_MASK &= ~SH2_CAL_MAG;
+        //     sh2_setCalConfig(SENSOR_CAL_MASK);
+        // } else if (out.data.rotation_vector.accuracy > MAX_ACC){
+        //     SENSOR_CAL_MASK |= SH2_CAL_MAG;
+        //     sh2_setCalConfig(SENSOR_CAL_MASK);
+        // }
+
+        enqueue_service_event(&out);
+        return;
+    }
+
+    if (value.sensorId == SH2_GYROSCOPE_CALIBRATED) {
+        s_last_valid_event_us = now;
+
+        out.type = SH2SERVICE_GYROSCOPE;
+
+        out.data.gyroscope.x = value.un.gyroscope.x;
+        out.data.gyroscope.y = value.un.gyroscope.y;
+        out.data.gyroscope.z = value.un.gyroscope.z;
 
         enqueue_service_event(&out);
         return;
@@ -501,7 +526,7 @@ static int configure_sensors(void)
 {
     int rc;
 
-    rc = sh2_setCalConfig(SH2_CAL_ACCEL | SH2_CAL_GYRO | SH2_CAL_MAG);
+    rc = sh2_setCalConfig(SENSOR_CAL_MASK);
     if (rc != 0) {
         return rc;
     }
@@ -514,6 +539,13 @@ static int configure_sensors(void)
     service_for_ms(100);
 
     rc = enable_sensor(SH2_ROTATION_VECTOR, s_config.report_interval_us);
+    if (rc != 0) {
+        return rc;
+    }
+
+    service_for_ms(100);
+
+    rc = enable_sensor(SH2_GYROSCOPE_CALIBRATED, s_config.report_interval_us);
     if (rc != 0) {
         return rc;
     }
@@ -719,6 +751,14 @@ static esp_err_t open_sh2(void)
     s_hal.getTimeUs = hal_get_time_us;
 
     int rc = sh2_open(&s_hal, event_callback, NULL);
+    if (rc != 0) {
+        return ESP_FAIL;
+    }
+
+    uint32_t unused = 0;
+
+    rc = sh2_setFrs(SYSTEM_ORIENTATION, &unused, 0);
+
     if (rc != 0) {
         return ESP_FAIL;
     }

@@ -5,6 +5,9 @@
 #include <stdexcept>
 #include <thread>
 
+#define DEFAULT_RADAR_HEIGHT_METERS 3
+#define MAX_ALLOWED_ENU_DEVIATION_FROM_ORIGIN_METERS 100
+
 RadarPositionNavigationController::RadarPositionNavigationController(const _KalmanValues& config,
                                                                      std::shared_ptr<DatabaseManager> databaseManager,
                                                                      std::unique_ptr<IMUSerialPortReader> imuSerialPortReader,
@@ -23,8 +26,6 @@ RadarPositionNavigationController::RadarPositionNavigationController(const _Kalm
         imuManager->SensorCallback(optRv, optLa, optRr);
     };
     this->m_imuSerialPortReader->InstallCallback(imuSerialCallback);
-
-    this->m_lastUTMZone = -1;
 }
 
 RadarPositionNavigationController::~RadarPositionNavigationController() {
@@ -39,12 +40,7 @@ void RadarPositionNavigationController::StartAndConfigureRadarPNT(double lat0, d
     this->StopRadarPNT();
 
     if (!this->m_isKFConfigured) {
-        this->ConfigureKalmanFilter(lat0,
-                                    lon0,
-                                    m_config.gpsChiSqLowerBound,
-                                    m_config.gpsChiSqUpperBound,
-                                    m_config.imuChiSqLowerBound,
-                                    m_config.imuChiSqUpperBound);
+        this->ConfigureKalmanFilter(lat0, lon0);
 
         this->m_isKFConfigured = true;
     }
@@ -70,78 +66,20 @@ bool RadarPositionNavigationController::IsRunning() const {
     return m_running;
 }
 
-void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0, double gpsLowerPercentile,
-                                                              double gpsUpperPercentile, double imuLowerPercentile,
-                                                              double imuUpperPercentile) {
+void RadarPositionNavigationController::ConfigureKalmanFilter(double lat0, double lon0) {
     Vector6d x0;
     x0 << lon0, lat0, 1e-15, 1e-15, 1e-16, 1e-16;
 
     Matrix6d P0 = Matrix6d::Zero();
-    P0(0, 0) = 20.0001;
-    P0(1, 1) = 20;
-    P0(2, 2) = 12.0001;
-    P0(3, 3) = 12;
-    P0(4, 4) = 9;
-    P0(5, 5) = 9.0001;
+    P0.diagonal() << 25.0, 25.0, 0.59, 1.0, 0.4, 0.5;
 
-    Eigen::Matrix<double, 2, 2> R0_GPS = Eigen::Matrix<double, 2, 2>::Zero();
-    R0_GPS(0, 0) = 3;
-    R0_GPS(1, 1) = 3.0001;
-
-    Eigen::Matrix<double, 2, 2> R0_IMU = Eigen::Matrix<double, 2, 2>::Zero();
-    R0_IMU(0, 0) = 4.0001;
-    R0_IMU(1, 1) = 4;
-
-    Matrix6d Q0 = Matrix6d::Zero();
-    Q0(0, 0) = 1.0001;
-    Q0(1, 1) = 1;
-    Q0(2, 2) = 2.0001;
-    Q0(3, 3) = 2;
-    Q0(4, 4) = 3;
-    Q0(5, 5) = 3.0001;
+    Eigen::Matrix<double, 4, 4> R0 = Eigen::Matrix<double, 4, 4>::Zero();
+    R0.diagonal() << 0.05000000001, 0.05, 0.009001, 0.01;
 
     this->m_latestX = x0;
     this->m_latestP = P0;
 
-    auto checkPercentileBounds = [](double percentile) { return percentile <= 0.0 || percentile >= 1.0; };
-
-    // Calculate Chi SQ stats for df 2 and 4 at percentiles
-    if (checkPercentileBounds(gpsLowerPercentile) ||
-        checkPercentileBounds(gpsUpperPercentile) ||
-        checkPercentileBounds(imuLowerPercentile) ||
-        checkPercentileBounds(imuUpperPercentile)) {
-        throw std::runtime_error("One or more Fuzzy fusion Chi SQ percentiles are <= 0 and/or >= 1");
-    }
-
-    if (gpsLowerPercentile >= gpsUpperPercentile) {
-        throw std::runtime_error("GPS Chi SQ lower percentile is >= upper percentile");
-    }
-
-    if (imuLowerPercentile >= imuUpperPercentile) {
-        throw std::runtime_error("IMU Chi SQ lower percentile is >= upper percentile");
-    }
-
-    double chiSquaredBetaLowerBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsLowerPercentile);
-    double chiSquaredBetaUpperBound_GPS = boost::math::quantile(boost::math::chi_squared(2), gpsUpperPercentile);
-
-    double chiSquaredBetaLowerBound_IMU = boost::math::quantile(boost::math::chi_squared(2), imuLowerPercentile);
-    double chiSquaredBetaUpperBound_IMU = boost::math::quantile(boost::math::chi_squared(2), imuUpperPercentile);
-
-    this->m_kf = IMUGPSFusionKF_2D_ConstantAcceleration(x0,
-                                                        P0,
-                                                        R0_GPS,
-                                                        R0_IMU,
-                                                        Q0,
-                                                        chiSquaredBetaLowerBound_GPS,
-                                                        chiSquaredBetaLowerBound_IMU,
-                                                        chiSquaredBetaUpperBound_GPS,
-                                                        chiSquaredBetaUpperBound_IMU,
-                                                        m_config.gpsN,
-                                                        m_config.gpsL,
-                                                        m_config.imuN,
-                                                        m_config.imuL,
-                                                        m_config.qN,
-                                                        m_config.qL);
+    this->m_kf = IMUGPSFusionKF(x0, P0, R0);
 }
 
 void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matrix<double, 2, 1> &imuVec) {
@@ -150,15 +88,23 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matr
     double reconfigLon = 0.0;
     std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
     {
-        if (!this->m_isKFConfigured.load() || this->m_lastUTMZone == -1) {
+        if (!this->m_isKFConfigured) {
             return;
         }
 
         try {
-            if (dt <= 0 || dt > 0.5) {
+            if (dt <= 0 || dt > 1.0) {
                 dt = 0.01;
             }
             std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, imuVec);
+
+            const double previousOriginLon = this->m_originLatLon.first;
+            const double previousOriginLat = this->m_originLatLon.second;
+            const bool isENUReset = this->ValidateAndUpdateENUOrigin(output.first);
+            
+            if (isENUReset) {
+                this->RestKFOrigin(previousOriginLat, previousOriginLon);
+            }
 
             this->m_latestX = output.first;
             this->m_latestP = output.second;
@@ -172,7 +118,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matr
                 double lon = this->m_latestX(0, 0);
 
                 if (!std::isfinite(lat) || !std::isfinite(lon)) {
-                    this->m_isKFConfigured.store(false);
+                    this->m_isKFConfigured = false;
                     return;
                 }
                 // note: original was lat0, lon0
@@ -184,12 +130,7 @@ void RadarPositionNavigationController::KFCallbackImuOnly(double dt, Eigen::Matr
     }
 
     if (needsReconfig) {
-        this->ConfigureKalmanFilter(reconfigLat,
-                                    reconfigLon,
-                                    m_config.gpsChiSqLowerBound,
-                                    m_config.gpsChiSqUpperBound,
-                                    m_config.imuChiSqLowerBound,
-                                    m_config.imuChiSqUpperBound);
+        this->ConfigureKalmanFilter(reconfigLat, reconfigLon);
     }
 }
 
@@ -200,46 +141,39 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Eigen::Matr
     {
         std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
-        if (!this->m_isKFConfigured.load()) {
+        if (!this->m_isKFConfigured) {
             return;
         }
 
         try {
-            if (dt <= 0 || dt > 0.5) {
+            if (dt <= 0 || dt > 1.0) {
                 dt = 0.01;
             }
 
-            auto utmGps = IMUUtils::WGS84_to_UTM(gpsVec(1, 0), gpsVec(0, 0));
+            double E;
+            double N;
+            double previousOriginLon = this->m_originLatLon.first;
+            double previousOriginLat = this->m_originLatLon.second;
+            bool isENUReset = this->ConvertGPSToENU(E, N, gpsVec(0, 0), gpsVec(1, 0));
 
-            gpsVec(0, 0) = utmGps[0];
-            gpsVec(1, 0) = utmGps[1];
-
-            int zone = utmGps[2];
-
-            if (this->m_lastUTMZone != zone && this->m_lastUTMZone != -1) {
-                this->m_kf.UpdatePosition(utmGps[0], utmGps[1]);
+            if (isENUReset) {
+                this->RestKFOrigin(previousOriginLat, previousOriginLon);
             }
 
-            this->m_lastUTMZone = zone;
+            gpsVec << E, N;
 
             std::pair<Vector6d, Matrix6d> output = this->m_kf.Step(dt, gpsVec, imuVec);
 
-            // Check if the KF has surpassed the 
-            auto wgs84 = IMUUtils::UTM_to_WGS84(output.first(0, 0), output.first(1, 0), zone, utmGps[3]);
-            auto utm = IMUUtils::WGS84_to_UTM(wgs84[0], [1]);
-
-            zone = utm[2];
-
-            if (this->m_lastUTMZone != zone) {
-                this->m_kf.UpdatePosition(utm[0], utm[1]);
+            previousOriginLon = this->m_originLatLon.first;
+            previousOriginLat = this->m_originLatLon.second;
+            isENUReset = this->ValidateAndUpdateENUOrigin(output.first);
+            
+            if (isENUReset) {
+                this->RestKFOrigin(previousOriginLat, previousOriginLon);
             }
-
-            this->m_lastUTMZone = zone;
 
             this->m_latestX = output.first;
             this->m_latestP = output.second;
-
-            std::cout << m_latestX << std::endl;
 
             this->m_databaseManager->EnqueueEkfOutput(m_latestX, m_latestP);
         } catch (const std::exception &e) {
@@ -250,7 +184,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Eigen::Matr
                 double lon = this->m_latestX(0, 0);
 
                 if (!std::isfinite(lat) || !std::isfinite(lon)) {
-                this->m_isKFConfigured.store(false);
+                this->m_isKFConfigured = false;
                 return;
                 }
                 // note: original was lat0, lon0
@@ -261,12 +195,7 @@ void RadarPositionNavigationController::KFCallbackWithGps(double dt, Eigen::Matr
         }
     }
     if (needsReconfig) {
-        this->ConfigureKalmanFilter(reconfigLat,
-                                    reconfigLon,
-                                    m_config.gpsChiSqLowerBound,
-                                    m_config.gpsChiSqUpperBound,
-                                    m_config.imuChiSqLowerBound,
-                                    m_config.imuChiSqUpperBound);
+        this->ConfigureKalmanFilter(reconfigLat, reconfigLon);
     }
 }
 
@@ -279,9 +208,80 @@ void RadarPositionNavigationController::TotalDestruction() {
 
     std::lock_guard<std::mutex> kfStepGuard(this->m_kFUpdateMutex);
 
-    this->m_kf.Clean();
     this->m_isKFConfigured = false;
 
     this->m_latestX = Vector6d::Zero();
     this->m_latestP = Matrix6d::Zero();
 }
+
+bool RadarPositionNavigationController::ConvertGPSToENU(double& E, double& N, double lat, double lon) {
+    if (!this->m_hasOrigin) {
+        this->m_originLatLon = {lon, lat};
+    }
+
+    double up;
+    IMUUtils::WGS84_To_ENU(this->m_originLatLon.first, this->m_originLatLon.second, DEFAULT_RADAR_HEIGHT_METERS, lon, lat, DEFAULT_RADAR_HEIGHT_METERS, E, N, up);
+
+    if (!this->m_hasOrigin) {
+        this->m_originEN = {E, N};
+        this->m_hasOrigin = true;
+    }
+
+    if (std::hypot(E - this->m_originEN.first, N - this->m_originEN.second) > MAX_ALLOWED_ENU_DEVIATION_FROM_ORIGIN_METERS) {
+        this->m_hasOrigin = false;
+        this->ConvertGPSToENU(E, N, lat, lon);
+
+        return true;
+    }
+
+    return false;
+}
+
+bool RadarPositionNavigationController::ValidateAndUpdateENUOrigin(Eigen::Matrix<double, 6, 1> &x) {
+    if (!this->m_hasOrigin) {
+        throw std::runtime_error("No origin available and attempting to update ENU origin off of KF.");
+    }
+
+    double E = x(0, 0);
+    double N = x(1, 0);
+
+    if (std::hypot(E - this->m_originEN.first, N - this->m_originEN.second) > MAX_ALLOWED_ENU_DEVIATION_FROM_ORIGIN_METERS) {
+        double lat;
+        double lon;
+
+        this->ConvertKFStateToWGS84(lat, lon, x);
+
+        this->m_originLatLon = {lon, lat};
+        
+        double up;
+        IMUUtils::WGS84_To_ENU(this->m_originLatLon.first, this->m_originLatLon.second, DEFAULT_RADAR_HEIGHT_METERS, lon, lat, DEFAULT_RADAR_HEIGHT_METERS, E, N, up);
+
+        this->m_originEN = {E, N};
+
+        return true;
+    }
+
+    return false;
+}
+
+void RadarPositionNavigationController::ConvertKFStateToWGS84(double& lat, double& lon, Eigen::Matrix<double, 6, 1> &x) {
+    double E = x(0, 0);
+    double N = x(1, 0);
+
+    double _;
+    IMUUtils::ENU_To_WGS84(E, N, DEFAULT_RADAR_HEIGHT_METERS, this->m_originLatLon.first, this->m_originLatLon.second, DEFAULT_RADAR_HEIGHT_METERS, lat, lon, _);
+}
+
+void RadarPositionNavigationController::RestKFOrigin(double oldLatOrigin, double oldLonOrigin) {
+    double kfLat;
+    double kfLon;
+    this->ConvertKFStateToWGS84(kfLat, kfLon, this->m_latestX);
+
+    double up;
+    double E;
+    double N;
+    IMUUtils::WGS84_To_ENU(this->m_originLatLon.first, this->m_originLatLon.second, DEFAULT_RADAR_HEIGHT_METERS, kfLon, kfLat, DEFAULT_RADAR_HEIGHT_METERS, E, N, up);
+
+    this->m_kf.UpdatePosition(E, N, oldLatOrigin, oldLonOrigin, this->m_originLatLon.second, this->m_originLatLon.first);
+}
+

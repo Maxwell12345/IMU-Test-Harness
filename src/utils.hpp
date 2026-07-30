@@ -24,6 +24,12 @@ namespace IMUUtils
 {
     inline double RAD_PER_DEGREE = std::numbers::pi / 180.0;
     inline double DEGREE_PER_RAD = 180.0 / std::numbers::pi;
+    constexpr double SEMI_MAJOR_AXIS_M = 6'378'137.0;
+    constexpr double SEMI_MINOR_AXIS_M = 6'356'752.3;
+    constexpr double ECCENTRICITY_SQUARED = 1.0 - ((SEMI_MINOR_AXIS_M * SEMI_MINOR_AXIS_M) / (SEMI_MAJOR_AXIS_M * SEMI_MAJOR_AXIS_M));
+    constexpr double FLATTENING = 1 - (SEMI_MINOR_AXIS_M / SEMI_MAJOR_AXIS_M);
+    constexpr double piOver180 = 0.017453292519943;
+    constexpr double one80OverPi = 57.29577951308232;
 
     struct GpsUpdate {
         std::chrono::steady_clock::time_point rxTimestamp;
@@ -278,6 +284,176 @@ namespace IMUUtils
         return degrees;
     };
 
+    /*
+     * @brief Calculates the vertical radius of the elipse
+     *
+     * @param [in] sinLat is the sin(lat) evaluated outside of the function
+     * 
+     * @return the vertical radius of the elipse in meters
+    */
+    inline double PrimeVerticalRadiusOfCurvature(double sinLat) {
+        double denominator = std::sqrt(1 - ECCENTRICITY_SQUARED * sinLat * sinLat);
+        return SEMI_MAJOR_AXIS_M / denominator;
+    }
+
+    /*
+     * @brief Converts lat, lon, height in WGS84 to Earth Centered, Earth Fixed coordinate in meters
+     *
+     * @param [in] lambda   longitude in degrees
+     * @param [in] phi      latitude in degrees
+     * @param [in] height   height in meters
+     * @param [out] X       X coordinate in ECEF in meters
+     * @param [out] Y       Y coordinate in ECEF in meters
+     * @param [out] Z       Z coordinate in ECEF in meters
+    */
+    inline void WGS84_To_ECEF(const double lambda, const double phi, const double height, double& X, double& Y, double& Z) {
+        const double lonRad = lambda * piOver180;
+        const double latRad = phi * piOver180;
+
+        const double sinLat = std::sin(latRad);
+        const double cosLat = std::cos(latRad);
+        const double sinLon = std::sin(lonRad);
+        const double cosLon = std::cos(lonRad);
+
+        const double radius = PrimeVerticalRadiusOfCurvature(sinLat);
+
+        X = ( radius + height ) * cosLat * cosLon;
+        Y = ( radius + height ) * cosLat * sinLon;
+        Z = ( (1.0 - ECCENTRICITY_SQUARED) * radius + height ) * sinLat;
+    }
+
+    /*
+     * @brief Converts Geodetic WGS84 coordinates to ENU coordinates in meters
+     *
+     * @param [in] lambdaR  longitude of reference point in degrees
+     * @param [in] phiR     latitude of reference point in degrees
+     * @param [in] heightR  height of reference point in meters
+     * @param [in] lambda   longitude of destination point in degrees
+     * @param [in] phi      latitude of destination point in degrees
+     * @param [in] height   height of destination point in meters
+     * @param [out] E       E coordinate in ENU frame in meters
+     * @param [out] N       N coordinate in ENU frame in meters
+     * @param [out] U       U coordinate in ENU frame in meters
+    */
+    inline void WGS84_To_ENU(const double lambdaR, const double phiR, const double heightR, const double lambda, const double phi, const double height, double& E, double& N, double& U) {
+        const double lonRefRad = lambdaR * piOver180;
+        const double latRefRad = phiR * piOver180;
+        const double lonDestRad = lambda * piOver180;
+        const double latDestRad = phi * piOver180;
+    
+        const double cosLatRef = std::cos(latRefRad);
+        const double cosLonRef = std::cos(lonRefRad);
+        const double sinLatRef = std::sin(latRefRad);
+        const double sinLonRef = std::sin(lonRefRad);
+        const double cosLatDest = std::cos(latDestRad);
+        const double cosLonDest = std::cos(lonDestRad);
+        const double sinLatDest = std::sin(latDestRad);
+        const double sinLonDest = std::sin(lonDestRad);
+
+        const double NRef = PrimeVerticalRadiusOfCurvature(sinLatRef);
+        const double NDest = PrimeVerticalRadiusOfCurvature(sinLatDest);
+
+        const double dX = (NDest + height) * cosLatDest * cosLonDest - (NRef + heightR) * cosLatRef * cosLonRef;
+        const double dY = (NDest + height) * cosLatDest * sinLonDest - (NRef + heightR) * cosLatRef * sinLonRef;
+        const double dZ = ((1 - ECCENTRICITY_SQUARED) * NDest + height) * sinLatDest - ((1 - ECCENTRICITY_SQUARED) * NRef + heightR) * sinLatRef;
+    
+        E = -dX * sinLonRef + dY * cosLonRef;
+        N = -dX * sinLatRef * cosLonRef - dY * sinLatRef * sinLonRef + dZ * cosLatRef;
+        U = dX * cosLatRef * cosLonRef + dY * cosLatRef * sinLonRef + dZ * sinLatRef;
+    }
+
+    /*
+     * @brief Converts ENU coordinates in meters to Geodetic WGS84 coordinates
+     *
+     * @param [in] E            E coordinate in ENU frame in meters
+     * @param [in] N            N coordinate in ENU frame in meters
+     * @param [in] U            U coordinate in ENU frame in meters
+     * @param [in] lambdaR      longitude of reference point in degrees
+     * @param [in] phiR         latitude of reference point in degrees
+     * @param [in] heightR      height of reference point in meters
+     * @param [out] WGS_phi     WGS84 latitude in degrees
+     * @param [out] WGS_lambda  WGS84 longitude in degrees
+     * @param [out] height      WGS84 altitude in degrees
+    */
+    inline void ENU_To_WGS84(const double E, const double N, const double U, const double lambdaR, const double phiR, const double heightR, double& WGS_phi, double& WGS_lambda, double& height) {
+        constexpr double oneMinusESq = 1.0 - ECCENTRICITY_SQUARED;
+        constexpr double aSqMinusBSq = SEMI_MAJOR_AXIS_M * SEMI_MAJOR_AXIS_M - SEMI_MINOR_AXIS_M * SEMI_MINOR_AXIS_M;
+        constexpr double aSq = SEMI_MAJOR_AXIS_M * SEMI_MAJOR_AXIS_M;
+        constexpr double bSq = SEMI_MINOR_AXIS_M * SEMI_MINOR_AXIS_M;
+        constexpr double ePrimSq = ( aSq - bSq ) / bSq;
+        constexpr double eSqSq = ECCENTRICITY_SQUARED * ECCENTRICITY_SQUARED;
+
+        const double lambdaRad = lambdaR * piOver180;
+        const double phiRad = phiR * piOver180;
+        const double sinLambda = std::sin(lambdaRad);
+        const double cosLambda = std::cos(lambdaRad);
+        const double sinPhi = std::sin(phiRad);
+        const double cosPhi = std::cos(phiRad);
+        
+        // Convert to ECEF
+        const double NLocal = PrimeVerticalRadiusOfCurvature(sinPhi);
+        const double Xr = (NLocal + heightR) * cosPhi * cosLambda;
+        const double Yr = (NLocal + heightR) * cosPhi * sinLambda;
+        const double Zr = ((1 - ECCENTRICITY_SQUARED) * NLocal + heightR) * sinPhi;
+        const double Xp = -E * sinLambda - N * sinPhi * cosLambda + U * cosPhi * cosLambda + Xr;
+        const double Yp = E * cosLambda - N * sinPhi * sinLambda + U * cosPhi * sinLambda + Yr;
+        const double Zp = N * cosPhi + U * sinPhi + Zr;
+
+        // Convert to WGS84
+        const double pSq = Xp * Xp + Yp * Yp;
+        const double p = std::sqrt(pSq);
+        const double ZSq = Zp * Zp;
+
+        const double F = 54.0 * bSq * ZSq;
+        const double G = pSq + oneMinusESq * ZSq - ECCENTRICITY_SQUARED * aSqMinusBSq;
+
+        const double c = eSqSq * F * pSq / ( G * G * G );
+        const double s = std::cbrt( 1.0 + c + std::sqrt( c * c + 2.0 * c ) );
+        const double kappa = s + 1.0 + ( 1.0 / s );
+
+        const double P = F / ( 3.0 * kappa * kappa * G * G );
+        const double Q = std::sqrt( 1.0 + 2.0 * eSqSq * P );
+
+        const double r0 = ( -P * ECCENTRICITY_SQUARED * p ) / ( 1.0 + Q ) + 
+                          std::sqrt( 0.5 * aSq * ( 1.0 + ( 1.0 / Q ) ) - ( P * oneMinusESq * ZSq ) / ( Q * ( 1.0 + Q ) ) - 0.5 * P * pSq );
+
+        const double innerRootUTerm = p - ECCENTRICITY_SQUARED * r0;
+        const double innerRootUSqTerm = innerRootUTerm * innerRootUTerm;
+        const double V = std::sqrt( innerRootUSqTerm + oneMinusESq * ZSq );
+
+        const double bSqOverAV = bSq / ( SEMI_MAJOR_AXIS_M * V );
+
+        const double z0 = bSqOverAV * Zp;
+
+        height = std::sqrt( innerRootUSqTerm + ZSq ) * ( 1.0 - bSqOverAV );
+        WGS_phi = std::atan2( Zp + ePrimSq * z0 , p ) * one80OverPi;
+        WGS_lambda = std::atan2( Yp, Xp ) * one80OverPi;
+    }
+    
+    inline void LocalENUVectorToOriginENU(double& E0, double& N0, double& U0, const double E, const double N, const double U, const double currentLon, const double currentLat, const double originLon, const double originLat) {
+        const double currentLonRad = currentLon * piOver180;
+        const double currentLatRad = currentLat * piOver180;
+        const double originLonRad = originLon * piOver180;
+        const double originLatRad = originLat * piOver180;
+
+        const double sinCurrentLon = std::sin(currentLonRad);
+        const double cosCurrentLon = std::cos(currentLonRad);
+        const double sinCurrentLat = std::sin(currentLatRad);
+        const double cosCurrentLat = std::cos(currentLatRad);
+        const double sinOriginLon = std::sin(originLonRad);
+        const double cosOriginLon = std::cos(originLonRad);
+        const double sinOriginLat = std::sin(originLatRad);
+        const double cosOriginLat = std::cos(originLatRad);
+
+        const double X = -E * sinCurrentLon - N * sinCurrentLat * cosCurrentLon + U * cosCurrentLat * cosCurrentLon;
+        const double Y = E * cosCurrentLon - N * sinCurrentLat * sinCurrentLon + U * cosCurrentLat * sinCurrentLon;
+        const double Z = N * cosCurrentLat + U * sinCurrentLat;
+
+        E0 = -X * sinOriginLon + Y * cosOriginLon;
+        N0 = -X * sinOriginLat * cosOriginLon - Y * sinOriginLat * sinOriginLon + Z * cosOriginLat;
+        U0 = X * cosOriginLat * cosOriginLon + Y * cosOriginLat * sinOriginLon + Z * sinOriginLat;
+    }
+
     struct ENUAccel {
         double east;
         double north;
@@ -328,138 +504,6 @@ namespace IMUUtils
         return {trueEast, trueNorth, up};
     }
 
-    /**
-     * @brief Converts lat/lon into mercator projected units in meters.
-     *
-     * @param lat WGS84 latitude in degrees.
-     * @param lon WGS84 longitude in degrees.
-     *
-     * @return {E, N, zone, N0} mercator project in meters. The E component is the longitudinal 
-     *                      axis, the N component is the latitudinal axis, the zone is the
-     *                      UTM zone, and N0 is the northern hemosphere coeff required for inverse 
-     *                      calculations.
-     */
-    inline std::array<double, 4> WGS84_to_UTM(double lat, double lon) {
-        // paramters
-        constexpr double piOver180 = std::numbers::pi_v<double> / 180.0;
-        constexpr double a = 6378137.0;
-        constexpr double k0 = 0.9996;
-        constexpr double eSq = 0.0066943799901413169961;
-        constexpr double ePrimeSq = 0.006739496742276;
-        constexpr double r = 6367449.1458234153093;
-        constexpr double U0 = -32144.479935001393;
-        constexpr double U2 = 135.366898504447;
-        constexpr double U4 = -0.709321656818;
-        constexpr double U6 = 0.003986100961;
-        constexpr double E0 = 500000.0;
-
-        // Zone calculation
-        int zone = std::clamp(static_cast<int>(std::floor((lon + 180.0) / 6.0)) + 1, 1, 60);
-
-        if (lat >= 56.0 && lat < 64.0 && lon >= 3.0 && lon < 12.0) {
-            zone = 32;
-        }
-
-        if (lat >= 72.0 && lat < 84.0) {
-            if (lon >= 0.0 && lon < 9.0) zone = 31;
-            else if (lon >= 9.0 && lon < 21.0) zone = 33;
-            else if (lon >= 21.0 && lon < 33.0) zone = 35;
-            else if (lon >= 33.0 && lon < 42.0) zone = 37;
-        }
-
-        // calculated coefficients
-        const double phi0 = 0.0;
-        const double lambda0 = (6.0 * zone - 183.0) * piOver180;
-        const double N0 = lat < 0.0 ? 10000000.0 : 0.0;
-
-        const double phi = lat * piOver180;
-        const double lambda = lon * piOver180;
-
-        const double L = (lambda - lambda0) * std::cos(phi);
-        const double LSq = L * L;
-        const double nSq = ePrimeSq * std::pow(std::cos(phi), 2);
-        const double t = std::tan(phi);
-        const double tSq = t * t;
-        const double tSqSq = tSq * tSq;
-        const double sinPhi = std::sin(phi);
-        const double cosPhi = std::cos(phi);
-        const double cosPhiSq = cosPhi * cosPhi;
-        const double A1 = k0 * a / std::sqrt(1.0 - eSq * std::pow(std::sin(phi),2));
-        const double A2 = 0.5 * A1 * t;
-        const double A3 = 0.166666666666666667 * ( 1 - tSq + nSq );
-        const double A4 = 0.083333333333333333 * ( 5 - tSq + nSq * ( 9 + 4 * nSq ) );
-        const double A5 = 0.008333333333333333 * ( 5 - 18 * tSq + tSqSq + nSq * ( 14 - 58 * tSq ) );
-        const double A6 = 0.002777777777777778 * ( 61 - 58 * tSq + tSqSq + nSq * ( 270 - 330 * tSq ) );
-        const double A7 = 0.000198412698413000 * ( 61 - 479 * tSq + 179 * tSqSq - ( tSqSq * tSq ) );
-        const double omega = phi * r + sinPhi * cosPhi * ( U0 + U2 * cosPhiSq + U4 * ( cosPhiSq * cosPhiSq ) + U6 * ( cosPhiSq * cosPhiSq * cosPhiSq ) );
-        const double S = k0 * omega;
-        const double S0 = 0.0;
-
-        const double E = E0 + A1 * L * ( 1.0 + LSq * (A3 + LSq * ( A5 + A7 * LSq ) ) );
-        const double N = N0 + S - S0 + A2 * LSq * ( 1.0 + LSq * ( A4 + A6 * LSq ) );
-
-        return {E, N, static_cast<double>(zone), N0};
-    }
-
-    /**
-     * @brief Converts UTM x, y, and zone into WGS84 lat/lon.
-     *
-     * @param x UTM x.
-     * @param y UTM y.
-     * @param zone UTM zone.
-     * @param N0 Northern Hemisphere coeff.
-     *
-     * @return {lat, lon} in WGS84 standard.
-     */
-    inline std::array<double, 2> UTM_to_WGS84(double E, double N, double zone, double N0) {
-        // parameters
-        constexpr double piOver180 = std::numbers::pi_v<double> / 180.0;
-        constexpr double one80OverPi = 180.0 / std::numbers::pi_v<double>;
-        constexpr double a = 6378137.0;
-        constexpr double k0 = 0.9996;
-        constexpr double r = 6367449.1458234153093;
-        constexpr double eSq = 0.0066943799901413169961;
-        constexpr double ePrimeSq = 0.006739496742276;
-        constexpr double S0 = 0.0;
-
-        const double V0 = ( ePrimeSq / 4 ) * ( ( ( ( 16384.0 * ePrimeSq - 11025.0 ) * ( ePrimeSq / 64.0 ) + 175.0 ) * ( ePrimeSq / 4.0 ) - 45 ) * ( ePrimeSq / 16 ) + 3 ); 
-        const double V2 = ( ( ePrimeSq * ePrimeSq ) / 32 ) * ( ( ( ( -20464721.0 / 120.0 ) * ePrimeSq + 19413.0 ) * ( ePrimeSq / 8.0 ) - 1477.0 ) * ( ePrimeSq / 32.0 ) + 21.0 );
-        const double V4 = ( ( ePrimeSq * ePrimeSq * ePrimeSq ) / 192.0 ) * ( ( ( 4737141.0 / 28.0 ) * ePrimeSq - 17121.0 ) * ( ePrimeSq / 32.0 ) + 151.0 );
-        const double V6 = ( ( ePrimeSq * ePrimeSq * ePrimeSq * ePrimeSq ) / 1024.0 ) * ( ( -427277.0 / 35.0 ) * ePrimeSq + 1097.0 );
-
-        const double omega = ( N - N0 + S0 ) / ( k0 * r );
-        const double cosOmega = std::cos( omega );
-        const double cosOmegaSq = cosOmega * cosOmega;
-        const double cosOmegaSqSq = cosOmegaSq * cosOmegaSq;
-
-        const double sinOmega = std::sin( omega );
-        const double phiF = omega + ( sinOmega * cosOmega ) * ( V0 + V2 * cosOmegaSq + V4 * cosOmegaSqSq + V6 * cosOmegaSq * cosOmegaSqSq );
-        const double sinPhiF = std::sin( phiF );
-        const double cosPhiF = std::cos( phiF );
-        
-        const double Rf = ( k0 * a ) / std::sqrt( 1 - eSq * sinPhiF * sinPhiF );
-        const double Q = ( E - 500000.0 ) / Rf;
-        const double QSq = Q * Q;
-
-        const double tf = std::tan( phiF );
-        const double NfSq = ePrimeSq * cosPhiF * cosPhiF;
-
-        const double tfSq = tf * tf;
-        const double tfSqSq = tfSq * tfSq;
-
-        const double B2 = -0.5 * tf * ( 1 + NfSq );
-        const double B3 = -( 1.0 / 6.0 ) * ( 1 + 2 * tfSq + NfSq );
-        const double B4 = -( 1.0 / 12.0 ) * ( 5.0 + 3.0 * tfSq + NfSq * ( 1.0 - 9.0 * tfSq ) - 4.0 * NfSq * NfSq );
-        const double B5 = ( 1.0 / 120.0 ) * ( 5.0 + 28.0 * tfSq + 24.0 * tfSqSq + NfSq * ( 6.0 + 8.0 * tfSq ) );
-        const double B6 = ( 1.0 / 360.0 ) * ( 61.0 + 90.0 * tfSq + 45.0 * tfSqSq + NfSq * ( 46.0 - 252.0 * tfSq - 90.0 * tfSqSq ) );
-        const double B7 = -( 1.0 / 5040.0 ) * ( 61.0 + 662.0 * tfSq + 1320.0 * tfSqSq + 720.0 * tfSq * tfSqSq );
-
-        const double phi = phiF + B2 * QSq * ( 1 + QSq * ( B4 + B6 * QSq ) );
-        const double L = Q * ( 1 + QSq * ( B3 + QSq * ( B5 + B7 * QSq * Q ) ) );
-        const double lambda = (6.0 * zone - 183.0) * piOver180 + L / cosPhiF;
-
-        return {phi * one80OverPi, lambda * one80OverPi};
-    }
 }; // namespace IMUUtils
 
 #endif // IMU_UTILS_HPP

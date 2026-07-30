@@ -177,3 +177,23 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
 
     return host_serial_write_all(buffer, length);
 }
+
+esp_err_t send_rotation_rate_t(const rotation_rate_t *rotationRate) {
+    if (rotationRate == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[50] = {0};
+    size_t length = 0;
+
+    buffer[length++] = MAGIC_ENCODER;
+    buffer[length++] = ROTATION_RATE_T_ID;
+    buffer[length++] = ROTATION_RATE_PAYLOAD_BYTES;
+
+    memcpy(buffer+length, rotation, sizeof(rotation_rate_t));
+    length += sizeof(rotation_rate_t);
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    return host_serial_write_all(buffer, length);
+}

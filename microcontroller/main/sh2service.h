@@ -13,6 +13,7 @@
 typedef enum {
     SH2SERVICE_LINEAR_ACCELERATION = 1,
     SH2SERVICE_ROTATION_VECTOR = 2,
+    SH2SERVICE_GYROSCOPE = 3
 } sh2service_event_type_t;
 
 typedef struct {
@@ -30,12 +31,19 @@ typedef struct {
 } sh2service_rotation_vector_t;
 
 typedef struct {
+    float x;
+    float y;
+    float z;
+} sh2service_gyroscope_t;
+
+typedef struct {
     sh2service_event_type_t type;
     uint64_t timestamp_us;
 
     union {
         sh2service_linear_acceleration_t linear_acceleration;
         sh2service_rotation_vector_t rotation_vector;
+        sh2service_gyroscope_t gyroscope;
     } data;
 } sh2service_event_t;
 
