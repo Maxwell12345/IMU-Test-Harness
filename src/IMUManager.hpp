@@ -207,7 +207,7 @@ private:
      *
      * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
      */
-    Vector6d BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+    Eigen::Matrix<double, 2, 1> BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                        const Raw_Accelerometer &la,
                                        const Raw_RotationRate &rr,
                                        const GpsUpdate &gps,

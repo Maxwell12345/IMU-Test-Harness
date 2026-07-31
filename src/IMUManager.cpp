@@ -96,7 +96,7 @@ void IMUManager::DispatchToEkf() {
     }
 
     int year = GetCurrentYear();
-    Vector6d zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
+    Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
                                               linearAccelerationSnapshot,
                                               rotationRateSnapshot,
                                               gpsUpdateSnapshot.value(),
@@ -195,7 +195,7 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildGpsMeasurementVector(const GpsUpdat
     return gpsVector;
 }
 
-Vector6d IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
+Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                                const Raw_Accelerometer &la,
                                                const Raw_RotationRate &rr,
                                                const GpsUpdate &gps, int currentYear) {

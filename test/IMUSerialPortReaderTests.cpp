@@ -170,7 +170,7 @@ TEST(IMUSerialPortTest, CallbackIgnoresNonStartByte) {
 
     IMUSerialPortReader reader(config, std::move(port));
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>) {
             called = true;
         }
     );
@@ -195,12 +195,14 @@ TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
+    std::optional<Raw_RotationRate> receivedRate;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
+        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel, std::optional<Raw_RotationRate> rate) {
             called = true;
             receivedRot = rot;
             receivedAccel = accel;
+            receivedRate = rate;
         }
     );
 
@@ -226,12 +228,14 @@ TEST(IMUSerialPortTest, CallbackReadsRotationPacket) {
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
+    std::optional<Raw_RotationRate> receivedRate;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
+        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel, std::optional<Raw_RotationRate> rate) {
             called = true;
             receivedRot = rot;
             receivedAccel = accel;
+            receivedRate = rate;
         }
     );
 
@@ -258,7 +262,7 @@ TEST(IMUSerialPortTest, CallbackRejectsBadChecksum) {
     bool called = false;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>) {
             called = true;
         }
     );
