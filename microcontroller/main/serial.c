@@ -179,7 +179,7 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
 }
 
 esp_err_t send_status_t(const processor_status_t *processor_status) {
-    printf("\n%sStarting status update%s\n", "\e[32m", "\e[37m");
+    // printf("\n%sStarting status update%s\n", "\e[32m", "\e[37m");
     if (processor_status == NULL) return ESP_ERR_INVALID_ARG;
     unsigned char buffer[20] = {0};
     size_t length = 0;
@@ -201,6 +201,6 @@ esp_err_t send_status_t(const processor_status_t *processor_status) {
     // for (int i=0; i< 100; i++) {
         write_status = host_serial_write_all(buffer, length);
     // }
-    printf("\n%sStatus update complete with write status: %s%d\n", "\e[32m", "\e[37m", write_status);
+    // printf("\n%sStatus update complete with write status: %s%d\n", "\e[32m", "\e[37m", write_status);
     return write_status;
 }

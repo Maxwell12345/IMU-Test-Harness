@@ -7,11 +7,11 @@ TEST(YamlConfigServiceTest, ConstructorThrowsRuntimeError) {
 }
 
 TEST(YamlConfigServiceTest, ConstructorDoesNotThrow) {
-    EXPECT_NO_THROW(YamlConfigService service("test_config.yaml"));
+    EXPECT_NO_THROW(YamlConfigService service("../test_config.yaml"));
 }
 
 TEST(YamlConfigServiceTest, GetConfigReturnsConfig) {
-    YamlConfigService service("test_config.yaml");
+    YamlConfigService service("../test_config.yaml");
     auto config = service.GetConfig();
 
     EXPECT_EQ(20u, config.kalmanValues.gpsN);

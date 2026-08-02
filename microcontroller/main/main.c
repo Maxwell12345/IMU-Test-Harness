@@ -18,7 +18,7 @@
 
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
-    if (event->type == SH2SERVICE_LINEAR_ACCELERATION) {
+    if (event->type == SH2_LINEAR_ACCELERATION) {
         acceleration_t accel = {
             event->data.linear_acceleration.x,
             event->data.linear_acceleration.y,
@@ -31,10 +31,7 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         //        event->data.linear_acceleration.x,
         //        event->data.linear_acceleration.y,
         //        event->data.linear_acceleration.z);
-        return;
-    }
-
-    if (event->type == SH2SERVICE_ROTATION_VECTOR) {
+    } else if (event->type == SH2_ROTATION_VECTOR) {
         rotation_t rotation = {
             event->data.rotation_vector.i,
             event->data.rotation_vector.j,
@@ -51,7 +48,16 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         //        event->data.rotation_vector.k,
         //        event->data.rotation_vector.real,
         //        event->data.rotation_vector.accuracy);
-        return;
+    } else if (event->type == SH2_GEOMAGNETIC_ROTATION_VECTOR) {
+        rotation_t rotation = {
+            event->data.rotation_vector.i,
+            event->data.rotation_vector.j,
+            event->data.rotation_vector.k,
+            event->data.rotation_vector.real,
+            event->data.rotation_vector.accuracy,
+            (unsigned long long)event->timestamp_us
+        };
+        send_rotation_t(&rotation);
     }
 }
 

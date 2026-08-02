@@ -64,9 +64,11 @@ typedef struct rotation_t {
     float accuracy;
     uint64_t timestamp;
 } rotation_t;
+#pragma pack(pop)
 
 enum imu_status {
     INITIALIZING=0,
+    SENSOR_INITIALIZATION_ERROR,
     HEALTHY,
     IMU_UNAVAILABLE,
     NO_DATA_RECEIVED_AFTER_BOOT,
@@ -78,7 +80,6 @@ typedef struct processor_status_t {
     enum imu_status status;
     uint64_t timestamp;
 } processor_status_t;
-#pragma pack(pop)
 
 esp_err_t host_serial_init(void);
 

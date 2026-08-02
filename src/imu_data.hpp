@@ -30,6 +30,22 @@ typedef struct Raw_Accelerometer {
 } Raw_Accelerometer_t;
 #pragma pack(pop)
 
+enum imu_status {
+    INITIALIZING=0,
+    HEALTHY,
+    IMU_UNAVAILABLE,
+    NO_DATA_RECEIVED_AFTER_BOOT,
+    IMU_RESET_FAILURE,
+    NO_DETECTED_IMU,
+};
+
+typedef struct processor_status_t {
+    enum imu_status status;
+    uint64_t timestamp;
+
+    processor_status_t(): status(imu_status::IMU_UNAVAILABLE), timestamp(0) {};
+} processor_status_t;
+
 /**
  * @brief Raw 3-axis accelerometer measurement from the BNO085.
  */

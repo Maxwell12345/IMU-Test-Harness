@@ -34,7 +34,7 @@ public:
    *
    * @throws std::invalid_argument when databaseManager is nullptr
    */
-  IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "WMM.COF");
+  IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::string cofPath = "../test/WMM.COF");
 
     /**
      * @brief Installs ekf. If none is installed, calls to ekf will not be made.

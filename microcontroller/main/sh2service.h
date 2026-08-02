@@ -8,12 +8,14 @@
 #include "freertos/FreeRTOS.h"
 
 #include "esp_err.h"
+#include "sh2.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 
 typedef enum {
     SH2SERVICE_LINEAR_ACCELERATION = 1,
     SH2SERVICE_ROTATION_VECTOR = 2,
+    SH2GEOMAGNETIC_ROTATION_VECTOR = 3,
 } sh2service_event_type_t;
 
 typedef struct {
@@ -31,7 +33,8 @@ typedef struct {
 } sh2service_rotation_vector_t;
 
 typedef struct {
-    sh2service_event_type_t type;
+    // sh2service_event_type_t type;
+    enum sh2_SensorId_e type;
     uint64_t timestamp_us;
 
     union {

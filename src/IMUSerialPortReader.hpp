@@ -17,8 +17,9 @@
 #include <array>
 
 enum _IMU_MESSAGE_TYPES_ {
-    ACCELERATION = 0,
-    ROTATION_VECTOR = 1
+    ACCELERATION = 1,
+    ROTATION_VECTOR = 2,
+    STATUS_MSG = 3,
 };
 
 class IMUSerialPortReader {
@@ -115,6 +116,9 @@ private:
                 
             case 0x02:
                 return _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
+
+            case 0x03:
+                return _IMU_MESSAGE_TYPES_::STATUS_MSG;
             
             default:
                 throw std::runtime_error("Unsupported type");
@@ -163,6 +167,7 @@ private:
     cm_t m_cm;
     std::unique_ptr<SerialComService> m_serialComService;
     std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>)> m_callback;
+    processor_status_t m_currentImuStatus;
 
     FRIEND_TEST(IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
     FRIEND_TEST(IMUSerialPortTest, ValidateIsStartEncoder);

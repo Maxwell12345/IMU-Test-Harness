@@ -22,7 +22,7 @@ add_library(IMUPROC_LIB
 	${PROJ_SRC}
 )
 
-target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/include)
+target_include_directories(IMUPROC_LIB PUBLIC ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-linux/include)
 target_link_libraries(IMUPROC_LIB
     PUBLIC
         Eigen3::Eigen
