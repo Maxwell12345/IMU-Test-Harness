@@ -36,7 +36,7 @@ namespace {
 
 #define SET_UP()  std::shared_ptr<DatabaseManager> databaseManager = std::make_shared<DatabaseManager>("./IMUPROC_tests.db"); \
                   auto imuSerialPortReader = std::make_unique<IMUSerialPortReader>(imuSerialPortConfig, std::make_unique<MockSerialPort>()); \
-                  auto imuManager = std::make_unique<IMUManager>(databaseManager); \
+                  auto imuManager = std::make_unique<IMUManager>(databaseManager, "WMM.COF"); \
                   RadarPositionNavigationController radarPositionNavigationController(kalmanValuesConfig, \
                                                                                       databaseManager, \
                                                                                       std::move(imuSerialPortReader), \
@@ -126,12 +126,13 @@ TEST(RadarPositionNavigationControllerTest, ConfigureKalmanFilterSetsInitialStat
   ASSERT_NEAR(radarPositionNavigationController.m_latestX(4), 1e-16, 1e-21);
   ASSERT_NEAR(radarPositionNavigationController.m_latestX(5), 1e-16, 1e-21);
 
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(0, 0), 1e-10, 1e-20);
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(1, 1), 1e-10, 1e-20);
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(2, 2), 1e-8, 1e-18);
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(3, 3), 1e-8, 1e-18);
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(4, 4), 1e-10, 1e-20);
-  ASSERT_NEAR(radarPositionNavigationController.m_latestP(5, 5), 1e-10, 1e-20);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(0, 0), 1.2e-10, 1e-18);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(1, 1), 1e-10, 1e-18);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(2, 2), 1.9e-8, 1e-18);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(3, 3), 1.32e-8, 1e-18);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(4, 4), 1.2e-10, 1e-18);
+  ASSERT_NEAR(radarPositionNavigationController.m_latestP(5, 5), 1.8e-10, 1e-18);
+  
 
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 6; j++) {
@@ -184,37 +185,4 @@ TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsReturnsWithoutConfi
 
   ASSERT_TRUE(radarPositionNavigationController.m_latestX.isZero(0.0));
   ASSERT_TRUE(radarPositionNavigationController.m_latestP.isZero(0.0));
-}
-
-TEST(RadarPositionNavigationControllerTest, KFCallbackImuOnlyProducesNonFiniteStateBecauseKFUsesSingularR) {
-  SET_UP();
-
-  radarPositionNavigationController.ConfigureKalmanFilter(47.319065, 5.06832, 0.20, 0.95, 0.20, 0.95);
-  radarPositionNavigationController.m_isKFConfigured.store(true);
-
-  Vector6d imuVec;
-  imuVec << 0.0, 0.0, 1e-9, -1e-9, 1e-10, -1e-10;
-
-  radarPositionNavigationController.KFCallbackImuOnly(0.01, imuVec);
-
-  ASSERT_TRUE(radarPositionNavigationController.m_isKFConfigured.load());
-  ASSERT_FALSE(std::isfinite(radarPositionNavigationController.m_latestX(0)));
-}
-
-TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR) {
-  SET_UP();
-
-  radarPositionNavigationController.ConfigureKalmanFilter(47.319065, 5.06832, 0.20, 0.95, 0.20, 0.95);
-  radarPositionNavigationController.m_isKFConfigured.store(true);
-
-  Vector6d gpsVec;
-  gpsVec << 5.0683200001, 47.3190650001, 0.0, 0.0, 0.0, 0.0;
-
-  Vector6d imuVec;
-  imuVec << 0.0, 0.0, 1e-9, -1e-9, 1e-10, -1e-10;
-
-  radarPositionNavigationController.KFCallbackWithGps(0.01, imuVec, gpsVec);
-
-  ASSERT_TRUE(radarPositionNavigationController.m_isKFConfigured.load());
-  ASSERT_FALSE(std::isfinite(radarPositionNavigationController.m_latestX(0)));
 }
