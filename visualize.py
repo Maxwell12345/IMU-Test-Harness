@@ -22,40 +22,29 @@ start_timestamp = timestamps[0]
 elapsed_seconds = [(timestamp - start_timestamp) / 1_000_000_000 for timestamp in timestamps]
 gps_longitude = [float(row["gps_longitude_deg"]) for row in rows]
 gps_latitude = [float(row["gps_latitude_deg"]) for row in rows]
-kf_easting = [float(row["kf_easting_m"]) for row in rows]
-kf_northing = [float(row["kf_northing_m"]) for row in rows]
-kf_speed = [float(row["kf_speed_mps"]) for row in rows]
-kf_heading = [float(row["kf_heading_deg"]) for row in rows]
+kf_longitude = [float(row["kf_easting_m"]) for row in rows]
+kf_latitude = [float(row["kf_northing_m"]) for row in rows]
+covariance_trace = [
+    sum(float(row[f"kf_covariance_{index}_{index}"]) for index in range(6))
+    for row in rows
+]
 
-figure, axes = plt.subplots(2, 2, figsize=(14, 10))
+path_figure, path_axes = plt.subplots(figsize=(10, 8))
+path_axes.plot(gps_longitude, gps_latitude, label="GPS")
+path_axes.plot(kf_longitude, kf_latitude, label="Kalman Filter")
+path_axes.set_title(f"GPS and Kalman Filter Path — {csv_path.name}")
+path_axes.set_xlabel("Longitude (degrees)")
+path_axes.set_ylabel("Latitude (degrees)")
+path_axes.axis("equal")
+path_axes.grid(True)
+path_axes.legend()
+path_figure.tight_layout()
 
-axes[0, 0].plot(gps_longitude, gps_latitude)
-axes[0, 0].set_title("GPS Path")
-axes[0, 0].set_xlabel("Longitude (degrees)")
-axes[0, 0].set_ylabel("Latitude (degrees)")
-axes[0, 0].axis("equal")
-axes[0, 0].grid(True)
-
-axes[0, 1].plot(kf_easting, kf_northing)
-axes[0, 1].set_title("Kalman Filter ENU Path")
-axes[0, 1].set_xlabel("Easting (m)")
-axes[0, 1].set_ylabel("Northing (m)")
-axes[0, 1].axis("equal")
-axes[0, 1].grid(True)
-
-axes[1, 0].plot(elapsed_seconds, kf_speed)
-axes[1, 0].set_title("Kalman Filter Speed")
-axes[1, 0].set_xlabel("Elapsed time (s)")
-axes[1, 0].set_ylabel("Speed (m/s)")
-axes[1, 0].grid(True)
-
-axes[1, 1].plot(elapsed_seconds, kf_heading)
-axes[1, 1].set_title("Kalman Filter Heading")
-axes[1, 1].set_xlabel("Elapsed time (s)")
-axes[1, 1].set_ylabel("Heading (degrees)")
-axes[1, 1].set_ylim(0, 360)
-axes[1, 1].grid(True)
-
-figure.suptitle(csv_path.name)
-figure.tight_layout()
+covariance_figure, covariance_axes = plt.subplots(figsize=(10, 6))
+covariance_axes.plot(elapsed_seconds, covariance_trace)
+covariance_axes.set_title(f"Kalman Filter Covariance Trace — {csv_path.name}")
+covariance_axes.set_xlabel("Elapsed time (s)")
+covariance_axes.set_ylabel("Covariance trace")
+covariance_axes.grid(True)
+covariance_figure.tight_layout()
 plt.show()
