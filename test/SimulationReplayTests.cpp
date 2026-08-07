@@ -30,6 +30,8 @@ TEST(SimulationReplayTest, RecordedRmcMapsDatabaseTimestampIntoGpsUpdate) {
     EXPECT_EQ(update.gpsTimestampMs, 1'060'413U);
     ASSERT_TRUE(update.heading.has_value());
     EXPECT_NEAR(*update.heading, 165.40, 1e-12);
+    ASSERT_TRUE(update.measurementYear.has_value());
+    EXPECT_EQ(*update.measurementYear, 2026);
 }
 
 TEST(SimulationReplayTest, DatabaseTimestampOutsideGpsFieldRangeIsRejected) {

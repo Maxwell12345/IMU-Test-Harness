@@ -287,15 +287,6 @@
 //   EXPECT_TRUE(imuManager.ReadyForEkf());
 // }
 
-// TEST(IMUManagerTest, GetCurrentYearReturnsYear) {
-//   IMUManager imuManager(db, "WMM.COF");
-//   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
-
-//   auto ymdNow = std::chrono::system_clock::now();
-//   const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
-//   EXPECT_EQ(imuManager.GetCurrentYear(), static_cast<int>(ymd.year()));
-// }
-
 // TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
 //   IMUManager imuManager(db, "WMM.COF");
 //   imuManager.InstallEkf(ekfNoGps, ekfWithGps);
@@ -337,15 +328,30 @@ TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
     auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
     IMUManager imuManager(databaseManager, TEST_DATA_DIR "/WMM.COF");
 
+    const Raw_RotationVectorWAcc rotationVector{
+        0.0F,
+        0.0F,
+        0.0F,
+        1.0F,
+        3.0F,
+        1'000'000ULL
+    };
     const Raw_Accelerometer linearAcceleration{1.25F, 2.5F, -0.5F, 1'000'000ULL};
-    const Raw_RotationRate rotationRate{0.1F, -0.2F, 0.75F, 1'500'000ULL};
+    const Raw_RotationRate rotationRate{0.1F, -0.2F, 0.75F, 1'000'000ULL};
+    GpsUpdate gpsUpdate{};
+    gpsUpdate.latitude = 32.6969315;
+    gpsUpdate.longitude = -117.2328995;
 
     const Eigen::Matrix<double, 2, 1> control = imuManager.BuildImuMeasurementVector(
+        rotationVector,
         linearAcceleration,
-        rotationRate);
+        rotationRate,
+        gpsUpdate,
+        2026,
+        0.01);
 
-    EXPECT_DOUBLE_EQ(control(0), 2.5);
-    EXPECT_DOUBLE_EQ(control(1), 0.75);
+    EXPECT_TRUE(control.allFinite());
+    EXPECT_NEAR(control(1), 0.45, 1e-12);
 }
 
 TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {

@@ -197,16 +197,21 @@ private:
     Eigen::Matrix<double, 2, 1> BuildGpsMeasurementVector(const GpsUpdate &gps);
 
     /**
-     * @brief Builds the two-value control input consumed by the ENU Kalman-filter motion model.
      *
-     * @remarks The BNO085 is mounted with its positive Y axis aligned with the vehicle's forward direction. The rotation-rate
-     *          payload already contains Euler yaw rate in radians per second.
+     * @brief   Rotates body-frame linear acceleration into true ENU coordinates, smooths acceleration and yaw rate, and
+     *          projects ENU acceleration onto the payload-derived vehicle heading for the Kalman-filter control input.
      *
-     * @param [in] la the linear acceleration measurement snapshot from IMU (m/s^2)
-     * @param [in] rr the Euler rotation-rate payload containing yaw rate in radians per second
+     * @param [in] rv           Rotation-vector quaternion used to transform body acceleration and predict heading.
+     * @param [in] la           Body-frame linear acceleration measurement in meters per second squared.
+     * @param [in] rr           Euler rotation-rate measurement in radians per second.
+     * @param [in] gps          GPS position used to calculate magnetic declination for the measurement location.
+     * @param [in] currentYear  UTC measurement year parsed from the GPS RMC payload.
+     * @param [in] dt           Elapsed measurement time in seconds derived from consecutive IMU payload timestamps.
      *
-     * @return Two-element filter control vector containing forward acceleration in meters per second squared followed by yaw
-     *         rate in radians per second.
+     * @return  Two-element filter control vector containing forward acceleration in meters per second squared followed by
+     *          smoothed yaw rate in radians per second.
+     *
+     * @throws  std::runtime_error  If RotateLinearAccelToTrueENU() or ComputeENUHeading() rejects an invalid quaternion.
      */
     Eigen::Matrix<double, 2, 1> BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                        const Raw_Accelerometer &la,

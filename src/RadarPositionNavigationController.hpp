@@ -19,6 +19,7 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <utility>
 
 #include "GpsUpdate.hpp"
 #include "IMUGPSFusionKF.hpp"
@@ -126,6 +127,21 @@ public:
      * @throws  std::system_error  If the Kalman-filter update mutex cannot be locked.
      */
     Matrix6d GetKFCovariance() const;
+
+    /**
+     *
+     * @brief   Converts the latest Kalman-filter easting and northing from the active local ENU frame into WGS84 longitude
+     *          and latitude while holding the filter-state mutex.
+     *
+     * @return  Pair containing WGS84 longitude in the first element and WGS84 latitude in the second element, both in
+     *          decimal degrees.
+     *
+     * @remarks The conversion uses the same active ENU origin as the filter state returned by GetKFState().
+     *
+     * @throws  std::runtime_error  If the controller has not established an ENU origin.
+     * @throws  std::system_error   If the Kalman-filter update mutex cannot be locked.
+     */
+    std::pair<double, double> GetKFWGS84Position() const;
 
 private:
     /**

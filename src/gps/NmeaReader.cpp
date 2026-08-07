@@ -12,6 +12,8 @@
 #include "NmeaReader.hpp"
 #include "SerialPortBase.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <fcntl.h>
 #include <sstream>
 #include <vector>
@@ -142,6 +144,17 @@ NmeaMessage NmeaReader::Parse(const std::string& line) {
         msg.lon = ParseDeg(f[5], f[6]);
         msg.speedKnots = f[7].empty() ? 0.0 : std::atof(f[7].c_str());
         msg.courseDeg = f[8].empty() ? 0.0 : std::atof(f[8].c_str());
+
+        const std::string& rmcDate = f[9];
+        const bool validDate = rmcDate.size() == 6 &&
+            std::all_of(rmcDate.begin(), rmcDate.end(), [](unsigned char character) {
+                return std::isdigit(character) != 0;
+            });
+
+        if (validDate) {
+            const int twoDigitYear = std::stoi(rmcDate.substr(4, 2));
+            msg.measurementYear = twoDigitYear >= 80 ? 1900 + twoDigitYear : 2000 + twoDigitYear;
+        }
     }
 
     if ((msg.type == "GPGGA" || msg.type == "GNGGA") && f.size() >= 10) {

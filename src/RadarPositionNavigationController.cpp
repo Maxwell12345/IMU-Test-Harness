@@ -97,6 +97,29 @@ Matrix6d RadarPositionNavigationController::GetKFCovariance() const {
     return this->m_latestP;
 }
 
+std::pair<double, double> RadarPositionNavigationController::GetKFWGS84Position() const {
+    std::lock_guard<std::mutex> kfStateGuard(this->m_kFUpdateMutex);
+
+    if (!this->m_hasOrigin) {
+        throw std::runtime_error("No ENU origin is available for KF position conversion");
+    }
+
+    double latitude;
+    double longitude;
+    double altitude;
+    IMUUtils::ENU_To_WGS84(this->m_latestX(0),
+                           this->m_latestX(1),
+                           DEFAULT_RADAR_HEIGHT_METERS,
+                           this->m_originLatLon.first,
+                           this->m_originLatLon.second,
+                           DEFAULT_RADAR_HEIGHT_METERS,
+                           latitude,
+                           longitude,
+                           altitude);
+
+    return {longitude, latitude};
+}
+
 void RadarPositionNavigationController::ConfigureKalmanFilter(double initialLatitude, double initialLongitude) {
     this->m_originLatLon = {initialLongitude, initialLatitude};
     this->m_originEN = {0.0, 0.0};
@@ -381,4 +404,3 @@ void RadarPositionNavigationController::RestKFOrigin(double oldLatOrigin, double
     this->m_latestX(0) = easting;
     this->m_latestX(1) = northing;
 }
-

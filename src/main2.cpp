@@ -22,6 +22,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <SQLiteCpp/SQLiteCpp.h>
 
@@ -36,10 +37,10 @@
 
 namespace {
 
-constexpr const char* INPUT_DATABASE_PATH = "./imu_data_good.db";
-constexpr const char* OUTPUT_CSV_PATH = "./output.csv";
+constexpr const char* INPUT_DATABASE_PATH = "build/imu_data_good.db";
+constexpr const char* OUTPUT_CSV_PATH = "build/output.csv";
 constexpr const char* CONFIG_PATH = "config.yaml";
-constexpr const char* MAGNETIC_MODEL_PATH = "./WMM.COF";
+constexpr const char* MAGNETIC_MODEL_PATH = "build/WMM.COF";
 
 enum class ReplayEventType : int {
     Gps = 0,
@@ -98,6 +99,7 @@ void WriteCsvRow(std::ofstream& csvOutput,
                  uint64_t measurementTimestampNs,
                  uint64_t gpsTimestampNs,
                  const GpsUpdate& gpsUpdate,
+                 const std::pair<double, double>& kfWgs84Position,
                  const Vector6d& state,
                  const Matrix6d& covariance) {
     constexpr double pi = 3.141592653589793238462643383279502884;
@@ -123,8 +125,8 @@ void WriteCsvRow(std::ofstream& csvOutput,
         normalizedHeadingRadians += fullTurnRadians;
     }
 
-    csvOutput << ',' << state(0)
-              << ',' << state(1)
+    csvOutput << ',' << kfWgs84Position.first
+              << ',' << kfWgs84Position.second
               << ',' << state(3)
               << ',' << normalizedHeadingRadians
               << ',' << normalizedHeadingRadians * radiansToDegrees;
@@ -139,6 +141,8 @@ void WriteCsvRow(std::ofstream& csvOutput,
 }
 
 } // namespace
+
+int iii = 0;
 
 int main() {
     try {
@@ -252,19 +256,21 @@ int main() {
         while (eventQuery.executeStep()) {
             const ReplayEventType eventType = static_cast<ReplayEventType>(eventQuery.getColumn(0).getInt());
             const uint64_t hostTimestampNs = static_cast<uint64_t>(eventQuery.getColumn(1).getInt64());
+            
+            // 1835
+            if (eventType == ReplayEventType::Gps) {
+                const NmeaMessage message = NmeaReader::Parse(eventQuery.getColumn(9).getString());
+                const GpsUpdate gpsUpdate = GpsManager::BuildGpsUpdate(message, hostTimestampNs);
 
-            // if (eventType == ReplayEventType::Gps) {
-            //     const NmeaMessage message = NmeaReader::Parse(eventQuery.getColumn(9).getString());
-            //     const GpsUpdate gpsUpdate = GpsManager::BuildGpsUpdate(message, hostTimestampNs);
+                if (gpsUpdate.valid && gpsUpdate.latitude != 0.0 && gpsUpdate.longitude != 0.0) {
+                    latestGps = gpsUpdate;
+                    latestGpsTimestampNs = hostTimestampNs;
+                    if ( ( iii++ < 800 || iii >  1000 ) && ( iii < 200 || iii > 450 ) )
+                    gpsCallback(latestGps);
+                }
 
-            //     if (gpsUpdate.valid && gpsUpdate.latitude != 0.0 && gpsUpdate.longitude != 0.0) {
-            //         latestGps = gpsUpdate;
-            //         latestGpsTimestampNs = hostTimestampNs;
-            //         gpsCallback(latestGps);
-            //     }
-
-            //     continue;
-            // }
+                continue;
+            }
 
             const uint64_t sensorTimestampUs =
                 static_cast<uint64_t>(eventQuery.getColumn(3).getInt64());
@@ -316,6 +322,7 @@ int main() {
                             hostTimestampNs,
                             latestGpsTimestampNs,
                             latestGps,
+                            controller.GetKFWGS84Position(),
                             controller.GetKFState(),
                             controller.GetKFCovariance());
                 ++csvRowCount;

@@ -13,6 +13,7 @@ struct GpsUpdate {
     double latitude;                                      // decimal degrees
     double longitude;                                     // decimal degrees
     std::optional<double> heading;                        // course-over-ground degrees (from $GPRMC), nullopt if unavailable
+    std::optional<int> measurementYear;                   // UTC measurement year parsed from the RMC payload date
     uint8_t fixQuality;                                   // 0=invalid, 1=GPS, 2=DGPS, etc.
     uint8_t numSatellites;                                // number of satellites in use
     double hdop;                                          // horizontal dilution of precision
@@ -25,6 +26,7 @@ struct GpsUpdate {
         latitude = other.latitude;
         longitude = other.longitude;
         heading = other.heading;
+        measurementYear = other.measurementYear;
         fixQuality = other.fixQuality;
         numSatellites = other.numSatellites;
         hdop = other.hdop;

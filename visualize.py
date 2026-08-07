@@ -31,7 +31,7 @@ covariance_trace = [
 
 path_figure, path_axes = plt.subplots(figsize=(10, 8))
 path_axes.plot(gps_longitude, gps_latitude, label="GPS")
-path_axes.plot(kf_longitude, kf_latitude, label="Kalman Filter")
+path_axes.plot(kf_longitude, kf_latitude,marker="o", markersize=1, label="Kalman Filter")
 path_axes.set_title(f"GPS and Kalman Filter Path — {csv_path.name}")
 path_axes.set_xlabel("Longitude (degrees)")
 path_axes.set_ylabel("Latitude (degrees)")

@@ -334,6 +334,10 @@ TEST(RadarPositionNavigationControllerTest, GpsOriginResetPreservesPhysicalFilte
     EXPECT_NEAR(controller.m_latestX(1), expectedNorthing, 1e-5);
     EXPECT_NEAR(gpsEasting, 0.0, 1e-5);
     EXPECT_NEAR(gpsNorthing, 0.0, 1e-5);
+
+    const auto [kfLongitude, kfLatitude] = controller.GetKFWGS84Position();
+    EXPECT_NEAR(kfLongitude, stateLongitude, 1e-9);
+    EXPECT_NEAR(kfLatitude, stateLatitude, 1e-9);
 }
 
 TEST(RadarPositionNavigationControllerTest, FilterOriginResetRecentersReturnedState) {

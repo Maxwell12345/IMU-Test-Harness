@@ -39,8 +39,8 @@ public:
      * @param [in] databaseTimestampNs  Recorded host capture timestamp in nanoseconds. Its millisecond representation must fit
      *                                  in the GpsUpdate::gpsTimestampMs field.
      *
-     * @return  GpsUpdate containing coordinates, validity, optional RMC course, replay receive time, and the recorded database
-     *          timestamp expressed in seconds and milliseconds.
+     * @return  GpsUpdate containing coordinates, validity, optional RMC course and UTC measurement year, replay receive time,
+     *          and the recorded database timestamp expressed in seconds and milliseconds.
      *
      * @throws  std::out_of_range  If databaseTimestampNs expressed in milliseconds exceeds uint32_t.
      */

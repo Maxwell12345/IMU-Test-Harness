@@ -72,7 +72,7 @@ The filter motion model consumes forward acceleration and yaw rate. The IMU meas
 
 ## CSV Output
 
-The replay writes `build/imu_fusion_replay.csv`, replacing an older CSV of the same name. Each completed filter update produces one row containing:
+The replay writes `build/output.csv`, replacing an older CSV of the same name. Each completed filter update produces one row containing:
 
 - database timestamp in nanoseconds;
 - GPS latitude and longitude in decimal degrees;

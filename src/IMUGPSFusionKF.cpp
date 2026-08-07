@@ -170,9 +170,6 @@ IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& imuControl) {
     this->m_P = residualProjection * predictedCovariance * residualProjection.transpose() +
                 kalmanGain * this->m_R * kalmanGain.transpose();
 
-    // this->m_R = this->m_covarianceEstimator.R(z, this->m_x, P_priori, this->m_H_IMU);
-    // this->m_Q = this->m_covarianceEstimator.Q(z, x_priori, P_priori, K, this->m_H_IMU);
-
     return {this->m_x, this->m_P};
 }
 
@@ -210,9 +207,6 @@ IMUGPSFusionKF::Step(double dt,
     this->m_P = residualProjection * predictedCovariance * residualProjection.transpose() +
                 kalmanGain * this->m_R * kalmanGain.transpose();
 
-    // this->m_R = this->m_covarianceEstimator.R(z, this->m_x, P_priori, this->m_H_GPS_IMU);
-    // this->m_Q = this->m_covarianceEstimator.Q(z, x_priori, P_priori, K, this->m_H_GPS_IMU);
-
     return {this->m_x, this->m_P};
 }
 
@@ -223,7 +217,7 @@ IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> state) {
     const double yawRate = state(4);
 
     const double jerkPSD = 0.3;
-    const double yawAccelerationPSD = 3.14159265358979323846 / 10.0;
+    const double yawAccelerationPSD = 3.14159265358979323846 / 20.0;
 
     const double dt2 = dt * dt;
     const double dt3 = dt2 * dt;

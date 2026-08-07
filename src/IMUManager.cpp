@@ -110,27 +110,24 @@ void IMUManager::DispatchToEkf() {
         throw std::runtime_error("No GPS data ever recorded");
     }
 
-<<<<<<< Updated upstream
-    double dtSeconds = PrepareEkfTiming();
-
-    int year = GetCurrentYear();
-    Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
-                                              linearAccelerationSnapshot,
-                                              rotationRateSnapshot,
-                                              gpsUpdateSnapshot.value(),
-                                              year,
-                                              dtSeconds);
-=======
-    Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(linearAccelerationSnapshot,
-                                                                 rotationRateSnapshot);
-
     double dtSeconds = PrepareEkfTiming();
 
     if (dtSeconds <= 0.0) {
         ResetImuReadyFlags();
         return;
     }
->>>>>>> Stashed changes
+
+    if (!gpsUpdateSnapshot->measurementYear.has_value()) {
+        throw std::runtime_error("GPS measurement year is unavailable for magnetic declination");
+    }
+
+    Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(
+        rotationVectorSnapshot,
+        linearAccelerationSnapshot,
+        rotationRateSnapshot,
+        *gpsUpdateSnapshot,
+        *gpsUpdateSnapshot->measurementYear,
+        dtSeconds);
     
     if (gpsSentToEkfSnapshot == false) {
         Eigen::Matrix<double, 2, 1> zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
@@ -251,5 +248,5 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_Rota
         this->m_muYaw
     };
 
-    return imuControl;
+    return imuVector;
 }
