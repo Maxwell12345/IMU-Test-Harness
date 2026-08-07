@@ -1,3 +1,14 @@
+/******************************************************************************
+ * File:             IMUGPSFusionKF.cpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Implements ENU prediction and GPS/IMU covariance updates
+ *                   for the vehicle navigation extended Kalman filter.
+ *
+ ******************************************************************************/
+
 #include "IMUGPSFusionKF.hpp"
 #include <string>
 
@@ -12,13 +23,13 @@ IMUGPSFusionKF::IMUGPSFusionKF(
 
     this->m_H_GPS_IMU << 1, 0, 0, 0, 0, 0,
                          0, 1, 0, 0, 0, 0,
-                         0, 0, 0, 0, 1, 0,
-                         0, 0, 0, 0, 0, 1;
+                         0, 0, 0, 0, 0, 1,
+                         0, 0, 0, 0, 1, 0;
 
     this->m_H_IMU << 0, 0, 0, 0, 0, 0,
                      0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 1, 0,
-                     0, 0, 0, 0, 0, 1;
+                     0, 0, 0, 0, 0, 1,
+                     0, 0, 0, 0, 1, 0;
 
     this->Update_Q(1.0 / 100.0, this->m_x);
 
@@ -31,125 +42,133 @@ IMUGPSFusionKF::IMUGPSFusionKF(
 }
 
 Eigen::Matrix<double, N_STATE, N_STATE>
-IMUGPSFusionKF::BuildFk(double dt, Eigen::Matrix<double, N_STATE, 1> x, Eigen::Matrix<double, 2, 1> u) {
-    // const double u_a = u(0, 0);
-    const double u_phi_prime = u(1, 0);
+IMUGPSFusionKF::BuildFk(double dt,
+                       Eigen::Matrix<double, N_STATE, 1> state,
+                       Eigen::Matrix<double, 2, 1> imuControl) {
+    const double measuredYawRate = imuControl(1, 0);
 
-    const double psi = x(2);
-    const double v = x(3);
-    // const double yawRate = x(4);
+    const double heading = state(2);
+    const double speed = state(3);
 
     const double dt2 = dt * dt;
-    const double sinPsi = std::sin(psi);
-    const double cosPsi = std::cos(psi);
+    const double sinHeading = std::sin(heading);
+    const double cosHeading = std::cos(heading);
 
-    Eigen::Matrix<double, N_STATE, N_STATE> F = Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
+    Eigen::Matrix<double, N_STATE, N_STATE> transitionJacobian =
+        Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
 
-    F(2, 4) = dt;
-    F(3, 5) = dt;
+    transitionJacobian(2, 4) = dt;
+    transitionJacobian(3, 5) = dt;
 
     constexpr double yawRateThreshold = 0.04;
 
-    if (std::abs(u_phi_prime) < yawRateThreshold) {
-        F(0, 2) = -v * dt * sinPsi;
-        F(0, 3) = dt * cosPsi;
-        F(0, 4) = -0.5 * v * dt2 * sinPsi;
+    if (std::abs(measuredYawRate) < yawRateThreshold) {
+        transitionJacobian(0, 2) = -speed * dt * sinHeading;
+        transitionJacobian(0, 3) = dt * cosHeading;
+        transitionJacobian(0, 4) = -0.5 * speed * dt2 * sinHeading;
 
-        F(1, 2) = v * dt * cosPsi;
-        F(1, 3) = dt * sinPsi;
-        F(1, 4) = 0.5 * v * dt2 * cosPsi;
+        transitionJacobian(1, 2) = speed * dt * cosHeading;
+        transitionJacobian(1, 3) = dt * sinHeading;
+        transitionJacobian(1, 4) = 0.5 * speed * dt2 * cosHeading;
 
-        return F;
+        return transitionJacobian;
     }
 
-    const double newPsi = psi + u_phi_prime * dt;
-    const double sinNewPsi = std::sin(newPsi);
-    const double cosNewPsi = std::cos(newPsi);
-    const double yawRate2 = u_phi_prime * u_phi_prime;
+    const double newHeading = heading + measuredYawRate * dt;
+    const double sinNewHeading = std::sin(newHeading);
+    const double cosNewHeading = std::cos(newHeading);
+    const double yawRateSquared = measuredYawRate * measuredYawRate;
 
-    const double deltaSin = sinNewPsi - sinPsi;
-    const double deltaCos = cosPsi - cosNewPsi;
+    const double deltaSin = sinNewHeading - sinHeading;
+    const double deltaCos = cosHeading - cosNewHeading;
 
-    F(0, 2) = (v / u_phi_prime) * (cosNewPsi - cosPsi);
-    F(0, 3) = deltaSin / u_phi_prime;
-    F(0, 4) = v * (u_phi_prime * dt * cosNewPsi - deltaSin) / yawRate2;
+    transitionJacobian(0, 2) = (speed / measuredYawRate) * (cosNewHeading - cosHeading);
+    transitionJacobian(0, 3) = deltaSin / measuredYawRate;
+    transitionJacobian(0, 4) = speed * (measuredYawRate * dt * cosNewHeading - deltaSin) /
+                               yawRateSquared;
 
-    F(1, 2) = (v / u_phi_prime) * (sinNewPsi - sinPsi);
-    F(1, 3) = deltaCos / u_phi_prime;
-    F(1, 4) = v * (u_phi_prime * dt * sinNewPsi - deltaCos) / yawRate2;
+    transitionJacobian(1, 2) = (speed / measuredYawRate) * (sinNewHeading - sinHeading);
+    transitionJacobian(1, 3) = deltaCos / measuredYawRate;
+    transitionJacobian(1, 4) = speed * (measuredYawRate * dt * sinNewHeading - deltaCos) /
+                               yawRateSquared;
 
-    return F;
+    return transitionJacobian;
 }
 
 Eigen::Matrix<double, N_STATE, 1>
-IMUGPSFusionKF::f(double dt, Eigen::Matrix<double, N_STATE, 1> x, Eigen::Matrix<double, 2, 1> u) {
-    const double u_a = u(0, 0);
-    const double u_phi_prime = u(1, 0);
+IMUGPSFusionKF::f(double dt,
+                 Eigen::Matrix<double, N_STATE, 1> state,
+                 Eigen::Matrix<double, 2, 1> imuControl) {
+    const double measuredAcceleration = imuControl(0, 0);
+    const double measuredYawRate = imuControl(1, 0);
 
-    const double X = x(0, 0);
-    const double Y = x(1, 0);
-    const double phi = x(2, 0);
-    const double v = x(3, 0);
-    const double phi_prime = x(4, 0);
-    const double a = x(5, 0);
+    const double easting = state(0, 0);
+    const double northing = state(1, 0);
+    const double heading = state(2, 0);
+    const double speed = state(3, 0);
+    const double yawRate = state(4, 0);
+    const double acceleration = state(5, 0);
 
-    Eigen::Matrix<double, N_STATE, 1> x_update;
+    Eigen::Matrix<double, N_STATE, 1> updatedState;
 
-    const double cos_phi = std::cos(phi);
-    const double sin_phi = std::sin(phi);
+    const double cosHeading = std::cos(heading);
+    const double sinHeading = std::sin(heading);
 
-    if (u_phi_prime < 0.04) {
-        x_update(0, 0) = X + v * dt * cos_phi + 0.5 * dt * dt * u_a * cos_phi;
-        x_update(1, 0) = Y + v * dt * sin_phi + 0.5 * dt * dt * u_a * sin_phi;
-        x_update(2, 0) = phi + dt * u_phi_prime;
-        x_update(3, 0) = v + dt * a;
-        x_update(4, 0) = phi_prime;
-        x_update(5, 0) = a;
+    if (std::abs(measuredYawRate) < 0.04) {
+        updatedState(0, 0) = easting + speed * dt * cosHeading +
+                             0.5 * dt * dt * measuredAcceleration * cosHeading;
+        updatedState(1, 0) = northing + speed * dt * sinHeading +
+                             0.5 * dt * dt * measuredAcceleration * sinHeading;
+        updatedState(2, 0) = heading + dt * measuredYawRate;
+        updatedState(3, 0) = speed + dt * measuredAcceleration;
+        updatedState(4, 0) = yawRate;
+        updatedState(5, 0) = acceleration;
     }
     else {
-        const double v_over_phi_prime = v / u_phi_prime;
-        const double new_heading = phi + dt * u_phi_prime;
-        x_update(0, 0) = X + v_over_phi_prime * (std::sin(new_heading) - sin_phi);
-        x_update(1, 0) = Y + v_over_phi_prime * (-std::cos(new_heading) + cos_phi);
-        x_update(2, 0) = new_heading;
-        x_update(3, 0) = v + dt * u_a;
-        x_update(4, 0) = phi_prime;
-        x_update(5, 0) = a;
+        const double speedOverYawRate = speed / measuredYawRate;
+        const double newHeading = heading + dt * measuredYawRate;
+        updatedState(0, 0) = easting + speedOverYawRate * (std::sin(newHeading) - sinHeading);
+        updatedState(1, 0) = northing + speedOverYawRate * (-std::cos(newHeading) + cosHeading);
+        updatedState(2, 0) = newHeading;
+        updatedState(3, 0) = speed + dt * measuredAcceleration;
+        updatedState(4, 0) = yawRate;
+        updatedState(5, 0) = acceleration;
     }
 
-    return x_update;
+    return updatedState;
 }
 
 std::pair<Eigen::Matrix<double, N_STATE, 1>, Eigen::Matrix<double, N_STATE, N_STATE>> 
-IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& z_IMU) {
+IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& imuControl) {
     this->m_Q = this->Update_Q(dt, this->m_x);
 
     this->m_lastGPSDt += dt;
 
-    auto IMUR = this->m_covarianceEstimator.GetR(z_IMU(0,0), z_IMU(1,0));
+    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(0, 0), imuControl(1, 0));
 
-    this->m_R(2, 2) = IMUR(0, 0); 
-    this->m_R(2, 3) = IMUR(0, 1); 
-    this->m_R(3, 2) = IMUR(1, 0); 
-    this->m_R(3, 3) = IMUR(1, 1); 
+    this->m_R(2, 2) = imuMeasurementCovariance(0, 0);
+    this->m_R(2, 3) = imuMeasurementCovariance(0, 1);
+    this->m_R(3, 2) = imuMeasurementCovariance(1, 0);
+    this->m_R(3, 3) = imuMeasurementCovariance(1, 1);
 
-    auto Fk = this->BuildFk(dt, this->m_x, z_IMU);
+    auto transitionJacobian = this->BuildFk(dt, this->m_x, imuControl);
 
-    auto x_priori = this->f(dt, this->m_x, z_IMU);
-    auto P_priori = Fk * this->m_P * Fk.transpose() + this->m_Q;
+    auto predictedState = this->f(dt, this->m_x, imuControl);
+    auto predictedCovariance = transitionJacobian * this->m_P * transitionJacobian.transpose() + this->m_Q;
 
-    Eigen::Matrix<double, M_Z, 1> z;
-    z << Eigen::Matrix<double, 2, 1>::Zero(), z_IMU;
+    Eigen::Matrix<double, M_Z, 1> measurement;
+    measurement << Eigen::Matrix<double, 2, 1>::Zero(), imuControl;
 
-    auto y = z - this->m_H_IMU * x_priori;
-    auto S = this->m_H_IMU * P_priori * this->m_H_IMU.transpose() + this->m_R;
-    auto K = P_priori * this->m_H_IMU.transpose() * S.inverse();
+    auto innovation = measurement - this->m_H_IMU * predictedState;
+    auto innovationCovariance = this->m_H_IMU * predictedCovariance * this->m_H_IMU.transpose() + this->m_R;
+    auto kalmanGain = predictedCovariance * this->m_H_IMU.transpose() * innovationCovariance.inverse();
 
-    this->m_x = x_priori + K * y;
+    this->m_x = predictedState + kalmanGain * innovation;
 
-    auto I = Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
-    auto IKH = I - K * this->m_H_IMU;
-    this->m_P = IKH * P_priori * IKH.transpose() + K * this->m_R * K.transpose();
+    auto identity = Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
+    auto residualProjection = identity - kalmanGain * this->m_H_IMU;
+    this->m_P = residualProjection * predictedCovariance * residualProjection.transpose() +
+                kalmanGain * this->m_R * kalmanGain.transpose();
 
     // this->m_R = this->m_covarianceEstimator.R(z, this->m_x, P_priori, this->m_H_IMU);
     // this->m_Q = this->m_covarianceEstimator.Q(z, x_priori, P_priori, K, this->m_H_IMU);
@@ -158,35 +177,38 @@ IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& z_IMU) {
 }
 
 std::pair<Eigen::Matrix<double, N_STATE, 1>, Eigen::Matrix<double, N_STATE, N_STATE>> 
-IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& z_GPS, Eigen::Matrix<double, 2, 1>& z_IMU) {
+IMUGPSFusionKF::Step(double dt,
+                    Eigen::Matrix<double, 2, 1>& gpsMeasurement,
+                    Eigen::Matrix<double, 2, 1>& imuControl) {
     this->m_Q = this->Update_Q(this->m_lastGPSDt + dt, this->m_x);
 
     this->m_lastGPSDt = 0.0;
 
-    auto IMUR = this->m_covarianceEstimator.GetR(z_IMU(0,0), z_IMU(1,0));
+    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(0, 0), imuControl(1, 0));
 
-    this->m_R(2, 2) = IMUR(0, 0); 
-    this->m_R(2, 3) = IMUR(0, 1); 
-    this->m_R(3, 2) = IMUR(1, 0); 
-    this->m_R(3, 3) = IMUR(1, 1); 
+    this->m_R(2, 2) = imuMeasurementCovariance(0, 0);
+    this->m_R(2, 3) = imuMeasurementCovariance(0, 1);
+    this->m_R(3, 2) = imuMeasurementCovariance(1, 0);
+    this->m_R(3, 3) = imuMeasurementCovariance(1, 1);
 
-    auto Fk = this->BuildFk(dt, this->m_x, z_IMU);
+    auto transitionJacobian = this->BuildFk(dt, this->m_x, imuControl);
 
-    auto x_priori = this->f(dt, this->m_x, z_IMU);
-    auto P_priori = Fk * this->m_P * Fk.transpose() + this->m_Q;
+    auto predictedState = this->f(dt, this->m_x, imuControl);
+    auto predictedCovariance = transitionJacobian * this->m_P * transitionJacobian.transpose() + this->m_Q;
 
-    Eigen::Matrix<double, M_Z, 1> z;
-    z << z_GPS, z_IMU;
+    Eigen::Matrix<double, M_Z, 1> measurement;
+    measurement << gpsMeasurement, imuControl;
 
-    auto y = z - this->m_H_GPS_IMU * x_priori;
-    auto S = this->m_H_GPS_IMU * P_priori * this->m_H_GPS_IMU.transpose() + this->m_R;
-    auto K = P_priori * this->m_H_GPS_IMU.transpose() * S.inverse();
+    auto innovation = measurement - this->m_H_GPS_IMU * predictedState;
+    auto innovationCovariance = this->m_H_GPS_IMU * predictedCovariance * this->m_H_GPS_IMU.transpose() + this->m_R;
+    auto kalmanGain = predictedCovariance * this->m_H_GPS_IMU.transpose() * innovationCovariance.inverse();
 
-    this->m_x = x_priori + K * y;
+    this->m_x = predictedState + kalmanGain * innovation;
 
-    auto I = Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
-    auto IKH = I - K * this->m_H_GPS_IMU;
-    this->m_P = IKH * P_priori * IKH.transpose() + K * this->m_R * K.transpose();
+    auto identity = Eigen::Matrix<double, N_STATE, N_STATE>::Identity();
+    auto residualProjection = identity - kalmanGain * this->m_H_GPS_IMU;
+    this->m_P = residualProjection * predictedCovariance * residualProjection.transpose() +
+                kalmanGain * this->m_R * kalmanGain.transpose();
 
     // this->m_R = this->m_covarianceEstimator.R(z, this->m_x, P_priori, this->m_H_GPS_IMU);
     // this->m_Q = this->m_covarianceEstimator.Q(z, x_priori, P_priori, K, this->m_H_GPS_IMU);
@@ -195,10 +217,10 @@ IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& z_GPS, Eigen::Matri
 }
 
 Eigen::Matrix<double, N_STATE, N_STATE>
-IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> x) {
-    const double psi = x(2);
-    const double v = x(3);
-    const double yawRate = x(4);
+IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> state) {
+    const double heading = state(2);
+    const double speed = state(3);
+    const double yawRate = state(4);
 
     const double jerkPSD = 0.3;
     const double yawAccelerationPSD = 3.14159265358979323846 / 10.0;
@@ -208,7 +230,7 @@ IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> x) {
     const double dt4 = dt3 * dt;
     const double dt5 = dt4 * dt;
 
-    const double middleHeading = psi + 0.5 * yawRate * dt;
+    const double middleHeading = heading + 0.5 * yawRate * dt;
     const double c = std::cos(middleHeading);
     const double s = std::sin(middleHeading);
 
@@ -236,13 +258,13 @@ IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> x) {
     addSymmetric(3, 5, jerkPSD * dt2 / 2.0);
     addSymmetric(5, 5, jerkPSD * dt);
 
-    addSymmetric(0, 0, yawAccelerationPSD * v * v * s * s * dt5 / 20.0);
-    addSymmetric(0, 1, -yawAccelerationPSD * v * v * s * c * dt5 / 20.0);
-    addSymmetric(1, 1, yawAccelerationPSD * v * v * c * c * dt5 / 20.0);
-    addSymmetric(0, 2, -yawAccelerationPSD * v * s * dt4 / 8.0);
-    addSymmetric(1, 2, yawAccelerationPSD * v * c * dt4 / 8.0);
-    addSymmetric(0, 4, -yawAccelerationPSD * v * s * dt3 / 6.0);
-    addSymmetric(1, 4, yawAccelerationPSD * v * c * dt3 / 6.0);
+    addSymmetric(0, 0, yawAccelerationPSD * speed * speed * s * s * dt5 / 20.0);
+    addSymmetric(0, 1, -yawAccelerationPSD * speed * speed * s * c * dt5 / 20.0);
+    addSymmetric(1, 1, yawAccelerationPSD * speed * speed * c * c * dt5 / 20.0);
+    addSymmetric(0, 2, -yawAccelerationPSD * speed * s * dt4 / 8.0);
+    addSymmetric(1, 2, yawAccelerationPSD * speed * c * dt4 / 8.0);
+    addSymmetric(0, 4, -yawAccelerationPSD * speed * s * dt3 / 6.0);
+    addSymmetric(1, 4, yawAccelerationPSD * speed * c * dt3 / 6.0);
 
     addSymmetric(2, 2, yawAccelerationPSD * dt3 / 3.0);
     addSymmetric(2, 4, yawAccelerationPSD * dt2 / 2.0);
@@ -252,27 +274,35 @@ IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> x) {
 }
 
 void 
-IMUGPSFusionKF::UpdatePosition(double E, double N, double oldLat, double oldLon, double newLat, double newLon) {
+IMUGPSFusionKF::UpdatePosition(double easting,
+                              double northing,
+                              double oldLatitude,
+                              double oldLongitude,
+                              double newLatitude,
+                              double newLongitude) {
     constexpr double piOver180 = 0.0174532925199433;
-    oldLat *= piOver180;
-    oldLon *= piOver180;
-    newLon *= piOver180;
-    newLat *= piOver180;
+    oldLatitude *= piOver180;
+    oldLongitude *= piOver180;
+    newLongitude *= piOver180;
+    newLatitude *= piOver180;
     const double yaw = this->m_x(2);
 
-    const double dLon = newLon - oldLon;
-    const double sinNewLat = std::sin(newLat);
-    const double sinDLon = std::sin(dLon);
+    const double longitudeDelta = newLongitude - oldLongitude;
+    const double sinNewLatitude = std::sin(newLatitude);
+    const double sinLongitudeDelta = std::sin(longitudeDelta);
     const double cosYaw = std::cos(yaw);
-    const double sinOldLat = std::sin(oldLat);
-    const double cosDLon = std::cos(dLon);
+    const double sinOldLatitude = std::sin(oldLatitude);
+    const double cosLongitudeDelta = std::cos(longitudeDelta);
     const double sinYaw = std::sin(yaw);
 
-    const double newYaw = std::atan2(-sinNewLat * sinDLon * cosYaw + ( sinNewLat * sinOldLat * cosDLon + std::cos(newLat) * std::cos(oldLat)) * sinYaw,
-                                     cosDLon * cosYaw + sinOldLat * sinDLon * sinYaw);
+    const double newYaw = std::atan2(
+        -sinNewLatitude * sinLongitudeDelta * cosYaw +
+            (sinNewLatitude * sinOldLatitude * cosLongitudeDelta +
+             std::cos(newLatitude) * std::cos(oldLatitude)) * sinYaw,
+        cosLongitudeDelta * cosYaw + sinOldLatitude * sinLongitudeDelta * sinYaw);
     
-    this->m_x(0, 0) = E;
-    this->m_x(1, 0) = N;
+    this->m_x(0, 0) = easting;
+    this->m_x(1, 0) = northing;
     this->m_x(2, 0) = newYaw;
 
 }

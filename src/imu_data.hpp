@@ -1,3 +1,16 @@
+/******************************************************************************
+ * File:             imu_data.hpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Defines packed IMU payload structures shared by serial,
+ *                   persistence, replay, and Kalman-filter processing paths.
+ *
+ ******************************************************************************/
+
+#ifndef INU_DISPLAY_IMU_DATA_HPP
+#define INU_DISPLAY_IMU_DATA_HPP
 #pragma once
 
 #include <cstdint>
@@ -203,3 +216,5 @@ struct GameRotationVectorData {
         return os;
     }
 };
+
+#endif // INU_DISPLAY_IMU_DATA_HPP

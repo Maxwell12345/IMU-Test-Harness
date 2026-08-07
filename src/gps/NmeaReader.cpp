@@ -1,3 +1,14 @@
+/******************************************************************************
+ * File:             NmeaReader.cpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Receives live NMEA serial sentences and parses the same
+ *                   sentence format reused by recorded database replay.
+ *
+ ******************************************************************************/
+
 #include "NmeaReader.hpp"
 #include "SerialPortBase.hpp"
 

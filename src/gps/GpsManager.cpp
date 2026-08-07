@@ -1,13 +1,20 @@
 /******************************************************************************
  * File:             GpsManager.cpp
  * 
- * Author:           Atkinson Maj Brian R.
+ * Author:           Brian R. Atkinson
  * Organization:     Marine Corps Software Factory
  * Created On:       6/10/26 9:47 AM
+ * Description:      Delivers live GPS updates and maps parsed NMEA messages
+ *                   with caller-provided measurement timestamps.
  *
  ******************************************************************************/
 
 #include "GpsManager.hpp"
+
+#include <chrono>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
 
 #define NMEA_COM_PORT "/dev/ttyTEST"
 
@@ -36,7 +43,10 @@ void GpsManager::Start() {
             msg = m_nmeaReader.GetNmeaMessage();
             // if (msg.validChecksum == false) continue;
 
-            GpsUpdate update = BuildGpsUpdate(msg);
+            const uint64_t receiveTimestampNs = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            GpsUpdate update = BuildGpsUpdate(msg, receiveTimestampNs);
 
             if (update.latitude == 0 || update.longitude == 0) {
                 continue;
@@ -65,15 +75,22 @@ void GpsManager::Stop() {
     }
 }
 
-GpsUpdate GpsManager::BuildGpsUpdate(const NmeaMessage& msg) {
-    GpsUpdate update;
+GpsUpdate GpsManager::BuildGpsUpdate(const NmeaMessage& msg, uint64_t databaseTimestampNs) {
+    const uint64_t databaseTimestampMs = databaseTimestampNs / 1'000'000ULL;
+    if (databaseTimestampMs > std::numeric_limits<uint32_t>::max()) {
+        throw std::out_of_range("Database GPS timestamp does not fit gpsTimestampMs");
+    }
+
+    GpsUpdate update{};
 
     update.receiveTime = std::chrono::steady_clock::now();
+    update.timestamp = static_cast<double>(databaseTimestampNs) / 1'000'000'000.0;
     update.latitude = msg.lat;
     update.longitude = msg.lon;
     update.fixQuality = static_cast<uint8_t>(msg.fixQuality);
     update.numSatellites = static_cast<uint8_t>(msg.numSatellites);
     update.hdop = msg.hdop;
+    update.gpsTimestampMs = static_cast<uint32_t>(databaseTimestampMs);
     update.valid = msg.validChecksum && msg.validFix;
 
     if (msg.type == "GPRMC" || msg.type == "GNRMC") {

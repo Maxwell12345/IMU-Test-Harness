@@ -1,5 +1,16 @@
-#ifndef IMU_MANAGER_HPP
-#define IMU_MANAGER_HPP
+/******************************************************************************
+ * File:             IMUManager.hpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Declares the manager that synchronizes GPS and recorded or
+ *                   live IMU payloads before dispatching filter measurements.
+ *
+ ******************************************************************************/
+
+#ifndef INU_DISPLAY_IMUMANAGER_HPP
+#define INU_DISPLAY_IMUMANAGER_HPP
 #pragma once
 
 #include <atomic>
@@ -121,20 +132,12 @@ private:
     void DispatchToEkf();
 
     /**
-     * @brief uses system_clock::now() to get current calendar year
+     * @brief Calculates elapsed measurement time from consecutive IMU payload timestamps.
      *
-     * @return current year in YYYY format
-     */
-    int GetCurrentYear() const;
-
-    /**
-     * @brief Calculates dt from last EKF invocation
+     * @remarks The first synchronized payload bundle establishes the timestamp baseline and returns zero because no prior
+     *          measurement interval exists. Non-monotonic payload time also returns zero without moving the baseline.
      *
-     * @remarks Assume m_imuRotationVector and m_imuLinearAcceleration are newly updated and unused
-     *    and m_lastEKFMachineTime exists:
-     *    dt = firstNewlyArrivedImuMeausurementTimestamp - m_lastEKFMachineTime
-     *
-     * @returns dt in seconds
+     * @return Elapsed payload time in seconds, or zero when an interval cannot be derived from two monotonic bundles.
      */
     double PrepareEkfTiming();
 
@@ -194,18 +197,16 @@ private:
     Eigen::Matrix<double, 2, 1> BuildGpsMeasurementVector(const GpsUpdate &gps);
 
     /**
-     * @brief Build an Eigen vector representation of SensorValue data
+     * @brief Builds the two-value control input consumed by the ENU Kalman-filter motion model.
      *
-     * @remarks Converts local IMU measurents and gps data to velocity and acceleration
-     *      in Global frame of reference in Geodetic units. Applies Magnetic Declination
-     *      to rotation vector using GPS coordinate.
+     * @remarks The BNO085 is mounted with its positive Y axis aligned with the vehicle's forward direction. The rotation-rate
+     *          payload already contains Euler yaw rate in radians per second.
      *
-     * @param [in] rv the rotation vector snapshot from IMU (i, j, k, w)
      * @param [in] la the linear acceleration measurement snapshot from IMU (m/s^2)
-     * @param [in] gps the latest gps snapshot
-     * @param [in] currentYear the current year YYYY
+     * @param [in] rr the Euler rotation-rate payload containing yaw rate in radians per second
      *
-     * @return Vector6d EKF-ready IMU measurement vector [0, 0, vx, vy, ax, ay]^T in the navigation frame.
+     * @return Two-element filter control vector containing forward acceleration in meters per second squared followed by yaw
+     *         rate in radians per second.
      */
     Eigen::Matrix<double, 2, 1> BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                        const Raw_Accelerometer &la,
@@ -227,10 +228,7 @@ private:
     bool m_ekfInstalled = false;          // True if installed Ekf, else no ekf installed, no call to ekf will be made
     std::optional<GpsUpdate> m_latestGps; // Internal GpsUpdate data state
 
-    // TODO: atomic, also refactor KineticState struct
-    std::mutex m_kineticStateMutex;        // Mutex used when m_kineticState is read/written
     mutable std::mutex m_gpsMutex;         // Mutex used when m_latestGps is read/written
-    IMUUtils::KineticState m_kineticState; // Internal KineticState data state
 
     MagneticDeclination m_magneticDeclination;          // MagneticDeclination member used to calculate declination angle in BuildImuMeasurementVector()
     std::shared_ptr<DatabaseManager> m_databaseManager; // shared ptr to DatabaseManager used to store incoming data persistently
@@ -254,9 +252,9 @@ private:
     FRIEND_TEST(IMUManagerTest, IngestSensorValueThrowsRuntimeError);
     FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsFalse);
     FRIEND_TEST(IMUManagerTest, ReadyForEkfReturnsTrue);
-    FRIEND_TEST(IMUManagerTest, GetCurrentYearReturnsYear);
     FRIEND_TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds);
+    FRIEND_TEST(IMUManagerTest, PrepareEkfTimingRejectsNonMonotonicPayloadTime);
     FRIEND_TEST(IMUManagerTest, ResetImuReadyFlagsExpectsFalse);
 };
 
-#endif
+#endif // INU_DISPLAY_IMUMANAGER_HPP

@@ -1,3 +1,14 @@
+/******************************************************************************
+ * File:             RadarPositionNavigationControllerTests.cpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Verifies RadarPositionNavigationController lifecycle,
+ *                   Kalman-filter snapshots, and ENU initialization behavior.
+ *
+ ******************************************************************************/
+
 // #include <atomic>
 // #include <chrono>
 // #include <gtest/gtest.h>
@@ -200,6 +211,190 @@
 //   ASSERT_TRUE(radarPositionNavigationController.m_isKFConfigured.load());
 //   ASSERT_FALSE(std::isfinite(radarPositionNavigationController.m_latestX(0)));
 // }
+
+#include <memory>
+
+#include <gtest/gtest.h>
+
+#include "DatabaseManager.hpp"
+#include "IMUManager.hpp"
+#include "RadarPositionNavigationController.hpp"
+
+namespace {
+
+_KalmanValues BuildTestKalmanValues() {
+    return _KalmanValues{
+        20,
+        5,
+        0.20,
+        0.95,
+        100,
+        10,
+        0.20,
+        0.95
+    };
+}
+
+} // namespace
+
+TEST(RadarPositionNavigationControllerTest, StateAndCovarianceAccessorsReturnEnuSnapshots) {
+    const _KalmanValues kalmanValues = BuildTestKalmanValues();
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    auto imuManager = std::make_unique<IMUManager>(databaseManager, TEST_DATA_DIR "/WMM.COF");
+
+    RadarPositionNavigationController controller(kalmanValues,
+                                                  databaseManager,
+                                                  nullptr,
+                                                  std::move(imuManager));
+
+    controller.StartAndConfigureRadarPNT(32.6969315, -117.2328995);
+
+    const Vector6d state = controller.GetKFState();
+    const Matrix6d covariance = controller.GetKFCovariance();
+
+    EXPECT_DOUBLE_EQ(state(0), 0.0);
+    EXPECT_DOUBLE_EQ(state(1), 0.0);
+    EXPECT_DOUBLE_EQ(covariance(0, 0), 25.0);
+    EXPECT_DOUBLE_EQ(covariance(1, 1), 25.0);
+    EXPECT_TRUE(controller.IsRunning());
+
+    controller.StopRadarPNT();
+    EXPECT_FALSE(controller.IsRunning());
+}
+
+TEST(RadarPositionNavigationControllerTest, GpsOriginResetPreservesPhysicalFilterPosition) {
+    const _KalmanValues kalmanValues = BuildTestKalmanValues();
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    auto imuManager = std::make_unique<IMUManager>(databaseManager, TEST_DATA_DIR "/WMM.COF");
+    RadarPositionNavigationController controller(kalmanValues,
+                                                  databaseManager,
+                                                  nullptr,
+                                                  std::move(imuManager));
+
+    constexpr double initialLatitude = 32.6969315;
+    constexpr double initialLongitude = -117.2328995;
+    controller.StartAndConfigureRadarPNT(initialLatitude, initialLongitude);
+
+    Vector6d oldState;
+    oldState << 50.0, 0.0, 0.25, 4.0, 0.02, 0.1;
+    const Matrix6d covariance = Matrix6d::Identity();
+    const Eigen::Matrix<double, 4, 4> measurementCovariance =
+        Eigen::Matrix<double, 4, 4>::Identity();
+    controller.m_latestX = oldState;
+    controller.m_kf = IMUGPSFusionKF(oldState, covariance, measurementCovariance);
+
+    double newOriginLatitude;
+    double newOriginLongitude;
+    double newOriginAltitude;
+    IMUUtils::ENU_To_WGS84(120.0,
+                           0.0,
+                           3.0,
+                           initialLongitude,
+                           initialLatitude,
+                           3.0,
+                           newOriginLatitude,
+                           newOriginLongitude,
+                           newOriginAltitude);
+
+    double gpsEasting;
+    double gpsNorthing;
+    ASSERT_TRUE(controller.ConvertGPSToENU(gpsEasting,
+                                           gpsNorthing,
+                                           newOriginLatitude,
+                                           newOriginLongitude));
+    controller.RestKFOrigin(initialLatitude, initialLongitude);
+
+    double stateLatitude;
+    double stateLongitude;
+    double stateAltitude;
+    IMUUtils::ENU_To_WGS84(oldState(0),
+                           oldState(1),
+                           3.0,
+                           initialLongitude,
+                           initialLatitude,
+                           3.0,
+                           stateLatitude,
+                           stateLongitude,
+                           stateAltitude);
+
+    double expectedEasting;
+    double expectedNorthing;
+    double expectedUp;
+    IMUUtils::WGS84_To_ENU(newOriginLongitude,
+                           newOriginLatitude,
+                           3.0,
+                           stateLongitude,
+                           stateLatitude,
+                           3.0,
+                           expectedEasting,
+                           expectedNorthing,
+                           expectedUp);
+
+    EXPECT_NEAR(controller.m_latestX(0), expectedEasting, 1e-5);
+    EXPECT_NEAR(controller.m_latestX(1), expectedNorthing, 1e-5);
+    EXPECT_NEAR(gpsEasting, 0.0, 1e-5);
+    EXPECT_NEAR(gpsNorthing, 0.0, 1e-5);
+}
+
+TEST(RadarPositionNavigationControllerTest, FilterOriginResetRecentersReturnedState) {
+    const _KalmanValues kalmanValues = BuildTestKalmanValues();
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    auto imuManager = std::make_unique<IMUManager>(databaseManager, TEST_DATA_DIR "/WMM.COF");
+    RadarPositionNavigationController controller(kalmanValues,
+                                                  databaseManager,
+                                                  nullptr,
+                                                  std::move(imuManager));
+
+    constexpr double initialLatitude = 32.6969315;
+    constexpr double initialLongitude = -117.2328995;
+    controller.StartAndConfigureRadarPNT(initialLatitude, initialLongitude);
+
+    Vector6d state;
+    state << 150.0, 25.0, 0.25, 4.0, 0.02, 0.1;
+    const Matrix6d covariance = Matrix6d::Identity();
+    const Eigen::Matrix<double, 4, 4> measurementCovariance =
+        Eigen::Matrix<double, 4, 4>::Identity();
+    controller.m_kf = IMUGPSFusionKF(state, covariance, measurementCovariance);
+
+    double expectedLatitude;
+    double expectedLongitude;
+    double expectedAltitude;
+    IMUUtils::ENU_To_WGS84(state(0),
+                           state(1),
+                           3.0,
+                           initialLongitude,
+                           initialLatitude,
+                           3.0,
+                           expectedLatitude,
+                           expectedLongitude,
+                           expectedAltitude);
+
+    ASSERT_TRUE(controller.ValidateAndUpdateENUOrigin(state));
+
+    EXPECT_NEAR(controller.m_originLatLon.first, expectedLongitude, 1e-10);
+    EXPECT_NEAR(controller.m_originLatLon.second, expectedLatitude, 1e-10);
+    EXPECT_NEAR(state(0), 0.0, 1e-5);
+    EXPECT_NEAR(state(1), 0.0, 1e-5);
+}
+
+TEST(RadarPositionNavigationControllerTest, UnknownPayloadIntervalDoesNotAdvanceFilter) {
+    const _KalmanValues kalmanValues = BuildTestKalmanValues();
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    auto imuManager = std::make_unique<IMUManager>(databaseManager, TEST_DATA_DIR "/WMM.COF");
+    RadarPositionNavigationController controller(kalmanValues,
+                                                  databaseManager,
+                                                  nullptr,
+                                                  std::move(imuManager));
+    controller.StartAndConfigureRadarPNT(32.6969315, -117.2328995);
+
+    const Vector6d stateBefore = controller.GetKFState();
+    Eigen::Matrix<double, 2, 1> imuControl;
+    imuControl << 1.0, 0.1;
+    controller.KFCallbackImuOnly(0.0, imuControl);
+
+    EXPECT_TRUE(controller.GetKFState().isApprox(stateBefore, 0.0));
+    EXPECT_EQ(databaseManager->GetStats().ekfQueued.load(), 0U);
+}
 
 // TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR) {
 //   SET_UP();

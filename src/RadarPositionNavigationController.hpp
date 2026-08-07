@@ -1,5 +1,16 @@
-#ifndef RADAR_POSITION_NAVIGATION_CONTROLLER_HPP
-#define RADAR_POSITION_NAVIGATION_CONTROLLER_HPP
+/******************************************************************************
+ * File:             RadarPositionNavigationController.hpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Declares the navigation controller that coordinates IMU
+ *                   processing, ENU GPS fusion, and Kalman-filter state access.
+ *
+ ******************************************************************************/
+
+#ifndef INU_DISPLAY_RADARPOSITIONNAVIGATIONCONTROLLER_HPP
+#define INU_DISPLAY_RADARPOSITIONNAVIGATIONCONTROLLER_HPP
 
 #include <Eigen/Dense>
 #include <atomic>
@@ -86,6 +97,36 @@ public:
      */
     bool IsRunning() const;
 
+    /**
+     *
+     * @brief   Returns a thread-safe snapshot of the most recently accepted Kalman-filter state in the active ENU frame. The
+     *          six elements contain easting, northing, heading, speed, yaw rate, and longitudinal acceleration in that order.
+     *
+     * @return  Copy of the latest six-element Kalman-filter state vector. Easting and northing are measured in meters, heading
+     *          in radians, speed in meters per second, yaw rate in radians per second, and acceleration in meters per second
+     *          squared.
+     *
+     * @remarks Acquires the controller's Kalman-filter update mutex so the returned vector cannot contain a partially written
+     *          filter update.
+     *
+     * @throws  std::system_error  If the Kalman-filter update mutex cannot be locked.
+     */
+    Vector6d GetKFState() const;
+
+    /**
+     *
+     * @brief   Returns a thread-safe snapshot of the covariance associated with the state returned by GetKFState().
+     *
+     * @return  Copy of the latest six-by-six Kalman-filter covariance matrix in state order: easting, northing, heading,
+     *          speed, yaw rate, and longitudinal acceleration.
+     *
+     * @remarks Acquires the controller's Kalman-filter update mutex so the returned matrix cannot contain a partially written
+     *          filter update.
+     *
+     * @throws  std::system_error  If the Kalman-filter update mutex cannot be locked.
+     */
+    Matrix6d GetKFCovariance() const;
+
 private:
     /**
      * @brief Starts the IMU serial reader service if one was constructed.
@@ -158,18 +199,66 @@ private:
      */
     void _GPSCallback(const GpsUpdate &gpsUpdate);
 
-    inline bool ConvertGPSToENU(double& E, double& N, double gpsLat, double gpsLon);
+    /**
+     *
+     * @brief   Converts a geodetic GPS position to easting and northing in the active local ENU frame. When the GPS
+     *          position is more than 100 meters from the active origin, establishes a new origin at the GPS position and
+     *          returns coordinates in that new frame.
+     *
+     * @param [out] easting    GPS easting in meters relative to the active origin on return.
+     * @param [out] northing   GPS northing in meters relative to the active origin on return.
+     * @param [in]  latitude   GPS latitude in decimal degrees.
+     * @param [in]  longitude  GPS longitude in decimal degrees.
+     *
+     * @return  True when the active ENU origin changed; otherwise false.
+     */
+    bool ConvertGPSToENU(double& easting, double& northing, double latitude, double longitude);
 
-    inline bool ValidateAndUpdateENUOrigin(Eigen::Matrix<double, 6, 1> &x);
+    /**
+     *
+     * @brief   Checks a predicted Kalman-filter position against the active ENU origin and recenters both the supplied state
+     *          and the filter's internal position when the state is more than 100 meters from that origin.
+     *
+     * @param [in,out] state  Six-element Kalman-filter state to inspect. When recentering occurs, easting and northing are
+     *                        rewritten in the new frame and heading is adjusted for the tangent-frame change.
+     *
+     * @return  True when the active ENU origin changed; otherwise false.
+     *
+     * @throws  std::runtime_error  If no geodetic origin is available for the coordinate conversion.
+     */
+    bool ValidateAndUpdateENUOrigin(Eigen::Matrix<double, 6, 1> &state);
 
-    inline void ConvertKFStateToWGS84(double& lat, double& lon, Eigen::Matrix<double, 6, 1> &x); 
-    
-    inline void RestKFOrigin(double oldLatOrigin, double oldLonOrigin);
+    /**
+     *
+     * @brief   Converts the easting and northing in a Kalman-filter state into WGS84 latitude and longitude using the active
+     *          ENU origin.
+     *
+     * @param [out] latitude   Converted WGS84 latitude in decimal degrees.
+     * @param [out] longitude  Converted WGS84 longitude in decimal degrees.
+     * @param [in]  state      Six-element state whose first two elements are easting and northing in meters.
+     *
+     * @return
+     */
+    void ConvertKFStateToWGS84(double& latitude,
+                               double& longitude,
+                               Eigen::Matrix<double, 6, 1> &state);
+
+    /**
+     *
+     * @brief   Re-expresses the latest Kalman-filter position and the filter's internal state in the current ENU frame after
+     *          a GPS measurement establishes a new origin.
+     *
+     * @param [in] oldLatOrigin  Latitude of the previous ENU origin in decimal degrees.
+     * @param [in] oldLonOrigin  Longitude of the previous ENU origin in decimal degrees.
+     *
+     * @return
+     */
+    void RestKFOrigin(double oldLatOrigin, double oldLonOrigin);
 
 private:
     Vector6d m_latestX;
     Matrix6d m_latestP;
-    std::mutex m_kFUpdateMutex;
+    mutable std::mutex m_kFUpdateMutex;
     IMUGPSFusionKF m_kf;
     
     const _KalmanValues& m_config;
@@ -199,6 +288,9 @@ private:
     FRIEND_TEST(RadarPositionNavigationControllerTest, KFCallbackWithGpsProducesNonFiniteStateBecauseKFUsesSingularR);
     FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpectingTryCatch);
     FRIEND_TEST(RadarPositionNavigationControllerTest, YamlFileParsingForKalmanFilterValuesExpecting);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, GpsOriginResetPreservesPhysicalFilterPosition);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, FilterOriginResetRecentersReturnedState);
+    FRIEND_TEST(RadarPositionNavigationControllerTest, UnknownPayloadIntervalDoesNotAdvanceFilter);
 };
 
-#endif // RADAR_POSITION_NAVIGATION_CONTROLLER_HPP
+#endif // INU_DISPLAY_RADARPOSITIONNAVIGATIONCONTROLLER_HPP

@@ -46,42 +46,7 @@ namespace IMUUtils
             latitude(latitude),
             longitude(longitude) {}
     };
-
-    struct KineticState {
-        std::chrono::steady_clock::time_point timestamp;
-        double speedEastWest{};
-        double speedNorthSouth{};
-        double accelerationEastWest{};
-        double accelerationNorthSouth{};
-
-        KineticState():
-            timestamp(std::chrono::steady_clock::now()) {}
-
-        KineticState(double v_x, double v_y, double a_x, double a_y):
-            timestamp(std::chrono::steady_clock::now()),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
-
-        KineticState(std::chrono::steady_clock::time_point tp, double v_x, double v_y, double a_x, double a_y):
-            timestamp(tp),
-            speedEastWest(v_x),
-            speedNorthSouth(v_y),
-            accelerationEastWest(a_x),
-            accelerationNorthSouth(a_y) {}
-
-        KineticState& operator=(const KineticState& other) {
-            timestamp = other.timestamp;
-            speedEastWest = other.speedEastWest;
-            speedNorthSouth = other.speedNorthSouth;
-            accelerationEastWest = other.accelerationEastWest;
-            accelerationNorthSouth = other.accelerationNorthSouth;
-
-            return *this;
-        }
-    };
-
+    
     /**
      * @brief Converts Degrees to Radians from IMU readings.
      *
@@ -155,55 +120,6 @@ namespace IMUUtils
         double global_Y = std::cos(theta_t) * boat_y - std::sin(theta_t) * boat_x;
         return global_Y;
     };
-
-    /**
-     *
-     * @brief   Calculates the current state of the vessel on a global coordinate frame using degrees latitude/longitude as
-     * the metric for movenemt. Utilizes basic Newtonia motion mechanics and assumes a constant acceleration over the elapsed
-     * period between measurements to project where an object is given a rate of acceleration, previous velocity, and
-     * time elapsed.
-     *
-     * @param [in] previous     A const reference to the previously calculated kinetic state of the system in global reference frame
-     * @param [in] accelerationEastWest     The east/west acceleration of the system as measured by the IMU, converted to global
-     * frame (measured in degrees longitude per second per second) with east being positive
-     * @param [in] accelerationNorthSouth     The north/south acceleration of the system as measured by the IMU, converted to global
-     * frame (measured in degrees latitude per second per second) with north being positive
-     * @param [in] currentTimestamp     The steady clock timestamp to assign to the calculated state. Allows tests and
-     * production callers to control the exact elapsed time used in the velocity update.
-     *
-     * @return  The calculated position of the vessel
-     */
-    inline KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
-                                            double accelerationNorthSouth, std::chrono::steady_clock::time_point currentTimestamp) {
-        KineticState current = KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
-        const double deltaT = std::chrono::duration<double>(current.timestamp - previous.timestamp).count();
-
-        current.accelerationEastWest = accelerationEastWest;
-        current.speedEastWest = previous.speedEastWest + accelerationEastWest * deltaT;
-
-        current.accelerationNorthSouth = accelerationNorthSouth;
-        current.speedNorthSouth= previous.speedNorthSouth + accelerationNorthSouth * deltaT;
-
-        return current;
-    }
-
-    /**
-     *
-     * @brief   Calculates the current kinetic state using the steady clock timestamp captured at the time of the call.
-     *
-     * @param [in] previous     A const reference to the previously calculated kinetic state of the system in global reference frame
-     * @param [in] accelerationEastWest     The east/west acceleration of the system as measured by the IMU, converted to global
-     * frame (measured in degrees longitude per second per second) with east being positive
-     * @param [in] accelerationNorthSouth     The north/south acceleration of the system as measured by the IMU, converted to global
-     * frame (measured in degrees latitude per second per second) with north being positive
-     *
-     * @return  The calculated position of the vessel
-     */
-    inline KineticState CalculateKineticUpdate(const IMUUtils::KineticState& previous, double accelerationEastWest,
-                                            double accelerationNorthSouth) {
-        return CalculateKineticUpdate(previous, accelerationEastWest, accelerationNorthSouth,
-                                        std::chrono::steady_clock::now());
-    }
 
     /**
      * @brief Converts magnetic heading and declination angle values into a true north angle.

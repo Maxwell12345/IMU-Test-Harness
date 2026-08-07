@@ -1,106 +1,61 @@
-import pandas as pd
-import numpy as np
+import argparse
+import csv
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 
-df = pd.read_csv(
-    "./build/output.csv",
-    names=[
-        "timestamp",
-        "lon",
-        "lat",
-        "vLon",
-        "vLat",
-        "aLon",
-        "aLat"
-    ]
-)
 
-est_lon = []
-est_lat = []
+parser = argparse.ArgumentParser()
+parser.add_argument("csv_path", nargs="?", default="build/output.csv")
+args = parser.parse_args()
 
-last_est_lon = None
-last_est_lat = None
-last_time = None
+csv_path = Path(args.csv_path)
 
+with csv_path.open(newline="") as csv_file:
+    rows = list(csv.DictReader(csv_file))
 
-for _, row in df.iterrows():
+if not rows:
+    raise RuntimeError(f"No data found in {csv_path}")
 
-    ts = row["timestamp"] * 1e-3
+timestamps = [int(row["measurement_host_timestamp_ns"]) for row in rows]
+start_timestamp = timestamps[0]
+elapsed_seconds = [(timestamp - start_timestamp) / 1_000_000_000 for timestamp in timestamps]
+gps_longitude = [float(row["gps_longitude_deg"]) for row in rows]
+gps_latitude = [float(row["gps_latitude_deg"]) for row in rows]
+kf_easting = [float(row["kf_easting_m"]) for row in rows]
+kf_northing = [float(row["kf_northing_m"]) for row in rows]
+kf_speed = [float(row["kf_speed_mps"]) for row in rows]
+kf_heading = [float(row["kf_heading_deg"]) for row in rows]
 
-    gps_available = (
-        row["lon"] != 0.0 and
-        row["lat"] != 0.0
-    )
+figure, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    if gps_available: 
-        last_est_lon = row["lon"]
-        last_est_lat = row["lat"]
-        gps_n_skips = 0
-        last_time = ts
+axes[0, 0].plot(gps_longitude, gps_latitude)
+axes[0, 0].set_title("GPS Path")
+axes[0, 0].set_xlabel("Longitude (degrees)")
+axes[0, 0].set_ylabel("Latitude (degrees)")
+axes[0, 0].axis("equal")
+axes[0, 0].grid(True)
 
-    elif last_est_lon is not None:
+axes[0, 1].plot(kf_easting, kf_northing)
+axes[0, 1].set_title("Kalman Filter ENU Path")
+axes[0, 1].set_xlabel("Easting (m)")
+axes[0, 1].set_ylabel("Northing (m)")
+axes[0, 1].axis("equal")
+axes[0, 1].grid(True)
 
-        dt = ts - last_time
+axes[1, 0].plot(elapsed_seconds, kf_speed)
+axes[1, 0].set_title("Kalman Filter Speed")
+axes[1, 0].set_xlabel("Elapsed time (s)")
+axes[1, 0].set_ylabel("Speed (m/s)")
+axes[1, 0].grid(True)
 
-        last_est_lon = (
-            last_est_lon
-            + row["vLon"] * dt
-            + 0.5 * row["aLon"] * dt * dt
-        )
+axes[1, 1].plot(elapsed_seconds, kf_heading)
+axes[1, 1].set_title("Kalman Filter Heading")
+axes[1, 1].set_xlabel("Elapsed time (s)")
+axes[1, 1].set_ylabel("Heading (degrees)")
+axes[1, 1].set_ylim(0, 360)
+axes[1, 1].grid(True)
 
-        last_est_lat = (
-            last_est_lat
-            + row["vLat"] * dt
-            + 0.5 * row["aLat"] * dt * dt
-        )
-
-    est_lon.append(last_est_lon)
-    est_lat.append(last_est_lat)
-
-    last_time = ts
-
-gps_mask = (
-    (df["lon"] != 0.0) &
-    (df["lat"] != 0.0)
-)
-
-plt.figure(figsize=(30, 30))
-
-plt.plot(
-    df.loc[gps_mask, "lon"],
-    df.loc[gps_mask, "lat"],
-    ".",
-    label="GPS Fixes",
-    linewidth=2
-)
-
-plt.plot(
-    est_lon,
-    est_lat,
-    "-",
-    label="Dead Reckoning",
-    linewidth=2
-)
-
-plt.scatter(
-    df.loc[gps_mask, "lon"],
-    df.loc[gps_mask, "lat"],
-    s=50,
-    marker="x",
-    label="GPS Corrections"
-)
-
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.title("GPS vs Dead-Reckoned Path")
-plt.legend()
-plt.grid(True)
-plt.axis("equal")
-
-plt.savefig(
-    "trajectory.png",
-    dpi=1200,
-    bbox_inches="tight"
-)
-
-print("Saved trajectory.png")
+figure.suptitle(csv_path.name)
+figure.tight_layout()
+plt.show()

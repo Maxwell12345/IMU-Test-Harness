@@ -1,3 +1,14 @@
+/******************************************************************************
+ * File:             IMUManagerTests.cpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Verifies IMU payload timing and the control measurements
+ *                   delivered by IMUManager to the Kalman filter.
+ *
+ ******************************************************************************/
+
 // #include <cmath>
 // #include <limits>
 // #include <vector>
@@ -225,7 +236,6 @@
 //   gps.latitude = 80.0;
 //   gps.longitude = 0;
 
-//   imuManager.m_kineticState = {std::chrono::steady_clock::now(), 0, 0, 0, 0};
 
 //   std::this_thread::sleep_for(std::chrono::seconds(1));
 //   Vector6d zImuT1Sec = imuManager.BuildImuMeasurementVector(rv, la, gps, 2025);
@@ -314,3 +324,52 @@
 //   imuManager.ResetImuReadyFlags();
 //   EXPECT_FALSE(imuManager.m_imuLinearAccelerationReady);
 // }
+
+#include <memory>
+
+#include <gtest/gtest.h>
+
+#include "DatabaseManager.hpp"
+#include "GpsUpdate.hpp"
+#include "IMUManager.hpp"
+
+TEST(IMUManagerTest, BuildImuMeasurementVectorReturnsVector) {
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    IMUManager imuManager(databaseManager, TEST_DATA_DIR "/WMM.COF");
+
+    const Raw_Accelerometer linearAcceleration{1.25F, 2.5F, -0.5F, 1'000'000ULL};
+    const Raw_RotationRate rotationRate{0.1F, -0.2F, 0.75F, 1'500'000ULL};
+
+    const Eigen::Matrix<double, 2, 1> control = imuManager.BuildImuMeasurementVector(
+        linearAcceleration,
+        rotationRate);
+
+    EXPECT_DOUBLE_EQ(control(0), 2.5);
+    EXPECT_DOUBLE_EQ(control(1), 0.75);
+}
+
+TEST(IMUManagerTest, PrepareEkfTimingReturnsDtSeconds) {
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    IMUManager imuManager(databaseManager, TEST_DATA_DIR "/WMM.COF");
+    imuManager.m_lastEKFMachineTime = 0;
+    imuManager.m_imuLinearAcceleration.timestamp = 1'000'000ULL;
+    imuManager.m_imuRotationVector.timestamp = 2'000'000ULL;
+
+    EXPECT_DOUBLE_EQ(imuManager.PrepareEkfTiming(), 0.0);
+    EXPECT_EQ(imuManager.m_lastEKFMachineTime, 1'000'000ULL);
+
+    imuManager.m_imuLinearAcceleration.timestamp = 2'500'000ULL;
+    imuManager.m_imuRotationVector.timestamp = 3'000'000ULL;
+    EXPECT_DOUBLE_EQ(imuManager.PrepareEkfTiming(), 1.5);
+}
+
+TEST(IMUManagerTest, PrepareEkfTimingRejectsNonMonotonicPayloadTime) {
+    auto databaseManager = std::make_shared<DatabaseManager>(":memory:");
+    IMUManager imuManager(databaseManager, TEST_DATA_DIR "/WMM.COF");
+    imuManager.m_lastEKFMachineTime = 2'000'000ULL;
+    imuManager.m_imuLinearAcceleration.timestamp = 1'500'000ULL;
+    imuManager.m_imuRotationVector.timestamp = 1'750'000ULL;
+
+    EXPECT_DOUBLE_EQ(imuManager.PrepareEkfTiming(), 0.0);
+    EXPECT_EQ(imuManager.m_lastEKFMachineTime, 2'000'000ULL);
+}

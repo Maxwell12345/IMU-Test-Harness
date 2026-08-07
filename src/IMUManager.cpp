@@ -1,3 +1,14 @@
+/******************************************************************************
+ * File:             IMUManager.cpp
+ *
+ * Author:           Brian R. Atkinson
+ * Organization:     Marine Corps Software Factory
+ * Created On:       08/07/26
+ * Description:      Synchronizes IMU payloads, computes payload-based filter
+ *                   timing, and dispatches GPS/IMU measurements to the EKF.
+ *
+ ******************************************************************************/
+
 #include <cmath>
 #include <cstdio>
 
@@ -16,7 +27,6 @@ IMUManager::IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::st
 
     m_magneticDeclination.LoadCOF(cofPath);
 
-    m_kineticState = IMUUtils::KineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
     m_imuRotationVector = {0, 0, 0, 0, 0};
     m_imuLinearAcceleration = {0, 0, 0};
 
@@ -100,6 +110,7 @@ void IMUManager::DispatchToEkf() {
         throw std::runtime_error("No GPS data ever recorded");
     }
 
+<<<<<<< Updated upstream
     double dtSeconds = PrepareEkfTiming();
 
     int year = GetCurrentYear();
@@ -109,6 +120,17 @@ void IMUManager::DispatchToEkf() {
                                               gpsUpdateSnapshot.value(),
                                               year,
                                               dtSeconds);
+=======
+    Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(linearAccelerationSnapshot,
+                                                                 rotationRateSnapshot);
+
+    double dtSeconds = PrepareEkfTiming();
+
+    if (dtSeconds <= 0.0) {
+        ResetImuReadyFlags();
+        return;
+    }
+>>>>>>> Stashed changes
     
     if (gpsSentToEkfSnapshot == false) {
         Eigen::Matrix<double, 2, 1> zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
@@ -124,12 +146,6 @@ void IMUManager::DispatchToEkf() {
     ResetImuReadyFlags();
 }
 
-int IMUManager::GetCurrentYear() const {
-    auto ymdNow = std::chrono::system_clock::now();
-    const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(ymdNow)};
-    return static_cast<int>(ymd.year());
-}
-
 double IMUManager::PrepareEkfTiming() {
     uint64_t accHwTime = m_imuLinearAcceleration.timestamp;
     uint64_t rotHwTime = m_imuRotationVector.timestamp;
@@ -138,14 +154,17 @@ double IMUManager::PrepareEkfTiming() {
     // TODO: This logic needs to be backtested and changed if required.
     uint64_t oldestHwTime = std::min(accHwTime, rotHwTime);
 
-    double dtSeconds = static_cast<double>(oldestHwTime - lastEKFhwTime) / 1e6;
-    m_lastEKFMachineTime = oldestHwTime;
-
-    if (dtSeconds <= 0) {
-        dtSeconds = 0.01;
+    if (lastEKFhwTime == 0) {
+        m_lastEKFMachineTime = oldestHwTime;
+        return 0.0;
     }
 
-    return dtSeconds;
+    if (oldestHwTime <= lastEKFhwTime) {
+        return 0.0;
+    }
+
+    m_lastEKFMachineTime = oldestHwTime;
+    return static_cast<double>(oldestHwTime - lastEKFhwTime) / 1e6;
 }
 
 void IMUManager::ResetImuReadyFlags() {
@@ -232,5 +251,5 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_Rota
         this->m_muYaw
     };
 
-    return imuVector;
+    return imuControl;
 }

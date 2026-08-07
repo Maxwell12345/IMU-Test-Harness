@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 project(IMUPROC LANGUAGES CXX C)
 
+option(SIMULATION_MODE "Build the recorded-sensor simulation entry point" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}")
 
@@ -17,6 +20,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 endif()
 
 file(GLOB_RECURSE PROJ_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+list(FILTER PROJ_SRC EXCLUDE REGEX ".*/main2?\\.cpp$")
 
 add_library(IMUPROC_LIB
 	${PROJ_SRC}
@@ -35,7 +39,13 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_link_libraries(IMUPROC_LIB PUBLIC yaml-cpp::yaml-cpp Boost::system)
 endif()
 
-add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
+if(SIMULATION_MODE)
+    set(IMUPROC_MAIN "${CMAKE_SOURCE_DIR}/src/main2.cpp")
+else()
+    set(IMUPROC_MAIN "${CMAKE_SOURCE_DIR}/src/main.cpp")
+endif()
+
+add_executable(${PROJECT_NAME} ${IMUPROC_MAIN})
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -63,9 +73,3 @@ target_compile_definitions(${PROJECT_NAME}_tests PRIVATE
 
 include(GoogleTest)
 gtest_discover_tests(${PROJECT_NAME}_tests)
-
-add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
-    COMMAND ${PROJECT_NAME}_tests
-    WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
-    COMMENT "Running ${PROJECT_NAME}_tests"
-)
