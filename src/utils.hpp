@@ -504,6 +504,63 @@ namespace IMUUtils
         return {trueEast, trueNorth, up};
     }
 
+    inline double ComputeENUHeading(double i, double j, double k, double real, double dRoll, double dPitch, double dYaw, double dt, double declinationRadians) {
+        double qx = i;
+        double qy = j;
+        double qz = k;
+        double qw = real;
+
+        const double qNorm = std::sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+
+        if (qNorm <= 1e-12) {
+            throw std::runtime_error("Invalid rotation-vector quaternion");
+        }
+
+        qx /= qNorm;
+        qy /= qNorm;
+        qz /= qNorm;
+        qw /= qNorm;
+
+        const double omega = std::sqrt(dRoll * dRoll + dPitch * dPitch + dYaw * dYaw);
+
+        double dqx;
+        double dqy;
+        double dqz;
+        double dqw;
+
+        if (omega > 1e-12 && dt > 0.0) {
+            const double halfAngle = 0.5 * omega * dt;
+            const double scale = std::sin(halfAngle) / omega;
+
+            dqx = dRoll  * scale;
+            dqy = dPitch * scale;
+            dqz = dYaw   * scale;
+            dqw = std::cos(halfAngle);
+        } else {
+            dqx = 0.5 * dRoll  * dt;
+            dqy = 0.5 * dPitch * dt;
+            dqz = 0.5 * dYaw   * dt;
+            dqw = 1.0;
+        }
+
+        const double predictedX = qw * dqx + qx * dqw + qy * dqz - qz * dqy;
+        const double predictedY = qw * dqy - qx * dqz + qy * dqw + qz * dqx;
+        const double predictedZ = qw * dqz + qx * dqy - qy * dqx + qz * dqw;
+        const double predictedW = qw * dqw - qx * dqx - qy * dqy - qz * dqz;
+
+        const double predictedNorm = std::sqrt(predictedX * predictedX + predictedY * predictedY + predictedZ * predictedZ + predictedW * predictedW);
+
+        qx = predictedX / predictedNorm;
+        qy = predictedY / predictedNorm;
+        qz = predictedZ / predictedNorm;
+        qw = predictedW / predictedNorm;
+
+        const double magneticENUHeading = std::atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
+        const double trueENUHeading = magneticENUHeading - declinationRadians;
+
+        return std::remainder(trueENUHeading, 2.0 * 3.141592653589793);
+    }
+
 }; // namespace IMUUtils
 
 #endif // IMU_UTILS_HPP

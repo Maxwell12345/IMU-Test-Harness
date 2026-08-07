@@ -65,6 +65,12 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         }
 
         have_attitude = 1;
+
+        const rotation_t rotation = {
+            x, y, z, w, event->data.rotation_vector.accuracy,
+            (unsigned long long)event->timestamp_us
+        };
+
         // send_rotation_t(&rotation);
         printf("RV,%llu,%f,%f,%f,%f,%f\n",
             (unsigned long long)event->timestamp_us,
@@ -101,12 +107,13 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         const double d_pitch = q * cos_roll - r * sin_roll;
         const double d_yaw = (q * sin_roll + r * cos_roll) / cos_pitch;
 
-        const rotation_rate_t rotationRate {
+        const rotation_rate_t rotationRate = {
             d_roll,
             d_pitch,
-            d_yaw
+            d_yaw,
+            (unsigned long long)event->timestamp_us
         };
-        send_rotation_rate_t(rotationRate);
+        // send_rotation_rate_t(&rotationRate);
 
         printf("DRPY,%llu,%f,%f,%f\n",
             (unsigned long long)event->timestamp_us,

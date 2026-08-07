@@ -19,6 +19,11 @@ IMUManager::IMUManager(std::shared_ptr<DatabaseManager> databaseManager, std::st
     m_kineticState = IMUUtils::KineticState(steadyMin, 0.0, 0.0, 0.0, 0.0);
     m_imuRotationVector = {0, 0, 0, 0, 0};
     m_imuLinearAcceleration = {0, 0, 0};
+
+    this->m_muEast = 0.0;
+    this->m_muNorth = 0.0;
+    this->m_muYaw = 0.0;
+    this->m_EMWA_alpha = 0.6;
 }
 
 void IMUManager::InstallEkf(std::function<void(double, Eigen::Matrix<double, 2, 1> &)> ekfCallbackImuOnly,
@@ -95,14 +100,15 @@ void IMUManager::DispatchToEkf() {
         throw std::runtime_error("No GPS data ever recorded");
     }
 
+    double dtSeconds = PrepareEkfTiming();
+
     int year = GetCurrentYear();
     Eigen::Matrix<double, 2, 1> zImu = BuildImuMeasurementVector(rotationVectorSnapshot,
                                               linearAccelerationSnapshot,
                                               rotationRateSnapshot,
                                               gpsUpdateSnapshot.value(),
-                                              year);
-
-    double dtSeconds = PrepareEkfTiming();
+                                              year,
+                                              dtSeconds);
     
     if (gpsSentToEkfSnapshot == false) {
         Eigen::Matrix<double, 2, 1> zGps = BuildGpsMeasurementVector(gpsUpdateSnapshot.value());
@@ -198,7 +204,9 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildGpsMeasurementVector(const GpsUpdat
 Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_RotationVectorWAcc &rv,
                                                const Raw_Accelerometer &la,
                                                const Raw_RotationRate &rr,
-                                               const GpsUpdate &gps, int currentYear) {
+                                               const GpsUpdate &gps, 
+                                               int currentYear,
+                                               double dt) {
     double latitude = gps.latitude;
     double longitude = gps.longitude;
     const double RADAR_HEIGHT_M = 4.0;
@@ -209,30 +217,19 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_Rota
                                                                                currentYear);
 
     const IMUUtils::ENUAccel acc = IMUUtils::RotateLinearAccelToTrueENU(
-        rv.real, rv.i, rv.j, rv.k,
-        la.x, la.y, la.z,
-        magneticDeclinationDeg
+        rv.real, rv.i, rv.j, rv.k, la.x, la.y, la.z, magneticDeclinationDeg
     );
 
-    const auto currentTimestamp = std::chrono::steady_clock::now();
+    this->m_muEast = this->m_EMWA_alpha * acc.east + (1.0 - this->m_EMWA_alpha) * this->m_muEast;
+    this->m_muNorth = this->m_EMWA_alpha * acc.north + (1.0 - this->m_EMWA_alpha) * this->m_muNorth;
+    this->m_muYaw = this->m_EMWA_alpha * rr.d_yaw + (1.0 - this->m_EMWA_alpha) * this->m_muYaw;
 
-    if (m_kineticState.timestamp == steadyMin) {
-        m_kineticState = IMUUtils::KineticState(currentTimestamp, 0.0, 0.0, 0.0, 0.0);
-    }
-
-    IMUUtils::KineticState kineticState =
-        IMUUtils::CalculateKineticUpdate(
-            m_kineticState,
-            acc.east,
-            acc.north,
-            currentTimestamp
-        );
-
-    m_kineticState = kineticState;
+    const double heading = IMUUtils::ComputeENUHeading(rv.i, rv.j, rv.k, rv.real, rr.d_roll, rr.d_pitch, this->m_muYaw, dt, magneticDeclinationDeg * 3.14159265359 / 180.0);
+    const double accelerationForward = this->m_muEast * std::cos(heading) + this->m_muNorth * std::sin(heading);
 
     Eigen::Matrix<double, 2, 1> imuVector = {
-        kineticState.accelerationEastWest,
-        kineticState.accelerationNorthSouth
+        accelerationForward,
+        this->m_muYaw
     };
 
     return imuVector;

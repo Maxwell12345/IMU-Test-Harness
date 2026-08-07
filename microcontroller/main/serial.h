@@ -74,7 +74,7 @@ typedef struct rotation_t {
 typedef struct rotation_rate_t {
     float d_roll;
     float d_pitch;
-    float d_raw;
+    float d_yaw;
     uint64_t timestamp;
 } rotation_rate_t;
 #pragma pack(pop)

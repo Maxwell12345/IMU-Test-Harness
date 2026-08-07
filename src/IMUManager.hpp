@@ -211,7 +211,8 @@ private:
                                        const Raw_Accelerometer &la,
                                        const Raw_RotationRate &rr,
                                        const GpsUpdate &gps,
-                                       int currentYear);
+                                       int currentYear,
+                                       double dt);
 
     bool m_imuRotationVectorReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
     bool m_imuRotationRateReady = false;            // True when class is updated with new RotationVector measurement and not used yet in EKF
@@ -236,6 +237,11 @@ private:
 
     std::function<void(double, Eigen::Matrix<double, 2, 1> &)> m_ekfCallbackImuOnly;             // EKF callback without new GPS data
     std::function<void(double, Eigen::Matrix<double, 2, 1> &, Eigen::Matrix<double, 2, 1> &)> m_ekfCallbackWithGps; // EKF callback with new unused GPS data
+
+    double m_muEast;
+    double m_muNorth;
+    double m_muYaw;
+    double m_EMWA_alpha;
 
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsTrue);
     FRIEND_TEST(IMUManagerTest, IsInvalidRangeReturnsFalse);

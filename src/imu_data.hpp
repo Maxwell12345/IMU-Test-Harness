@@ -37,7 +37,7 @@ typedef struct Raw_Accelerometer {
 typedef struct Raw_RotationRate {
     float d_roll;
     float d_pitch;
-    float d_raw;
+    float d_yaw;
     uint64_t timestamp;
 } rotation_rate_t;
 #pragma pack(pop)

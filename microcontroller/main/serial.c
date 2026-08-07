@@ -187,7 +187,7 @@ esp_err_t send_rotation_rate_t(const rotation_rate_t *rotationRate) {
     buffer[length++] = ROTATION_RATE_T_ID;
     buffer[length++] = ROTATION_RATE_PAYLOAD_BYTES;
 
-    memcpy(buffer+length, rotation, sizeof(rotation_rate_t));
+    memcpy(buffer+length, rotationRate, sizeof(rotation_rate_t));
     length += sizeof(rotation_rate_t);
 
     uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
