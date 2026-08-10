@@ -23,13 +23,13 @@ IMUGPSFusionKF::IMUGPSFusionKF(
 
     this->m_H_GPS_IMU << 1, 0, 0, 0, 0, 0,
                          0, 1, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 1,
-                         0, 0, 0, 0, 1, 0;
+                         0, 0, 0, 0, 1, 0,
+                         0, 0, 0, 0, 0, 1;
 
     this->m_H_IMU << 0, 0, 0, 0, 0, 0,
                      0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 1,
-                     0, 0, 0, 0, 1, 0;
+                     0, 0, 0, 0, 1, 0,
+                     0, 0, 0, 0, 0, 1;
 
     this->Update_Q(1.0 / 100.0, this->m_x);
 
@@ -38,14 +38,14 @@ IMUGPSFusionKF::IMUGPSFusionKF(
     Eigen::Matrix<double, 2, 2> IMUR;
     IMUR << R0(2, 2), R0(2, 3), R0(3, 2), R0(3, 3);
 
-    this->m_covarianceEstimator = IMUCovarianceEstimator(IMUR, 500, 200);
+    this->m_covarianceEstimator = IMUCovarianceEstimator(IMUR, 600, 300);
 }
 
 Eigen::Matrix<double, N_STATE, N_STATE>
 IMUGPSFusionKF::BuildFk(double dt,
                        Eigen::Matrix<double, N_STATE, 1> state,
                        Eigen::Matrix<double, 2, 1> imuControl) {
-    const double measuredYawRate = imuControl(1, 0);
+    const double measuredYawRate = imuControl(0, 0);
 
     const double heading = state(2);
     const double speed = state(3);
@@ -99,8 +99,8 @@ Eigen::Matrix<double, N_STATE, 1>
 IMUGPSFusionKF::f(double dt,
                  Eigen::Matrix<double, N_STATE, 1> state,
                  Eigen::Matrix<double, 2, 1> imuControl) {
-    const double measuredAcceleration = imuControl(0, 0);
-    const double measuredYawRate = imuControl(1, 0);
+    const double measuredYawRate = imuControl(0, 0);
+    const double measuredAcceleration = imuControl(1, 0);
 
     const double easting = state(0, 0);
     const double northing = state(1, 0);
@@ -144,7 +144,7 @@ IMUGPSFusionKF::Step(double dt, Eigen::Matrix<double, 2, 1>& imuControl) {
 
     this->m_lastGPSDt += dt;
 
-    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(0, 0), imuControl(1, 0));
+    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(1, 0), imuControl(0, 0));
 
     this->m_R(2, 2) = imuMeasurementCovariance(0, 0);
     this->m_R(2, 3) = imuMeasurementCovariance(0, 1);
@@ -181,7 +181,7 @@ IMUGPSFusionKF::Step(double dt,
 
     this->m_lastGPSDt = 0.0;
 
-    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(0, 0), imuControl(1, 0));
+    auto imuMeasurementCovariance = this->m_covarianceEstimator.GetR(imuControl(1, 0), imuControl(0, 0));
 
     this->m_R(2, 2) = imuMeasurementCovariance(0, 0);
     this->m_R(2, 3) = imuMeasurementCovariance(0, 1);
@@ -217,7 +217,7 @@ IMUGPSFusionKF::Update_Q(double dt, Eigen::Matrix<double, N_STATE, 1> state) {
     const double yawRate = state(4);
 
     const double jerkPSD = 0.3;
-    const double yawAccelerationPSD = 3.14159265358979323846 / 20.0;
+    const double yawAccelerationPSD = 3.14159265358979323846 / 15.0;
 
     const double dt2 = dt * dt;
     const double dt3 = dt2 * dt;

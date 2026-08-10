@@ -244,8 +244,8 @@ Eigen::Matrix<double, 2, 1> IMUManager::BuildImuMeasurementVector(const Raw_Rota
     const double accelerationForward = this->m_muEast * std::cos(heading) + this->m_muNorth * std::sin(heading);
 
     Eigen::Matrix<double, 2, 1> imuVector = {
-        accelerationForward,
-        this->m_muYaw
+        this->m_muYaw,
+        accelerationForward
     };
 
     return imuVector;
