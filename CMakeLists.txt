@@ -30,7 +30,7 @@ target_link_libraries(IMUPROC_LIB
         Boost::regex
         Boost::filesystem)
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_link_libraries(IMUPROC_LIB PUBLIC atomic yaml-cpp)
+    target_link_libraries(IMUPROC_LIB PUBLIC atomic yaml-cpp::yaml-cpp)
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_link_libraries(IMUPROC_LIB PUBLIC yaml-cpp::yaml-cpp Boost::system)
 endif()
@@ -65,6 +65,12 @@ include(GoogleTest)
 gtest_discover_tests(${PROJECT_NAME}_tests)
 
 add_custom_command(TARGET ${PROJECT_NAME}_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/test/WMM.COF"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}_tests>/WMM.COF"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/test_config.yaml"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}_tests>/test_config.yaml"
     COMMAND ${PROJECT_NAME}_tests
     WORKING_DIRECTORY $<TARGET_FILE_DIR:${PROJECT_NAME}_tests>
     COMMENT "Running ${PROJECT_NAME}_tests"
