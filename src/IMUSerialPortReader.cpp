@@ -94,7 +94,23 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(rot, std::nullopt, std::nullopt);
                 }
 
-                return;
+                break;
+            }
+
+            case _IMU_MESSAGE_TYPES_::STATUS_MSG: {
+                if (len != 9) {
+                    break;
+                }
+
+                processor_status_t status;
+                status.status = static_cast<imu_status>(*(message + 3));
+                std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
+
+                if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
+                    // std::string msg = std::format("Prev state- state:{} time:{}   New state- state:{} time:{}", (int)m_currentImuStatus.status, m_currentImuStatus.timestamp, (int)status.status, status.timestamp);
+                    // std::cout << msg << std::endl;
+                    this->m_currentImuStatus = status;
+                }
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_RATE: {
