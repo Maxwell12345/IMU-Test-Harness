@@ -265,8 +265,9 @@ namespace IMUUtils
     }
 
     /**
-     * @brief Converts quaternions w + (i,j,k) to calculate magnetic heading.
-     *
+     * @brief Uses the quaternion coefficients to convert quaternions  expressed as w + (i,j,k) to calculate magnetic heading.
+     * This code assumes that the y-axis of the IMU is perfectly aligned with the "forward" axis of the vehicle it is mounted on
+     * What this means that if the vehicle is facing perfectly North, then the IMU reading should produce a heading of 0.0 degrees
      * @remark
      * Expected Behavior:
      * The returned heading will always be between [0.0, 360).
@@ -276,14 +277,19 @@ namespace IMUUtils
      * - w, i, j and k values are normalized.
      *
      * @param w Scalar
-     * @param i Quaternion rotation with respect to x axis.
-     * @param j Quaternion rotation with respect to y axis.
-     * @param k Quaternion rotation with respect to z axis.
+     * @param i Quaternion rotation with respect to x-axis with counter-clockwise being positive.
+     * @param j Quaternion rotation with respect to y-axis with counter-clockwise being positive.
+     * @param k Quaternion rotation with respect to z-axis with counter-clockwise being positive.
      * @return  A double containing the magnetic heading of the IMU in degrees (not radians).
      *
      */
     inline double Calculate_Magnetic_Heading(double w, double i, double j, double k) {
-        const double n = std::sqrt(w*w + i*i + j*j + k*k);
+        const double squaredSum = w*w + i*i + j*j + k*k;
+        if (.99 >= squaredSum || 1.01 <= squaredSum) {
+            throw std::out_of_range("Invalid quaternion parameters");
+        }
+
+        const double n = std::sqrt(squaredSum);
 
         if (!std::isfinite(n) || n < 1e-12) {
             throw std::runtime_error("Invalid quaternion norm.");

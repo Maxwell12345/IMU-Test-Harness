@@ -177,3 +177,30 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
 
     return host_serial_write_all(buffer, length);
 }
+
+esp_err_t send_status_t(const processor_status_t *processor_status) {
+    // printf("\n%sStarting status update%s\n", "\e[32m", "\e[37m");
+    if (processor_status == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[20] = {0};
+    size_t length = 0;
+
+    buffer[length++] = MAGIC_ENCODER;
+    buffer[length++] = STATUS_MSG_ID;
+    buffer[length++] = STATUS_PAYLOAD_BYTES;
+
+    buffer[length++] = (uint8_t)processor_status->status;
+    memcpy(buffer+length, &processor_status->timestamp, sizeof(processor_status->timestamp));
+    length += 8;
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    esp_err_t write_status = ESP_OK;
+    // for (int i=0; i< 100; i++) {
+        write_status = host_serial_write_all(buffer, length);
+    // }
+    // printf("\n%sStatus update complete with write status: %s%d\n", "\e[32m", "\e[37m", write_status);
+    return write_status;
+}

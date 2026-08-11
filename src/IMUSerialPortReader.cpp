@@ -48,7 +48,9 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
 
         port.ReadExact(message + 1, 2);
 
-        _IMU_MESSAGE_TYPES_ type = this->GetMessageType(message[1]);
+        _IMU_MESSAGE_TYPES_ type = _IMU_MESSAGE_TYPES_::STATUS_MSG;
+        type = this->GetMessageType(message[1]);
+
         unsigned int len = this->GetMessageLength(message[2]);
 
         if (len > 73) {
@@ -67,7 +69,7 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
         switch (type) {
             case _IMU_MESSAGE_TYPES_::ACCELERATION: {
                 if (len != sizeof(Raw_Accelerometer)) {
-                    return;
+                    break;
                 }
 
                 Raw_Accelerometer accel = {};
@@ -77,12 +79,12 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(std::nullopt, accel, std::nullopt);
                 }
 
-                return;
+                break;
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_VECTOR: {
                 if (len != sizeof(Raw_RotationVectorWAcc)) {
-                    return;
+                    break;
                 }
 
                 Raw_RotationVectorWAcc rot = {};
@@ -92,7 +94,23 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(rot, std::nullopt, std::nullopt);
                 }
 
-                return;
+                break;
+            }
+
+            case _IMU_MESSAGE_TYPES_::STATUS_MSG: {
+                if (len != 9) {
+                    break;
+                }
+
+                processor_status_t status;
+                status.status = static_cast<imu_status>(*(message + 3));
+                std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
+
+                if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
+                    // std::string msg = std::format("Prev state- state:{} time:{}   New state- state:{} time:{}", (int)m_currentImuStatus.status, m_currentImuStatus.timestamp, (int)status.status, status.timestamp);
+                    // std::cout << msg << std::endl;
+                    this->m_currentImuStatus = status;
+                }
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_RATE: {
@@ -107,11 +125,27 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(std::nullopt, std::nullopt, dRotation);
                 }
 
-                return;
+                break;
+            }
+
+            case _IMU_MESSAGE_TYPES_::STATUS_MSG: {
+                if (len != 9) {
+                    break;
+                }
+
+                processor_status_t status;
+                status.status = static_cast<imu_status>(*(message + 3));
+                std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
+
+                if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
+                    // std::string msg = std::format("Prev state- state:{} time:{}   New state- state:{} time:{}", (int)m_currentImuStatus.status, m_currentImuStatus.timestamp, (int)status.status, status.timestamp);
+                    // std::cout << msg << std::endl;
+                    this->m_currentImuStatus = status;
+                }
             }
 
             default:
-                return;
+                break;
         }
     }
     catch(const std::exception& e) {
