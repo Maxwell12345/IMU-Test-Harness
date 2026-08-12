@@ -2,7 +2,9 @@
 
 #include "IMUSerialPortReader.hpp"
 
+std::unordered_map<imu_status, std::vector<std::function<void(imu_status, uint64_t)>>> IMUSerialPortReader::m_sImuStatusCallbacks;
 IMUSerialPortReader::IMUSerialPortReader(const _ImuSerialPort& config, std::unique_ptr<SerialPortBase> port){
+    IMUSerialPortReader::m_sImuStatusCallbacks.clear();
     // Set the CRC-16/CCITT w Polynomial=16
     this->m_cm.cm_width = 16;
     this->m_cm.cm_poly = 0x1021L;
@@ -34,6 +36,10 @@ void IMUSerialPortReader::Start() {
 
 void IMUSerialPortReader::Stop() {
     this->m_serialComService->Stop();
+}
+
+void IMUSerialPortReader::RegisterStatusCallback(imu_status type, const std::function<void(imu_status, uint64_t)> &statusCallback) {
+    IMUSerialPortReader::m_sImuStatusCallbacks[type].push_back(statusCallback);
 }
 
 void IMUSerialPortReader::Callback(SerialPortBase& port) {
@@ -107,10 +113,13 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                 std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
 
                 if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
-                    // std::string msg = std::format("Prev state- state:{} time:{}   New state- state:{} time:{}", (int)m_currentImuStatus.status, m_currentImuStatus.timestamp, (int)status.status, status.timestamp);
-                    // std::cout << msg << std::endl;
                     this->m_currentImuStatus = status;
+                    for (const auto& statusCallback : m_sImuStatusCallbacks[status.status]) {
+                        statusCallback(status.status, status.timestamp);
+                    }
                 }
+
+                break;
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_RATE: {
@@ -126,22 +135,6 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                 }
 
                 break;
-            }
-
-            case _IMU_MESSAGE_TYPES_::STATUS_MSG: {
-                if (len != 9) {
-                    break;
-                }
-
-                processor_status_t status;
-                status.status = static_cast<imu_status>(*(message + 3));
-                std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
-
-                if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
-                    // std::string msg = std::format("Prev state- state:{} time:{}   New state- state:{} time:{}", (int)m_currentImuStatus.status, m_currentImuStatus.timestamp, (int)status.status, status.timestamp);
-                    // std::cout << msg << std::endl;
-                    this->m_currentImuStatus = status;
-                }
             }
 
             default:
