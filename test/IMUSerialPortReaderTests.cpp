@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <array>
 
 #include <YamlConfig.hpp>
 
@@ -79,6 +80,42 @@ static std::vector<unsigned char> BuildPacket(unsigned char type, const T& paylo
 
     packet[3 + sizeof(T)] = static_cast<unsigned char>((crc >> 8) & 0xFF);
     packet[3 + sizeof(T) + 1] = static_cast<unsigned char>(crc & 0xFF);
+
+    return packet;
+}
+
+static std::vector<unsigned char> BuildStatusPacket(const processor_status_t& payload) {
+    std::array<unsigned char, 9> wirePayload = {};
+    wirePayload[0] = static_cast<unsigned char>(payload.status);
+    std::memcpy(wirePayload.data() + 1, &payload.timestamp, sizeof(payload.timestamp));
+
+    std::vector<unsigned char> packet;
+    packet.resize(1 + 1 + 1 + wirePayload.size() + 2);
+
+    packet[0] = 0xA5;
+    packet[1] = _IMU_MESSAGE_TYPES_::STATUS_MSG;
+    packet[2] = static_cast<unsigned char>(wirePayload.size());
+
+    std::memcpy(packet.data() + 3, wirePayload.data(), wirePayload.size());
+
+    unsigned int crc = 0xFFFF;
+
+    for (unsigned long i = 0; i < 3 + wirePayload.size(); ++i) {
+        crc ^= static_cast<unsigned int>(packet[i]) << 8;
+
+        for (int j = 0; j < 8; ++j) {
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc <<= 1;
+            }
+
+            crc &= 0xFFFF;
+        }
+    }
+
+    packet[3 + wirePayload.size()] = static_cast<unsigned char>((crc >> 8) & 0xFF);
+    packet[3 + wirePayload.size() + 1] = static_cast<unsigned char>(crc & 0xFF);
 
     return packet;
 }
@@ -172,7 +209,7 @@ TEST(IMUSerialPortTest, CallbackIgnoresNonStartByte) {
 
     IMUSerialPortReader reader(config, std::move(port));
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>) {
             called = true;
         }
     );
@@ -187,7 +224,7 @@ TEST(IMUSerialPortTest, CallbackIgnoresNonStartByte) {
 TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
     Raw_Accelerometer expected = {0.f,0.f,0.f,(uint64_t)0};
     std::memset(&expected, 0x11, sizeof(expected));
-    auto packet = BuildPacket(0x01, expected);
+    auto packet = BuildPacket(_IMU_MESSAGE_TYPES_::ACCELERATION, expected);
     
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
@@ -197,12 +234,14 @@ TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
+    std::optional<Raw_RotationRate>  receivedRotRate;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
+        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel, std::optional<Raw_RotationRate> rotation) {
             called = true;
             receivedRot = rot;
             receivedAccel = accel;
+            receivedRotRate = rotation;
         }
     );
 
@@ -219,7 +258,7 @@ TEST(IMUSerialPortTest, CallbackReadsAccelerationPacket) {
 TEST(IMUSerialPortTest, CallbackReadsRotationPacket) {
     Raw_RotationVectorWAcc expected{};
     std::memset(&expected, 0x22, sizeof(expected));
-    auto packet = BuildPacket(0x02, expected);
+    auto packet = BuildPacket(_IMU_MESSAGE_TYPES_::ROTATION_VECTOR, expected);
     
     auto port = std::make_unique<MockSerialPort>();
     port->m_data = packet;
@@ -228,12 +267,14 @@ TEST(IMUSerialPortTest, CallbackReadsRotationPacket) {
     bool called = false;
     std::optional<Raw_Accelerometer> receivedAccel;
     std::optional<Raw_RotationVectorWAcc> receivedRot;
+    std::optional<Raw_RotationRate> receivedRotRate;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel) {
+        [&](std::optional<Raw_RotationVectorWAcc> rot, std::optional<Raw_Accelerometer> accel, std::optional<Raw_RotationRate> rotation) {
             called = true;
             receivedRot = rot;
             receivedAccel = accel;
+            receivedRotRate = rotation;
         }
     );
 
@@ -247,10 +288,87 @@ TEST(IMUSerialPortTest, CallbackReadsRotationPacket) {
     EXPECT_EQ(std::memcmp(&expected, &receivedRot.value(), sizeof(Raw_RotationVectorWAcc)), 0);
 }
 
+TEST(IMUSerialPortTest, StatusCallbacksFire) {
+    processor_status_t expected;
+    expected.status = imu_status::HEALTHY;
+    expected.timestamp = 10u;
+    auto packet = BuildStatusPacket(expected);
+
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    IMUSerialPortReader reader(config, std::move(port));
+
+    bool imuDataCallbackCalled = false;
+    bool imuStatusCallbackCalled = false;
+    processor_status_t testStatus;
+
+    std::function<void(imu_status, uint64_t)> cb = [&](imu_status st, uint64_t timestamp) {
+        imuStatusCallbackCalled = true;
+        testStatus.status = st;
+        testStatus.timestamp = timestamp;
+    };
+
+    reader.RegisterStatusCallback(imu_status::HEALTHY, cb);
+
+    reader.InstallCallback(
+        [&](std::optional<Raw_RotationVectorWAcc> , std::optional<Raw_Accelerometer> , std::optional<Raw_RotationRate> ) {
+            imuDataCallbackCalled = true;
+        }
+    );
+
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
+
+    EXPECT_FALSE(imuDataCallbackCalled);
+    EXPECT_TRUE(imuStatusCallbackCalled);
+    EXPECT_EQ(testStatus.status, imu_status::HEALTHY);
+    EXPECT_EQ(testStatus.timestamp, 10u);
+}
+
+TEST(IMUSerialPortTest, StatusCallbacksIgnoresOtherStatus) {
+
+    processor_status_t expected;
+    expected.status = imu_status::HEALTHY;
+    expected.timestamp = 10u;
+    auto packet = BuildStatusPacket(expected);
+
+    auto port = std::make_unique<MockSerialPort>();
+    port->m_data = packet;
+    IMUSerialPortReader reader(config, std::move(port));
+
+    bool imuDataCallbackCalled = false;
+    bool imuStatusCallbackCalled = false;
+    processor_status_t testStatus;
+
+    std::function<void(imu_status, uint64_t)> cb = [&](imu_status st, uint64_t timestamp) {
+        imuStatusCallbackCalled = true;
+        testStatus.status = st;
+        testStatus.timestamp = timestamp;
+    };
+
+    reader.RegisterStatusCallback(imu_status::IMU_RESET_FAILURE, cb);
+
+    reader.InstallCallback(
+        [&](std::optional<Raw_RotationVectorWAcc> , std::optional<Raw_Accelerometer> , std::optional<Raw_RotationRate> ) {
+            imuDataCallbackCalled = true;
+        }
+    );
+
+    reader.Start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    reader.Stop();
+
+    EXPECT_FALSE(imuDataCallbackCalled);
+    EXPECT_FALSE(imuStatusCallbackCalled);
+    EXPECT_EQ(testStatus.status, imu_status::IMU_UNAVAILABLE);
+    EXPECT_EQ(testStatus.timestamp, 0u);
+}
+
 TEST(IMUSerialPortTest, CallbackRejectsBadChecksum) {
     Raw_Accelerometer payload{};
     std::memset(&payload, 0x33, sizeof(payload));
-    auto packet = BuildPacket(0x00, payload);
+    auto packet = BuildPacket(0xFF, payload);
     packet[packet.size() - 1] ^= 0xFF;
 
     auto port = std::make_unique<MockSerialPort>();
@@ -260,7 +378,7 @@ TEST(IMUSerialPortTest, CallbackRejectsBadChecksum) {
     bool called = false;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>) {
             called = true;
         }
     );
@@ -282,7 +400,7 @@ TEST(IMUSerialPortTest, CallbackNotCalledOnBadMessageType) {
     bool called = false;
 
     reader.InstallCallback(
-        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>) {
+        [&](std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>) {
             called = true;
         }
     );
