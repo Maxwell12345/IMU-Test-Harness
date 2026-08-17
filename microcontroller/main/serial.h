@@ -48,6 +48,14 @@
 #define ACCELERATION_CRC_IDX (PAYLOAD_START_IDX+ACCELERATION_PAYLOAD_BYTES)
 #define ROTATION_CRC_IDX (PAYLOAD_START_IDX+ROTATION_PAYLOAD_BYTES)
 
+enum message_type_id {
+    ACCELERATION_ID = 1,
+    ROTATION_VECTOR_ID,
+    STATUS_ID,
+    ROTATION_RATE_ID,
+    COMMAND_ID
+};
+
 #pragma pack(push, 1)
 typedef struct acceleration_t {
     float x;
@@ -66,6 +74,10 @@ typedef struct rotation_t {
 } rotation_t;
 #pragma pack(pop)
 
+enum micro_command_id {
+    IMU_RESET_CMD = 0,
+};
+
 enum imu_status {
     INITIALIZING=0,
     SENSOR_INITIALIZATION_ERROR,
@@ -74,12 +86,17 @@ enum imu_status {
     NO_DATA_RECEIVED_AFTER_BOOT,
     IMU_RESET_FAILURE,
     NO_DETECTED_IMU,
+    MICRO_COMMAND_ERROR,
 };
 
 typedef struct processor_status_t {
     enum imu_status status;
     uint64_t timestamp;
 } processor_status_t;
+
+typedef void (*receive_data_callback)(uint8_t command);
+
+esp_err_t start_listening(receive_data_callback);
 
 esp_err_t host_serial_init(void);
 

@@ -85,7 +85,8 @@ static volatile int s_callback_task_stop_requested;
 static volatile int s_callback_task_running;
 static volatile uint32_t s_dropped_events;
 
-static volatile enum imu_status s_last_imu_status = NO_DETECTED_IMU;
+static volatile enum imu_status
+s_last_imu_status = NO_DETECTED_IMU;
 static volatile int64_t s_last_status_time = 0;
 
 static esp_err_t open_sh2(void);
@@ -127,6 +128,17 @@ static void update_imu_status(enum imu_status status)
     s_last_imu_status = status;
     if (err == ESP_OK) {
         s_last_status_time = now;
+    }
+}
+
+void handle_micro_commands(enum micro_command_id cmd) {
+    switch (cmd) {
+        case IMU_RESET_CMD:
+            
+
+        default:
+            update_imu_status(MICRO_COMMAND_ERROR);
+            return;
     }
 }
 
