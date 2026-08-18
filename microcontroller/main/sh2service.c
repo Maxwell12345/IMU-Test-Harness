@@ -99,6 +99,8 @@ static esp_err_t sh2service_create_callback_task(void);
 static void sh2service_stop_callback_task(void);
 static void enqueue_service_event(const sh2service_event_t *event);
 
+static esp_err_t hard_reset_bno085(void);
+
 static void reset_event_timestamps(void)
 {
     int64_t now = esp_timer_get_time();
@@ -131,14 +133,14 @@ static void update_imu_status(enum imu_status status)
     }
 }
 
-void handle_micro_commands(enum micro_command_id cmd) {
+static void handle_micro_commands(enum micro_command_id cmd) {
     switch (cmd) {
         case IMU_RESET_CMD:
-            
-
+            (void)hard_reset_bno085();
+            break;
         default:
             update_imu_status(MICRO_COMMAND_ERROR);
-            return;
+            break;
     }
 }
 

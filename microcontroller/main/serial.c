@@ -69,7 +69,7 @@ static void rx_handle(void *args) {
         }
 
         for (int i = 0; i < bytes_read; i++) {
-            /* Feed buffer[i] into your frame parser here. */
+            process_rx_buffer(buffer, bytes_read);
         }
     }
 
