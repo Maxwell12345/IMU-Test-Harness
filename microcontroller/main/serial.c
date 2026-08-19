@@ -30,26 +30,60 @@ static uint16_t calculate_crc16_ccitt_false(const unsigned char *data, size_t le
     return (uint16_t) (cm_crc(&cm) & 0xFFFFu);
 }
 
-static void process_rx_buffer(uint8_t *buf, uint16_t length) {
-    if (buf == NULL) return;
+static void process_rx_buffer(uint8_t *buf, uint16_t length)
+{
+    if (buf == NULL)
+        return;
 
     uint16_t read_idx = 0;
+
     while (read_idx < length) {
-        if (++read_idx < length && buf[read_idx] == MAGIC_ENCODER) {
-            // ensure there is a length byte after the message type byte
-            if (++read_idx + 1 < length && buf[++read_idx] == COMMAND_ID) {
-                uint16_t payload_len = buf[++read_idx];
-                // ensure the payload and checksum are both present else drop
-                if (read_idx + payload_len + 2 < length && payload_len == 1) {
-                    enum micro_command_id cmd = buf[++read_idx];
-                    uint16_t chck = calculate_crc16_ccitt_false(buf, (size_t) read_idx);
-                    if (((chck >> 8) & 0xFFu) && (chck & 0xFFu)) {
-                        s_rx_callback(cmd);
-                    }
-                }
-            }
+        if (buf[read_idx] != MAGIC_ENCODER) {
+            ++read_idx;
+            continue;
         }
-        ++read_idx;
+
+        // MAGIC + COMMAND + LENGTH + CRC_H + CRC_L
+        if (read_idx + 5 > length)
+            return;
+
+        if (buf[read_idx + 1] != COMMAND_ID) {
+            ++read_idx;
+            continue;
+        }
+
+        uint8_t payload_len = buf[read_idx + 2];
+
+        if (payload_len != 1) {
+            ++read_idx;
+            continue;
+        }
+
+        uint16_t packet_len = 3 + payload_len + 2;
+
+        if (read_idx + packet_len > length)
+            return;
+
+        enum micro_command_id cmd =
+            (enum micro_command_id)buf[read_idx + 3];
+
+        uint16_t crc_idx = read_idx + 3 + payload_len;
+
+        uint16_t calculated_crc =
+            calculate_crc16_ccitt_false(buf, crc_idx);
+
+        uint16_t received_crc =
+            ((uint16_t)buf[crc_idx] << 8) |
+            buf[crc_idx + 1];
+
+        if (calculated_crc == received_crc) {
+            printf("VALIDATED, trying to reboot...\n");
+            s_rx_callback(cmd);
+        } else {
+            printf("WRONG CHECKSUM\n");
+        }
+
+        read_idx += packet_len;
     }
 }
 
@@ -76,7 +110,6 @@ static void rx_handle(void *args) {
     s_rx_task_handle = NULL;
     vTaskDelete(NULL);
 }
-
 
 esp_err_t start_listening(receive_data_callback cb) {
     if (cb == NULL) return ESP_ERR_INVALID_ARG;
@@ -165,7 +198,7 @@ esp_err_t send_fieldwise_acceleration_t(const acceleration_t *acceleration) {
     size_t length = 0;
 
     buffer[length++] = MAGIC_ENCODER;
-    buffer[length++] = ACCELERATION_T_ID;
+    buffer[length++] = ACCELERATION_ID;
     buffer[length++] = ACCELERATION_PAYLOAD_BYTES;
 
     memcpy(buffer + length, &acceleration->x, sizeof(float));
@@ -191,7 +224,7 @@ esp_err_t send_fieldwise_rotation_t(const rotation_t *rotation) {
     size_t length = 0;
 
     buffer[length++] = MAGIC_ENCODER;
-    buffer[length++] = ROTATION_T_ID;
+    buffer[length++] = ROTATION_VECTOR_ID;
     buffer[length++] = ROTATION_PAYLOAD_BYTES;
 
     memcpy(buffer + length, &rotation->i, sizeof(float));
@@ -255,8 +288,27 @@ esp_err_t send_rotation_t(const rotation_t *rotation) {
     return host_serial_write_all(buffer, length);
 }
 
+esp_err_t send_rotation_rate_t(const rotation_rate_t *rotationRate) {
+    if (rotationRate == NULL) return ESP_ERR_INVALID_ARG;
+    unsigned char buffer[50] = {0};
+    size_t length = 0;
+
+    buffer[length++] = MAGIC_ENCODER;
+    buffer[length++] = ROTATION_RATE_ID;
+    buffer[length++] = ROTATION_RATE_PAYLOAD_BYTES;
+
+    memcpy(buffer+length, rotationRate, sizeof(rotation_rate_t));
+    length += sizeof(rotation_rate_t);
+
+    uint16_t crc = calculate_crc16_ccitt_false(buffer, length);
+
+    buffer[length++] = (uint8_t)((crc >> 8) & 0xFFu);
+    buffer[length++] = (uint8_t)(crc & 0xFFu);
+
+    return host_serial_write_all(buffer, length);
+}
+
 esp_err_t send_status_t(const processor_status_t *processor_status) {
-    // printf("\n%sStarting status update%s\n", "\e[32m", "\e[37m");
     if (processor_status == NULL) return ESP_ERR_INVALID_ARG;
     unsigned char buffer[20] = {0};
     size_t length = 0;
@@ -280,4 +332,21 @@ esp_err_t send_status_t(const processor_status_t *processor_status) {
     // }
     // printf("\n%sStatus update complete with write status: %s%d\n", "\e[32m", "\e[37m", write_status);
     return write_status;
+}
+
+void serial_command_callback(uint8_t command)
+{
+    enum micro_command_id cmd = (enum micro_command_id)command;
+
+    printf("RX_COMMAND,%d\n", cmd);
+
+    switch (cmd) {
+        case IMU_RESET_CMD:
+            esp_restart();
+            break;
+
+        default:
+            printf("RX_UNKNOWN_COMMAND,%d\n", cmd);
+            break;
+    }
 }

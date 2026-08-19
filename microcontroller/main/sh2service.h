@@ -12,12 +12,6 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 
-typedef enum {
-    SH2SERVICE_LINEAR_ACCELERATION = 1,
-    SH2SERVICE_ROTATION_VECTOR = 2,
-    SH2GEOMAGNETIC_ROTATION_VECTOR = 3,
-} sh2service_event_type_t;
-
 typedef struct {
     float x;
     float y;
@@ -33,6 +27,12 @@ typedef struct {
 } sh2service_rotation_vector_t;
 
 typedef struct {
+    float x;
+    float y;
+    float z;
+} sh2service_gyroscope_t;
+
+typedef struct {
     // sh2service_event_type_t type;
     enum sh2_SensorId_e type;
     uint64_t timestamp_us;
@@ -40,6 +40,7 @@ typedef struct {
     union {
         sh2service_linear_acceleration_t linear_acceleration;
         sh2service_rotation_vector_t rotation_vector;
+        sh2service_gyroscope_t gyroscope;
     } data;
 } sh2service_event_t;
 
