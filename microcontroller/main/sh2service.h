@@ -3,18 +3,14 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 
 #include "esp_err.h"
+#include "sh2.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
-
-typedef enum {
-    SH2SERVICE_LINEAR_ACCELERATION = 1,
-    SH2SERVICE_ROTATION_VECTOR = 2,
-    SH2SERVICE_GYROSCOPE = 3
-} sh2service_event_type_t;
 
 typedef struct {
     float x;
@@ -37,7 +33,8 @@ typedef struct {
 } sh2service_gyroscope_t;
 
 typedef struct {
-    sh2service_event_type_t type;
+    // sh2service_event_type_t type;
+    enum sh2_SensorId_e type;
     uint64_t timestamp_us;
 
     union {
@@ -56,6 +53,7 @@ typedef struct {
     gpio_num_t scl_pin;
     gpio_num_t sda_pin;
     gpio_num_t int_pin;
+    gpio_num_t reset_pin;
 
     uint32_t i2c_speed_hz;
     uint32_t report_interval_us;

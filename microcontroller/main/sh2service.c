@@ -1,4 +1,5 @@
 #include "sh2service.h"
+#include "serial.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -48,6 +49,7 @@ static sh2service_config_t s_config = {
     GPIO_NUM_22,
     GPIO_NUM_21,
     GPIO_NUM_27,
+    GPIO_NUM_26,
     400000,
     5000,
     8000,
@@ -77,18 +79,27 @@ static volatile int s_recovering;
 static volatile int s_valid_measurements = 0;
 static volatile int s_num_valid_acc_measurements;
 static volatile int s_num_valid_rot_measurements;
+static volatile int s_num_valid_rot_rate_measurements;
 static volatile int s_save_dcd_requested;
 static volatile int s_callback_task_stop_requested;
 static volatile int s_callback_task_running;
 static volatile uint32_t s_dropped_events;
 
+static volatile enum imu_status
+s_last_imu_status = NO_DETECTED_IMU;
+static volatile int64_t s_last_status_time = 0;
+
 static esp_err_t open_sh2(void);
+static esp_err_t hard_recover_and_open_sh2(void);
+static esp_err_t soft_reset_sh2(void);
 static void sh2service_task(void *arg);
 static void sh2service_recovery_task(void *arg);
 static void sh2service_callback_task(void *arg);
 static esp_err_t sh2service_create_callback_task(void);
 static void sh2service_stop_callback_task(void);
 static void enqueue_service_event(const sh2service_event_t *event);
+
+static esp_err_t hard_reset_bno085(void);
 
 static void reset_event_timestamps(void)
 {
@@ -103,7 +114,25 @@ static void reset_valid_measurement_state(void)
     s_valid_measurements = 0;
     s_num_valid_acc_measurements = 0;
     s_num_valid_rot_measurements = 0;
+    s_num_valid_rot_rate_measurements = 0;
     s_save_dcd_requested = 0;
+}
+
+static void update_imu_status(enum imu_status status)
+{
+    if (s_last_imu_status == status) {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+
+    s_last_imu_status = status;
+    const processor_status_t stat = {s_last_imu_status, now};
+    esp_err_t err = send_status_t(&stat);
+
+    if (err == ESP_OK) {
+        s_last_status_time = now;
+    }
 }
 
 static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
@@ -116,9 +145,14 @@ static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
 
     if (value->sensorId == SH2_LINEAR_ACCELERATION) {
         counter = &s_num_valid_acc_measurements;
-    } else if (value->sensorId == SH2_ROTATION_VECTOR) {
+    }
+    else if (value->sensorId == SH2_ROTATION_VECTOR) {
         counter = &s_num_valid_rot_measurements;
-    } else {
+    }
+    else if (value->sensorId == SH2_GYROSCOPE_CALIBRATED) {
+        counter = &s_num_valid_rot_rate_measurements;
+    }
+    else {
         return;
     }
 
@@ -129,7 +163,8 @@ static void update_valid_counts(sh2_SensorValue_t *value, uint8_t acc)
     }
 
     if (s_num_valid_rot_measurements > 5000 &&
-        s_num_valid_acc_measurements > 5000) {
+        s_num_valid_acc_measurements > 5000 &&
+        s_num_valid_rot_rate_measurements > 5000) {
         s_valid_measurements = 1;
         s_save_dcd_requested = 1;
     }
@@ -234,8 +269,11 @@ static esp_err_t hard_reset_bno085(void)
 
     esp_err_t err = gpio_config(&cfg);
     if (err != ESP_OK) {
+        update_imu_status(IMU_RESET_FAILURE);
         return err;
     }
+
+    update_imu_status(IMU_UNAVAILABLE);
 
     gpio_set_level(BNO085_RESET_PIN, 0);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -316,6 +354,8 @@ static void enqueue_service_event(const sh2service_event_t *event)
 
 static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
 {
+    update_imu_status(HEALTHY);
+
     int64_t now = esp_timer_get_time();
     s_last_packet_us = now;
 
@@ -339,7 +379,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     out.timestamp_us = now;
 
     if (value.sensorId == SH2_LINEAR_ACCELERATION) {
-        out.type = SH2SERVICE_LINEAR_ACCELERATION;
+        out.type = SH2_LINEAR_ACCELERATION;
 
         out.data.linear_acceleration.x = value.un.linearAcceleration.x;
         out.data.linear_acceleration.y = value.un.linearAcceleration.y;
@@ -352,23 +392,13 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     if (value.sensorId == SH2_ROTATION_VECTOR) {    
         s_last_valid_event_us = now;
 
-        out.type = SH2SERVICE_ROTATION_VECTOR;
+        out.type = SH2_ROTATION_VECTOR;
 
         out.data.rotation_vector.i = value.un.rotationVector.i;
         out.data.rotation_vector.j = value.un.rotationVector.j;
         out.data.rotation_vector.k = value.un.rotationVector.k;
         out.data.rotation_vector.real = value.un.rotationVector.real;
         out.data.rotation_vector.accuracy = value.un.rotationVector.accuracy;
-
-        // const float MIN_ACC = 0.25;
-        // const float MAX_ACC = 0.3;
-        // if(out.data.rotation_vector.accuracy <= MIN_ACC){
-        //     SENSOR_CAL_MASK &= ~SH2_CAL_MAG;
-        //     sh2_setCalConfig(SENSOR_CAL_MASK);
-        // } else if (out.data.rotation_vector.accuracy > MAX_ACC){
-        //     SENSOR_CAL_MASK |= SH2_CAL_MAG;
-        //     sh2_setCalConfig(SENSOR_CAL_MASK);
-        // }
 
         enqueue_service_event(&out);
         return;
@@ -377,7 +407,7 @@ static void sensor_callback(void *cookie, sh2_SensorEvent_t *event)
     if (value.sensorId == SH2_GYROSCOPE_CALIBRATED) {
         s_last_valid_event_us = now;
 
-        out.type = SH2SERVICE_GYROSCOPE;
+        out.type = SH2_GYROSCOPE_CALIBRATED;
 
         out.data.gyroscope.x = value.un.gyroscope.x;
         out.data.gyroscope.y = value.un.gyroscope.y;
@@ -396,6 +426,15 @@ static void sh2service_callback_task(void *arg)
 
     while (!s_callback_task_stop_requested) {
         QueueHandle_t queue = s_event_queue;
+
+        int64_t now = esp_timer_get_time();
+        if (1000000 <= now - s_last_status_time) {
+            const processor_status_t repeatUpdate = {s_last_imu_status, now};
+            esp_err_t err= send_status_t(&repeatUpdate);
+            if (err == ESP_OK) {
+                s_last_status_time = now;
+            }
+        }
 
         if (queue == NULL) {
             break;
@@ -497,6 +536,7 @@ static void event_callback(void *cookie, sh2_AsyncEvent_t *event)
         reset_event_timestamps();
         s_reset_seen = 1;
         s_sensors_enabled = 0;
+        update_imu_status(IMU_UNAVAILABLE);
     }
 }
 
@@ -533,6 +573,7 @@ static int configure_sensors(void)
 
     rc = enable_sensor(SH2_LINEAR_ACCELERATION, s_config.report_interval_us);
     if (rc != 0) {
+        update_imu_status(SENSOR_INITIALIZATION_ERROR);
         return rc;
     }
 
@@ -540,6 +581,7 @@ static int configure_sensors(void)
 
     rc = enable_sensor(SH2_ROTATION_VECTOR, s_config.report_interval_us);
     if (rc != 0) {
+        update_imu_status(SENSOR_INITIALIZATION_ERROR);
         return rc;
     }
 
@@ -547,6 +589,7 @@ static int configure_sensors(void)
 
     rc = enable_sensor(SH2_GYROSCOPE_CALIBRATED, s_config.report_interval_us);
     if (rc != 0) {
+        update_imu_status(SENSOR_INITIALIZATION_ERROR);
         return rc;
     }
 
@@ -554,22 +597,52 @@ static int configure_sensors(void)
     return 0;
 }
 
+static esp_err_t soft_reset_sh2(void)
+{
+    reset_event_timestamps();
+    s_reset_seen = 0;
+    s_sensors_enabled = 0;
+    update_imu_status(IMU_UNAVAILABLE);
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int rc = sh2_devReset();
+    if (rc != 0) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_FAIL;
+    }
+
+    if (!wait_for_reset(s_config.reset_wait_ms)) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_ERR_TIMEOUT;
+    }
+
+    service_for_ms(s_config.startup_delay_ms);
+
+    rc = configure_sensors();
+    if (rc != 0) {
+        update_imu_status(IMU_RESET_FAILURE);
+        return ESP_FAIL;
+    }
+
+    reset_event_timestamps();
+    return ESP_OK;
+}
+
 static int sh2service_open_and_configure(void)
 {
     sh2_close();
     cleanup_i2c();
-    hard_reset_bno085();
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
     printf("sh2service_open_and_configure!\n");
 
-    esp_err_t err = open_sh2();
+    esp_err_t err = hard_recover_and_open_sh2();
 
     if (err != ESP_OK) {
         sh2_close();
         cleanup_i2c();
-        hard_reset_bno085();
         s_sh2_ready = 0;
         return err;
     }
@@ -666,7 +739,6 @@ static void sh2service_recovery_task(void *arg)
 
     sh2_close();
     cleanup_i2c();
-    hard_reset_bno085();
 
     wdt_delete_current(wdt_added);
     vTaskDelete(NULL);
@@ -723,16 +795,9 @@ static esp_err_t open_sh2(void)
 
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    esp_err_t err = hard_reset_bno085();
+    esp_err_t err = init_int_pin();
     if (err != ESP_OK) {
-        return err;
-    }
-
-    recover_i2c_bus();
-
-    err = init_int_pin();
-    if (err != ESP_OK) {
-        hard_reset_bno085();
+        update_imu_status(NO_DETECTED_IMU);
         return err;
     }
 
@@ -740,6 +805,7 @@ static esp_err_t open_sh2(void)
 
     err = init_i2c();
     if (err != ESP_OK) {
+        update_imu_status(NO_DETECTED_IMU);
         return err;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -752,10 +818,17 @@ static esp_err_t open_sh2(void)
 
     int rc = sh2_open(&s_hal, event_callback, NULL);
     if (rc != 0) {
+        update_imu_status(NO_DETECTED_IMU);
         return ESP_FAIL;
     }
 
     uint32_t unused = 0;
+
+    sh2_Quaternion_t orientation = {
+	    0, 0, 0, 1
+    };
+
+    sh2_setReorientation(&orientation);
 
     rc = sh2_setFrs(SYSTEM_ORIENTATION, &unused, 0);
 
@@ -766,6 +839,7 @@ static esp_err_t open_sh2(void)
     rc = sh2_setSensorCallback(sensor_callback, NULL);
     if (rc != 0) {
         sh2_close();
+        update_imu_status(NO_DETECTED_IMU);
         return ESP_FAIL;
     }
 
@@ -789,10 +863,28 @@ static esp_err_t open_sh2(void)
     rc = configure_sensors();
     if (rc != 0) {
         sh2_close();
+        cleanup_i2c();
         return ESP_FAIL;
     }
 
+    update_imu_status(HEALTHY);
     return ESP_OK;
+}
+
+static esp_err_t hard_recover_and_open_sh2(void)
+{
+    esp_err_t err = hard_reset_bno085();
+    if (err != ESP_OK) {
+        return err;
+    }
+ 
+    recover_i2c_bus();
+    err = open_sh2();
+    if (err != ESP_OK && s_last_imu_status == IMU_UNAVAILABLE) {
+        update_imu_status(NO_DETECTED_IMU);
+    }
+
+    return err;
 }
 
 static void sh2service_task(void *arg)
@@ -842,21 +934,27 @@ static void sh2service_task(void *arg)
         int64_t now = esp_timer_get_time();
 
         if (s_sh2_ready && s_sensors_enabled && now - s_last_packet_us > SH2SERVICE_TIMEOUT_US) {
-            printf("SH2 packet timeout\n");
-            s_running = 0;
-            s_task_handle = NULL;
-            sh2service_request_recovery();
-            wdt_delete_current(wdt_added);
-            vTaskDelete(NULL);
+            if (soft_reset_sh2() != ESP_OK) {
+                s_running = 0;
+                s_task_handle = NULL;
+                sh2service_request_recovery();
+                wdt_delete_current(wdt_added);
+                vTaskDelete(NULL);
+            }
+
+            continue;
         }
 
         if (s_sh2_ready && s_sensors_enabled && now - s_last_valid_event_us > SH2SERVICE_TIMEOUT_US) {
-            printf("SH2 valid rotation vector timeout\n");
-            s_running = 0;
-            s_task_handle = NULL;
-            sh2service_request_recovery();
-            wdt_delete_current(wdt_added);
-            vTaskDelete(NULL);
+            if (soft_reset_sh2() != ESP_OK) {
+                s_running = 0;
+                s_task_handle = NULL;
+                sh2service_request_recovery();
+                wdt_delete_current(wdt_added);
+                vTaskDelete(NULL);
+            }
+
+            continue;
         }
 
         loop_count++;
@@ -920,7 +1018,7 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         return err;
     }
 
-    err = open_sh2();
+    err = sh2service_open_and_configure();
     if (err != ESP_OK) {
         cleanup_i2c();
         hard_reset_bno085();
@@ -947,6 +1045,7 @@ esp_err_t sh2service_start(sh2service_callback_t callback, void *ctx)
         return err;
     }
 
+    update_imu_status(HEALTHY);
     return ESP_OK;
 }
 

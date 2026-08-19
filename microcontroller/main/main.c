@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "sh2service.h"
 
@@ -13,7 +15,7 @@
 #include "shtp.h"
 #include "esp_log_level.h"
 #include <serial.h>
-#include <math.h>
+#include <time.h>
 
 static double current_roll;
 static double current_pitch;
@@ -21,23 +23,22 @@ static int have_attitude;
 
 static void imu_callback(const sh2service_event_t *event, void *ctx)
 {
-    if (event->type == SH2SERVICE_LINEAR_ACCELERATION) {
+    if (event->type == SH2_LINEAR_ACCELERATION) {
         acceleration_t accel = {
             event->data.linear_acceleration.x,
             event->data.linear_acceleration.y,
             event->data.linear_acceleration.z,
             (unsigned long long)event->timestamp_us
         };
-        // send_acceleration_t(&accel);
-        printf("LA,%llu,%f,%f,%f\n",
-               (unsigned long long)event->timestamp_us,
-               event->data.linear_acceleration.x,
-               event->data.linear_acceleration.y,
-               event->data.linear_acceleration.z);
+        send_acceleration_t(&accel);
+        // printf("LA,%llu,%f,%f,%f\n",
+        //        (unsigned long long)event->timestamp_us,
+        //        event->data.linear_acceleration.x,
+        //        event->data.linear_acceleration.y,
+        //        event->data.linear_acceleration.z);
         return;
     }
-
-    if (event->type == SH2SERVICE_ROTATION_VECTOR) {
+    else if (event->type == SH2_ROTATION_VECTOR) {
         const double x = event->data.rotation_vector.i;
         const double y = event->data.rotation_vector.j;
         const double z = event->data.rotation_vector.k;
@@ -67,24 +68,21 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
         have_attitude = 1;
 
         const rotation_t rotation = {
-            x, y, z, w, event->data.rotation_vector.accuracy,
+            qx, qy, qz, qw, event->data.rotation_vector.accuracy,
             (unsigned long long)event->timestamp_us
         };
 
-        // send_rotation_t(&rotation);
-        printf("RV,%llu,%f,%f,%f,%f,%f\n",
-            (unsigned long long)event->timestamp_us,
-            event->data.rotation_vector.i,
-            event->data.rotation_vector.j,
-            event->data.rotation_vector.k,
-            event->data.rotation_vector.real,
-            event->data.rotation_vector.accuracy);
-
+        send_rotation_t(&rotation);
+        // printf("RV,%llu,%f,%f,%f,%f,%f\n",
+        //     (unsigned long long)event->timestamp_us,
+        //     event->data.rotation_vector.i,
+        //     event->data.rotation_vector.j,
+        //     event->data.rotation_vector.k,
+        //     event->data.rotation_vector.real,
+        //     event->data.rotation_vector.accuracy);
         return;
     }
-            
-
-    if (event->type == SH2SERVICE_GYROSCOPE) {
+    else if (event->type == SH2_GYROSCOPE_CALIBRATED) {
         if (!have_attitude) {
             return;
         }
@@ -113,13 +111,13 @@ static void imu_callback(const sh2service_event_t *event, void *ctx)
             d_yaw,
             (unsigned long long)event->timestamp_us
         };
-        // send_rotation_rate_t(&rotationRate);
+        send_rotation_rate_t(&rotationRate);
 
-        printf("DRPY,%llu,%f,%f,%f\n",
-            (unsigned long long)event->timestamp_us,
-            d_roll,
-            d_pitch,
-            d_yaw);
+        // printf("DRPY,%llu,%f,%f,%f\n",
+        //     (unsigned long long)event->timestamp_us,
+        //     d_roll,
+        //     d_pitch,
+        //     d_yaw);
 
         return;
     }
@@ -134,7 +132,17 @@ void app_main(void)
     printf("\n\n\n");
     printf("BOOT,APP_MAIN\n");
 
-    esp_err_t err = sh2service_start(imu_callback, NULL);
+    esp_err_t err = start_listening(serial_command_callback);
+    if (err != ESP_OK) {
+        printf("ERR,SERIAL_LISTEN,%d\n", err);
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+    const processor_status_t stat = {INITIALIZING, now};
+    send_status_t(&stat);
+
+    err = sh2service_start(imu_callback, NULL);
     if (err != ESP_OK) {
         printf("ERR,SH2SERVICE_START,%d\n", err);
         return;
