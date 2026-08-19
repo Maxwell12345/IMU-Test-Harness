@@ -2,7 +2,9 @@
 
 #include "IMUSerialPortReader.hpp"
 
+std::unordered_map<imu_status, std::vector<std::function<void(imu_status, uint64_t)>>> IMUSerialPortReader::m_sImuStatusCallbacks;
 IMUSerialPortReader::IMUSerialPortReader(const _ImuSerialPort& config, std::unique_ptr<SerialPortBase> port){
+    IMUSerialPortReader::m_sImuStatusCallbacks.clear();
     // Set the CRC-16/CCITT w Polynomial=16
     this->m_cm.cm_width = 16;
     this->m_cm.cm_poly = 0x1021L;
@@ -36,6 +38,10 @@ void IMUSerialPortReader::Stop() {
     this->m_serialComService->Stop();
 }
 
+void IMUSerialPortReader::RegisterStatusCallback(imu_status type, const std::function<void(imu_status, uint64_t)> &statusCallback) {
+    IMUSerialPortReader::m_sImuStatusCallbacks[type].push_back(statusCallback);
+}
+
 void IMUSerialPortReader::Callback(SerialPortBase& port) {
     try {
         unsigned char message[75] = {};
@@ -48,7 +54,9 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
 
         port.ReadExact(message + 1, 2);
 
-        _IMU_MESSAGE_TYPES_ type = this->GetMessageType(message[1]);
+        _IMU_MESSAGE_TYPES_ type = _IMU_MESSAGE_TYPES_::STATUS_MSG;
+        type = this->GetMessageType(message[1]);
+
         unsigned int len = this->GetMessageLength(message[2]);
 
         if (len > 73) {
@@ -67,7 +75,7 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
         switch (type) {
             case _IMU_MESSAGE_TYPES_::ACCELERATION: {
                 if (len != sizeof(Raw_Accelerometer)) {
-                    return;
+                    break;
                 }
 
                 Raw_Accelerometer accel = {};
@@ -77,12 +85,12 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(std::nullopt, accel, std::nullopt);
                 }
 
-                return;
+                break;
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_VECTOR: {
                 if (len != sizeof(Raw_RotationVectorWAcc)) {
-                    return;
+                    break;
                 }
 
                 Raw_RotationVectorWAcc rot = {};
@@ -92,7 +100,26 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(rot, std::nullopt, std::nullopt);
                 }
 
-                return;
+                break;
+            }
+
+            case _IMU_MESSAGE_TYPES_::STATUS_MSG: {
+                if (len != 9) {
+                    break;
+                }
+
+                processor_status_t status;
+                status.status = static_cast<imu_status>(*(message + 3));
+                std::memcpy(&status.timestamp, message + 4, sizeof(status.timestamp));
+
+                if (this->m_currentImuStatus.status != status.status && this->m_currentImuStatus.timestamp < status.timestamp) {
+                    this->m_currentImuStatus = status;
+                    for (const auto& statusCallback : m_sImuStatusCallbacks[status.status]) {
+                        statusCallback(status.status, status.timestamp);
+                    }
+                }
+
+                break;
             }
 
             case _IMU_MESSAGE_TYPES_::ROTATION_RATE: {
@@ -107,11 +134,11 @@ void IMUSerialPortReader::Callback(SerialPortBase& port) {
                     this->m_callback(std::nullopt, std::nullopt, dRotation);
                 }
 
-                return;
+                break;
             }
 
             default:
-                return;
+                break;
         }
     }
     catch(const std::exception& e) {

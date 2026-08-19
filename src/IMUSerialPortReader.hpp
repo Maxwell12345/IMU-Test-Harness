@@ -1,8 +1,11 @@
 #ifndef IMU_SERIAL_PORT_READER_HPP
 #define IMU_SERIAL_PORT_READER_HPP
 
-#include <gtest/gtest_prod.h> 
+#include <gtest/gtest_prod.h>
+#include <unordered_map>
+#include <functional>
 #include <optional>
+#include <vector>
 #include "SerialComService.hpp"
 #include "SerialPortBase.hpp"
 #include "BoostSerialPort.hpp"
@@ -17,9 +20,10 @@
 #include <array>
 
 enum _IMU_MESSAGE_TYPES_ {
-    ACCELERATION = 0,
-    ROTATION_VECTOR = 1,
-    ROTATION_RATE = 2
+    ACCELERATION = 1,
+    ROTATION_VECTOR = 2,
+    STATUS_MSG = 3,
+    ROTATION_RATE = 4
 };
 
 class IMUSerialPortReader {
@@ -60,6 +64,19 @@ public:
      * @return
      */
     void Stop();
+
+    /**
+     * @brief Registers a status callback for the requested IMU status value so the callback runs
+     *        when a newer status packet reports that value.
+     *
+     * @param [in] type            IMU status value that must be present in a valid status packet
+     *                             before statusCallback is invoked.
+     * @param [in] statusCallback  Callable that receives the reported IMU status and payload
+     *                             timestamp when type matches a newly accepted status transition.
+     *
+     * @return
+     */
+    static void RegisterStatusCallback(imu_status type, const std::function<void(imu_status, uint64_t)> &statusCallback);
 
 private:
     /**
@@ -118,8 +135,11 @@ private:
                 return _IMU_MESSAGE_TYPES_::ROTATION_VECTOR;
 
             case 0x03:
+                return _IMU_MESSAGE_TYPES_::STATUS_MSG;
+
+            case 0x04:
                 return _IMU_MESSAGE_TYPES_::ROTATION_RATE;
-            
+
             default:
                 throw std::runtime_error("Unsupported type");
             }
@@ -167,6 +187,8 @@ private:
     cm_t m_cm;
     std::unique_ptr<SerialComService> m_serialComService;
     std::function<void(std::optional<Raw_RotationVectorWAcc>, std::optional<Raw_Accelerometer>, std::optional<Raw_RotationRate>)> m_callback;
+    processor_status_t m_currentImuStatus;
+    static std::unordered_map<imu_status, std::vector<std::function<void(imu_status, uint64_t)>>> m_sImuStatusCallbacks;
 
     FRIEND_TEST(IMUSerialPortTest, ValidateCalculateCRC16CCITTFalseChecksum);
     FRIEND_TEST(IMUSerialPortTest, ValidateIsStartEncoder);
