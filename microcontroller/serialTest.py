@@ -1,6 +1,5 @@
 import argparse
 import os
-import struct
 import sys
 import time
 
@@ -8,20 +7,12 @@ import serial
 from serial import SerialException
 
 
-MAGIC_BYTE = 0xA5
+MAGIC_BYTE = 0xFF
 CRC_POLY = 0x1021
 CRC_INIT = 0xFFFF
 CRC_XOR_OUT = 0x0000
 FRAME_HEADER_BYTES = 3
 FRAME_CRC_BYTES = 2
-ACCELERATION_T_ID = 1
-ROTATION_T_ID = 2
-ACCELERATION_PAYLOAD = struct.Struct("<fffQ")
-ROTATION_PAYLOAD = struct.Struct("<fffffQ")
-MESSAGE_PAYLOADS = {
-    ACCELERATION_T_ID: ("acceleration_t", ACCELERATION_PAYLOAD),
-    ROTATION_T_ID: ("rotation_t", ROTATION_PAYLOAD),
-}
 
 
 def open_port(port, baud):
@@ -58,11 +49,11 @@ def crc16_ccitt_false(data):
     return crc ^ CRC_XOR_OUT
 
 
-def write_payload_hex_line(payload, output_file):
-    if not payload:
+def write_hex_line(data, output_file):
+    if not data:
         return
 
-    line = payload.hex()
+    line = data.hex()
     print(line, flush=True)
 
     if output_file is not None:
@@ -70,18 +61,7 @@ def write_payload_hex_line(payload, output_file):
         output_file.flush()
 
 
-def report_unsynced_bytes(data):
-    if not data:
-        return
-
-    print(
-        f"unsynced_bytes,count={len(data)},hex={data.hex()}",
-        file=sys.stderr,
-        flush=True,
-    )
-
-
-def frame_crc_is_valid(frame):
+def report_crc(frame):
     message_type = frame[1]
     payload_length = frame[2]
     received_crc = (frame[-2] << 8) | frame[-1]
@@ -93,41 +73,13 @@ def frame_crc_is_valid(frame):
             file=sys.stderr,
             flush=True,
         )
-        return True
-
-    print(
-        f"crc_fail,type={message_type},payload_len={payload_length},"
-        f"received=0x{received_crc:04x},calculated=0x{calculated_crc:04x}",
-        file=sys.stderr,
-        flush=True,
-    )
-    return False
-
-
-def payload_is_valid(message_type, payload):
-    payload_definition = MESSAGE_PAYLOADS.get(message_type)
-
-    if payload_definition is None:
+    else:
         print(
-            f"unknown_message_type,type={message_type},payload_len={len(payload)}",
+            f"crc_fail,type={message_type},payload_len={payload_length},"
+            f"received=0x{received_crc:04x},calculated=0x{calculated_crc:04x}",
             file=sys.stderr,
             flush=True,
         )
-        return False
-
-    message_name, payload_struct = payload_definition
-
-    if len(payload) != payload_struct.size:
-        print(
-            f"invalid_payload_len,type={message_type},name={message_name},"
-            f"expected={payload_struct.size},actual={len(payload)}",
-            file=sys.stderr,
-            flush=True,
-        )
-        return False
-
-    payload_struct.unpack(payload)
-    return True
 
 
 def emit_complete_frames(buffer, output_file):
@@ -135,13 +87,15 @@ def emit_complete_frames(buffer, output_file):
         magic_index = buffer.find(bytes([MAGIC_BYTE]))
 
         if magic_index < 0:
-            report_unsynced_bytes(bytes(buffer))
+            write_hex_line(bytes(buffer), output_file)
+            print(f"unsynced_bytes,count={len(buffer)}", file=sys.stderr, flush=True)
             buffer.clear()
             return
 
         if magic_index > 0:
             unsynced = bytes(buffer[:magic_index])
-            report_unsynced_bytes(unsynced)
+            write_hex_line(unsynced, output_file)
+            print(f"unsynced_bytes,count={len(unsynced)}", file=sys.stderr, flush=True)
             del buffer[:magic_index]
 
         if len(buffer) < FRAME_HEADER_BYTES:
@@ -155,16 +109,13 @@ def emit_complete_frames(buffer, output_file):
 
         frame = bytes(buffer[:frame_length])
         del buffer[:frame_length]
-        message_type = frame[1]
-        payload = frame[FRAME_HEADER_BYTES:-FRAME_CRC_BYTES]
+        print(f"{frame[:3].hex()} ", end="")
+        for i in range(3, frame_length-2-3, 4):
+            # write_hex_line(frame[i:i+4], output_file)
+            print(f"{frame[i:i+4].hex()} ", end='')
+        print("",flush=True)
+        report_crc(frame)
 
-        if not frame_crc_is_valid(frame):
-            continue
-
-        if not payload_is_valid(message_type, payload):
-            continue
-
-        write_payload_hex_line(payload, output_file)
 
 
 def main():
@@ -211,11 +162,8 @@ def main():
 
             except KeyboardInterrupt:
                 if buffer:
-                    print(
-                        f"partial_bytes,count={len(buffer)},hex={bytes(buffer).hex()}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                    write_hex_line(bytes(buffer), output_file)
+                    print(f"partial_bytes,count={len(buffer)}", file=sys.stderr, flush=True)
 
                 if ser is not None:
                     ser.close()

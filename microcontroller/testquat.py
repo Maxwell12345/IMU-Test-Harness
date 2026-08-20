@@ -31,7 +31,7 @@ def parse_rotation_vector(line):
         return None
 
 
-def magnetic_heading_degrees(i, j, k, real):
+def get_enu(i, j, k, real):
     norm = math.sqrt(i * i + j * j + k * k + real * real)
 
     if not math.isfinite(norm) or norm <= 0.0:
@@ -47,11 +47,15 @@ def magnetic_heading_degrees(i, j, k, real):
         1.0 - 2.0 * (x * x + z * z),
     )
 
-    return math.degrees(yaw)
+    return real,i,j,k,math.degrees(yaw)
 
 
 def main():
     args = parse_args()
+
+    first_print = True
+    
+    ii = 0
 
     try:
         with serial.Serial(args.port, args.baud, timeout=1) as serial_port:
@@ -59,6 +63,11 @@ def main():
 
             while True:
                 raw = serial_port.readline()
+                # print(raw)
+
+                ii += 1
+                if (ii % 10 != 0): continue
+                ii = 0
 
                 if not raw:
                     continue
@@ -66,13 +75,11 @@ def main():
                 line = raw.decode("utf-8", errors="ignore").strip()
                 rotation = parse_rotation_vector(line)
 
-                # print(line)
-
                 if rotation is None:
                     continue
 
                 try:
-                    heading = magnetic_heading_degrees(
+                    w, i, j, k, heading = get_enu(
                         rotation["i"],
                         rotation["j"],
                         rotation["k"],
@@ -82,11 +89,19 @@ def main():
                     print(f"Quaternion error: {error}", file=sys.stderr)
                     continue
 
+                if not first_print:
+                    print("\033[4A", end="")
+
+                print(f'\033[2Kt={rotation["timestamp_us"]} us')
+                print(f'\033[2KWIJK={w:.3f} {i:.3f} {j:.3f} {k:.3f}')
+                print(f'\033[2Kmag heading={heading:.3f}')
                 print(
-                    f't={rotation["timestamp_us"]} us  '
-                    f'heading={heading:.3f} deg magnetic  '
-                    f'accuracy={(rotation["accuracy"] * 180.0 / math.pi):.6f}'
+                    f'\033[2Kaccuracy='
+                    f'{rotation["accuracy"] * 180.0 / math.pi:.6f}',
+                    flush=True,
                 )
+
+                first_print = False
 
     except serial.SerialException as error:
         print(f"Serial error: {error}", file=sys.stderr)
